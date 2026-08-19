@@ -65,6 +65,9 @@ func downloadFile(task *Task, url, localPath string, progress func(downloaded, t
 			fmt.Sscanf(parts[1], "%d", &totalSize)
 		}
 	} else {
+		// The server ignored our Range request and returned the complete file.
+		// Restart the partial download instead of appending and corrupting it.
+		existingSize = 0
 		totalSize = resp.ContentLength
 	}
 

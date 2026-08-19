@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -70,6 +71,12 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Llama Studio
 	mux.HandleFunc("GET /api/mantle/studio/models/inspect", h.handleInspectStudioModel)
 	mux.HandleFunc("GET /api/mantle/studio/datasets/inspect", h.handleInspectStudioDataset)
+	mux.HandleFunc("GET /api/mantle/studio/datasets", h.handleListStudioDatasets)
+	mux.HandleFunc("GET /api/mantle/studio/datasets/preview", h.handlePreviewStudioDataset)
+	mux.HandleFunc("POST /api/mantle/studio/datasets/import", h.handleImportStudioDataset)
+	mux.HandleFunc("GET /api/mantle/studio/datasets/hub/search", h.handleSearchHFDatasets)
+	mux.HandleFunc("GET /api/mantle/studio/datasets/hub/files", h.handleListHFDatasetFiles)
+	mux.HandleFunc("POST /api/mantle/studio/datasets/hub/download", h.handleDownloadHFDataset)
 	mux.HandleFunc("POST /api/mantle/studio/quantize", h.handleStartQuantize)
 	mux.HandleFunc("POST /api/mantle/studio/hash", h.handleStartHash)
 	mux.HandleFunc("POST /api/mantle/studio/split", h.handleStartSplit)
@@ -129,6 +136,98 @@ func (h *Handler) handleInspectStudioDataset(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	jsonResponse(w, http.StatusOK, inspection)
+}
+
+func (h *Handler) handleListStudioDatasets(w http.ResponseWriter, _ *http.Request) {
+	datasets, err := ListStudioDatasets(h.modelsDir)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, datasets)
+}
+
+func (h *Handler) handlePreviewStudioDataset(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	preview, err := PreviewStudioDataset(h.modelsDir, r.URL.Query().Get("name"), limit)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, preview)
+}
+
+func (h *Handler) handleImportStudioDataset(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024*1024)
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid or oversized upload")
+		return
+	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, "dataset file is required")
+		return
+	}
+	defer file.Close()
+	destination := strings.TrimSpace(r.FormValue("destination"))
+	if destination == "" {
+		destination = filepath.Base(header.Filename)
+	}
+	dataset, err := ImportStudioDataset(h.modelsDir, destination, file)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusCreated, dataset)
+}
+
+func (h *Handler) handleSearchHFDatasets(w http.ResponseWriter, r *http.Request) {
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if query == "" {
+		jsonError(w, http.StatusBadRequest, "query parameter 'q' is required")
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	datasets, err := SearchHFDatasets(query, limit, r.URL.Query().Get("sort"))
+	if err != nil {
+		jsonError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, datasets)
+}
+
+func (h *Handler) handleListHFDatasetFiles(w http.ResponseWriter, r *http.Request) {
+	datasetID := strings.TrimSpace(r.URL.Query().Get("dataset"))
+	if datasetID == "" {
+		jsonError(w, http.StatusBadRequest, "dataset is required")
+		return
+	}
+	files, err := ListHFDatasetFiles(datasetID)
+	if err != nil {
+		jsonError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, files)
+}
+
+func (h *Handler) handleDownloadHFDataset(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		DatasetID string `json:"datasetID"`
+		Filename  string `json:"filename"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	task, err := h.tm.StartHFDatasetDownload(req.DatasetID, req.Filename, h.modelsDir)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusAccepted, task)
 }
 
 func (h *Handler) handleStartQuantize(w http.ResponseWriter, r *http.Request) {

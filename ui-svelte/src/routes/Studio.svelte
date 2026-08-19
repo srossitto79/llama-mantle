@@ -7,8 +7,8 @@
   import * as Label from "$lib/components/ui/label/index.js";
   import * as Switch from "$lib/components/ui/switch/index.js";
   import LogPanel from "../components/LogPanel.svelte";
-  import { cancelStudioJob, inspectStudioDataset, inspectStudioModel, listLocalModels, listTasks, startEvaluate, startExportLoRA, startHash, startMerge, startPrune, startQuantize, startSplit, startStudioPipeline, startTrainQLoRA, streamTaskProgress } from "../lib/mantleApi";
-  import type { DatasetInspection, LocalModel, MantleTask, StudioModelInspection } from "../lib/types";
+  import { cancelStudioJob, inspectStudioDataset, inspectStudioModel, listLocalModels, listStudioDatasets, listTasks, startEvaluate, startExportLoRA, startHash, startMerge, startPrune, startQuantize, startSplit, startStudioPipeline, startTrainQLoRA, streamTaskProgress } from "../lib/mantleApi";
+  import type { DatasetInspection, LocalModel, MantleTask, StudioDataset, StudioModelInspection } from "../lib/types";
 
   const quantTypes = [
     "Q4_K_M", "Q5_K_M", "Q6_K", "Q8_0", "Q4_0", "Q5_0",
@@ -16,6 +16,7 @@
   ];
 
   let models = $state<LocalModel[]>([]);
+  let datasets = $state<StudioDataset[]>([]);
   let operation = $state<"pipeline" | "quantize" | "hash" | "split" | "merge" | "prune" | "train" | "export-lora" | "evaluate">("quantize");
   let loadingModels = $state(true);
   let input = $state("");
@@ -301,6 +302,7 @@
       loadingModels = false;
 	  if (preselectedModel && items.some((item) => item.name === preselectedModel)) void selectModel(preselectedModel);
     });
+    void listStudioDatasets().then((items) => datasets = items);
     void listTasks().then((tasks) => {
       const latest = tasks
         .filter((task) => task.type === "studio")
@@ -310,6 +312,10 @@
     return () => stopStream?.();
   });
 </script>
+
+<datalist id="studio-dataset-paths">
+  {#each datasets as dataset (dataset.path)}<option value={dataset.path}>{dataset.name}</option>{/each}
+</datalist>
 
 <div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-2">
   <Card.Root class="shrink-0 gap-0 py-0">
@@ -401,7 +407,7 @@
             <label class="flex items-center gap-2 text-sm font-medium"><Switch.Root checked={pipelineEvaluate} onCheckedChange={(value) => pipelineEvaluate = value} />Evaluate the generated model</label>
             {#if pipelineEvaluate}
               <div class="space-y-2"><Label.Root for="pipeline-evaluate-mode">Evaluation</Label.Root><select id="pipeline-evaluate-mode" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={evaluateMode}><option value="benchmark">Performance benchmark</option><option value="perplexity">Dataset perplexity</option></select></div>
-              {#if evaluateMode === "perplexity"}<div class="space-y-2"><Label.Root for="pipeline-dataset">Evaluation text file</Label.Root><Input id="pipeline-dataset" bind:value={evaluateDataset} placeholder="datasets/evaluation.txt" /></div>{/if}
+              {#if evaluateMode === "perplexity"}<div class="space-y-2"><Label.Root for="pipeline-dataset">Evaluation text file</Label.Root><Input id="pipeline-dataset" list="studio-dataset-paths" bind:value={evaluateDataset} placeholder="datasets/evaluation.txt" /></div>{/if}
             {/if}
           </div>
         {/if}
@@ -451,7 +457,7 @@
           </div>
           {#if mergeMethod === "evo"}
             <div class="grid gap-3 sm:grid-cols-2">
-              <div class="space-y-2"><Label.Root for="merge-calibration">Calibration dataset</Label.Root><Input id="merge-calibration" bind:value={mergeCalibration} placeholder="datasets/calibration.jsonl" /></div>
+              <div class="space-y-2"><Label.Root for="merge-calibration">Calibration dataset</Label.Root><Input id="merge-calibration" list="studio-dataset-paths" bind:value={mergeCalibration} placeholder="datasets/calibration.jsonl" /></div>
               <div class="space-y-2"><Label.Root for="merge-target">Target type</Label.Root><select id="merge-target" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={mergeTargetType}><option value="q4_k">Q4_K</option><option value="q4_0">Q4_0</option><option value="q3_k">Q3_K</option><option value="mxfp4">MXFP4</option></select></div>
             </div>
           {/if}
@@ -466,7 +472,7 @@
             </select>
           </div>
           {#if prunePhase === "analyze"}
-            <div class="space-y-2"><Label.Root for="prune-dataset">Training / calibration dataset</Label.Root><Input id="prune-dataset" bind:value={pruneDataset} placeholder="datasets/train.jsonl" /></div>
+            <div class="space-y-2"><Label.Root for="prune-dataset">Training / calibration dataset</Label.Root><Input id="prune-dataset" list="studio-dataset-paths" bind:value={pruneDataset} placeholder="datasets/train.jsonl" /></div>
           {:else if prunePhase === "profiles"}
             <div class="space-y-2"><Label.Root for="prune-cache">Importance cache</Label.Root><Input id="prune-cache" bind:value={pruneCache} placeholder="pruning/importance.cache" /></div>
           {:else}
@@ -483,7 +489,7 @@
             <label class="flex items-center gap-2 text-sm"><Switch.Root checked={pruneValidate} onCheckedChange={(value) => pruneValidate = value} />Reject output if perplexity regression exceeds threshold</label>
             {#if pruneValidate}
               <div class="grid gap-3 sm:grid-cols-2">
-                <div class="space-y-2"><Label.Root for="prune-validation-dataset">Validation dataset</Label.Root><Input id="prune-validation-dataset" bind:value={pruneDataset} placeholder="datasets/validation.jsonl" /></div>
+                <div class="space-y-2"><Label.Root for="prune-validation-dataset">Validation dataset</Label.Root><Input id="prune-validation-dataset" list="studio-dataset-paths" bind:value={pruneDataset} placeholder="datasets/validation.jsonl" /></div>
                 <div class="space-y-2"><Label.Root for="prune-ppl-delta">Maximum perplexity increase (%)</Label.Root><Input id="prune-ppl-delta" type="number" min="0" step="0.5" bind:value={pruneMaxPPLDelta} /></div>
               </div>
             {/if}
@@ -498,7 +504,7 @@
         {:else if operation === "train"}
           <div class="space-y-2">
             <Label.Root for="train-dataset">JSONL training dataset</Label.Root>
-            <div class="flex gap-2"><Input id="train-dataset" bind:value={trainDataset} placeholder="datasets/train.jsonl" /><Button variant="outline" onclick={inspectDataset} disabled={!trainDataset.trim() || inspectingDataset}>{inspectingDataset ? "Inspecting…" : "Inspect"}</Button></div>
+            <div class="flex gap-2"><Input id="train-dataset" list="studio-dataset-paths" bind:value={trainDataset} placeholder="datasets/train.jsonl" /><Button variant="outline" onclick={inspectDataset} disabled={!trainDataset.trim() || inspectingDataset}>{inspectingDataset ? "Inspecting…" : "Inspect"}</Button></div>
             {#if datasetInspection}
               <p class="text-muted-foreground text-xs">{datasetInspection.recordsScanned}{datasetInspection.truncated ? "+" : ""} records checked · {Object.entries(datasetInspection.formats).map(([format, count]) => `${format}: ${count}`).join(" · ")}</p>
             {/if}
@@ -540,7 +546,7 @@
         {:else}
           <div class="space-y-2"><Label.Root for="evaluate-mode">Evaluation</Label.Root><select id="evaluate-mode" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={evaluateMode}><option value="benchmark">Performance benchmark</option><option value="perplexity">Dataset perplexity</option></select></div>
           {#if evaluateMode === "perplexity"}
-            <div class="space-y-2"><Label.Root for="evaluate-dataset">Evaluation text file</Label.Root><Input id="evaluate-dataset" bind:value={evaluateDataset} placeholder="datasets/evaluation.txt" /></div>
+            <div class="space-y-2"><Label.Root for="evaluate-dataset">Evaluation text file</Label.Root><Input id="evaluate-dataset" list="studio-dataset-paths" bind:value={evaluateDataset} placeholder="datasets/evaluation.txt" /></div>
             <div class="grid gap-3 sm:grid-cols-2">
               <div class="space-y-2"><Label.Root for="evaluate-context">Context size</Label.Root><Input id="evaluate-context" type="number" min="1" bind:value={contextSize} /></div>
               <div class="space-y-2"><Label.Root for="evaluate-chunks">Maximum chunks</Label.Root><Input id="evaluate-chunks" type="number" min="0" bind:value={chunks} placeholder="All" /></div>

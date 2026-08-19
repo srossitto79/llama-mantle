@@ -539,6 +539,26 @@ export interface DatasetInspection {
 	truncated: boolean;
 }
 
+export interface StudioDataset {
+	name: string;
+	path: string;
+	size: number;
+	format: string;
+	modifiedAt: string;
+}
+
+export interface DatasetPreview extends DatasetInspection {
+	records: Record<string, unknown>[];
+}
+
+export interface HFDataset {
+	id: string;
+	downloads: number;
+	likes: number;
+	updatedAt: string;
+	tags: string[];
+}
+
 export interface ExportLoRARequest {
 	base: string;
 	adapters: string[];

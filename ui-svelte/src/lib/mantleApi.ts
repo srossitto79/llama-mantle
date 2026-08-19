@@ -1,4 +1,5 @@
 import type { MantleTask, HFModel, HFFile, LocalModel, BackendEntry, DatasetInspection, EvaluateRequest, ExportLoRARequest, HashRequest, MergeRequest, PruneRequest, QuantizeRequest, RegisterStudioModelRequest, SplitRequest, StudioCatalogArtifact, StudioEvaluation, StudioLineageEdge, StudioModelInspection, StudioPipelineRequest, StudioPipelineTemplate, StudioRetentionPolicy, StudioRetentionPreview, StudioSchedulerStatus, TrainQLoRARequest } from "../lib/types";
+import type { DatasetPreview, HFDataset, StudioDataset } from "../lib/types";
 
 // --- HF Model search ---
 
@@ -220,6 +221,39 @@ export async function inspectStudioDataset(name: string): Promise<DatasetInspect
 		throw new Error(body.error || `HTTP ${res.status}`);
 	}
 	return await res.json();
+}
+
+async function studioDatasetResponse<T>(response: Response): Promise<T> {
+	if (!response.ok) {
+		const body = await response.json().catch(() => ({}));
+		throw new Error(body.error || `HTTP ${response.status}`);
+	}
+	return await response.json();
+}
+
+export async function listStudioDatasets(): Promise<StudioDataset[]> {
+	return studioDatasetResponse(await fetch("/api/mantle/studio/datasets"));
+}
+
+export async function previewStudioDataset(name: string, limit = 10): Promise<DatasetPreview> {
+	return studioDatasetResponse(await fetch(`/api/mantle/studio/datasets/preview?name=${encodeURIComponent(name)}&limit=${limit}`));
+}
+
+export async function importStudioDataset(file: File, destination = ""): Promise<StudioDataset> {
+	const form = new FormData(); form.append("file", file); if (destination.trim()) form.append("destination", destination.trim());
+	return studioDatasetResponse(await fetch("/api/mantle/studio/datasets/import", { method: "POST", body: form }));
+}
+
+export async function searchHFDatasets(query: string, sort = "downloads"): Promise<HFDataset[]> {
+	return studioDatasetResponse(await fetch(`/api/mantle/studio/datasets/hub/search?q=${encodeURIComponent(query)}&limit=20&sort=${sort}`));
+}
+
+export async function listHFDatasetFiles(datasetID: string): Promise<HFFile[]> {
+	return studioDatasetResponse(await fetch(`/api/mantle/studio/datasets/hub/files?dataset=${encodeURIComponent(datasetID)}`));
+}
+
+export async function downloadHFDatasetFile(datasetID: string, filename: string): Promise<MantleTask> {
+	return studioDatasetResponse(await fetch("/api/mantle/studio/datasets/hub/download", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ datasetID, filename }) }));
 }
 
 export async function startQuantize(request: QuantizeRequest): Promise<MantleTask> {

@@ -45,6 +45,7 @@
     "/studio/jobs": wrap({ asyncComponent: () => import("./routes/StudioJobs.svelte"), loadingComponent: RouteLoading }),
     "/studio/pipelines": wrap({ asyncComponent: () => import("./routes/StudioPipelines.svelte"), loadingComponent: RouteLoading }),
     "/studio/artifacts": wrap({ asyncComponent: () => import("./routes/StudioArtifacts.svelte"), loadingComponent: RouteLoading }),
+    "/studio/datasets": wrap({ asyncComponent: () => import("./routes/StudioDatasets.svelte"), loadingComponent: RouteLoading }),
     "/performance": wrap({ asyncComponent: () => import("./routes/Performance.svelte"), loadingComponent: RouteLoading }),
     "*": wrap({ asyncComponent: () => import("./routes/Activity.svelte"), loadingComponent: RouteLoading }),
   };
@@ -63,6 +64,7 @@
     "/studio/jobs": "Studio Jobs",
     "/studio/pipelines": "Studio Pipelines",
     "/studio/artifacts": "Studio Artifacts",
+    "/studio/datasets": "Studio Datasets",
     "/performance": "Performance",
   };
 

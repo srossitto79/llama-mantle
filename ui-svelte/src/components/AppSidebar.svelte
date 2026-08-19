@@ -1,6 +1,6 @@
 <script lang="ts">
   import { link } from "svelte-spa-router";
-  import { FerrisWheel, Boxes, Activity, ScrollText, Gauge, Sun, Moon, Monitor, ChevronRight, Settings, PackageSearch, Cog, Server, Wrench, Workflow } from "@lucide/svelte";
+  import { FerrisWheel, Boxes, Activity, ScrollText, Gauge, Sun, Moon, Monitor, ChevronRight, Settings, PackageSearch, Cog, Server, Wrench, Workflow, Database } from "@lucide/svelte";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -172,6 +172,17 @@
                 <a href="/studio" use:link {...props}>
                   <Wrench />
                   <span>Llama Studio</span>
+                </a>
+              {/snippet}
+            </Sidebar.MenuButton>
+          </Sidebar.MenuItem>
+
+          <Sidebar.MenuItem>
+            <Sidebar.MenuButton isActive={isActive("/studio/datasets", $currentRoute)} tooltipContent="Studio Datasets">
+              {#snippet child({ props })}
+                <a href="/studio/datasets" use:link {...props}>
+                  <Database />
+                  <span>Datasets</span>
                 </a>
               {/snippet}
             </Sidebar.MenuButton>

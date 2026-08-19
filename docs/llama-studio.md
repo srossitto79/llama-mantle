@@ -10,6 +10,8 @@ arbitrary process execution.
 - **Studio**: guided model transformations and training workflows.
 - **Jobs**: queued, running, completed, failed, and cancelled operations.
 - **Artifacts**: generated models, adapters, profiles, caches, reports, and datasets.
+- **Datasets**: safely import, discover, validate, and preview local training data or
+  download selected files from public Hugging Face dataset repositories.
 - **Playground**: validate generated models using the existing inference interfaces.
 - **Serving**: register and launch generated model variants with existing backends.
 
@@ -109,6 +111,14 @@ llama-bench result rows and exact operation parameters. An evaluation may select
 job as its baseline and set a maximum regression percentage. Throughput regressions use
 generation speed (falling back to prompt speed), while perplexity regressions account for
 lower values being better; exceeding the threshold fails the evaluation job.
+
+The dataset manager catalogs JSONL, JSON, text, CSV, and Parquet files under the
+model root's `datasets/` directory. Browser imports use a temporary file and atomic
+publication, reject overwrites and path escapes, and are limited to 1 GiB per request.
+Hugging Face downloads run as cancellable Studio I/O jobs and become dataset artifacts.
+JSONL previews are bounded to 50 records and validate the `messages`, `text`, and
+`prompt`/`response` training shapes. Other formats are cataloged and downloadable;
+structured CSV, JSON-array, and Parquet previews remain future format adapters.
 
 ## Persistence model
 
