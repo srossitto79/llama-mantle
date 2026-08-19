@@ -298,6 +298,9 @@ func (tm *TaskManager) SetStudioStore(st *store.Store) error {
 	if err := st.RecoverStudioJobs(ctx); err != nil {
 		return err
 	}
+	if err := tm.seedStudioPipelineTemplates(); err != nil {
+		return err
+	}
 	jobs, err := st.ListStudioJobs(ctx, 100)
 	if err != nil {
 		return err

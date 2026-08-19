@@ -12,6 +12,28 @@ import (
 
 const maxStudioPipelineSteps = 20
 
+var defaultStudioPipelineTemplates = []StudioPipelineTemplate{
+	{
+		ID: "starter-quantize-benchmark", Name: "Quantize and benchmark",
+		Pipeline: StudioPipelineRequest{Name: "Quantize and benchmark", Steps: []StudioPipelineStep{
+			{Operation: "quantize", UsePrevious: true, Request: json.RawMessage(`{"output":"quantized-Q4_K_M.gguf","type":"Q4_K_M"}`)},
+			{Operation: "evaluate", UsePrevious: true, Request: json.RawMessage(`{"mode":"benchmark","promptTokens":512,"genTokens":128,"repetitions":5}`)},
+		}},
+	},
+	{
+		ID: "starter-benchmark", Name: "Benchmark model",
+		Pipeline: StudioPipelineRequest{Name: "Benchmark model", Steps: []StudioPipelineStep{
+			{Operation: "evaluate", UsePrevious: true, Request: json.RawMessage(`{"mode":"benchmark","promptTokens":512,"genTokens":128,"repetitions":5}`)},
+		}},
+	},
+	{
+		ID: "starter-verify", Name: "Verify model identity",
+		Pipeline: StudioPipelineRequest{Name: "Verify model identity", Steps: []StudioPipelineStep{
+			{Operation: "hash", UsePrevious: true, Request: json.RawMessage(`{"algorithm":"sha256","noLayer":true}`)},
+		}},
+	},
+}
+
 type StudioPipelineRequest struct {
 	Name      string               `json:"name,omitempty"`
 	Input     string               `json:"input,omitempty"`
@@ -44,6 +66,22 @@ type StudioPipelineTemplate struct {
 }
 
 type studioPipelineDispatch func(StudioPipelineStep, string) (*Task, error)
+
+func (tm *TaskManager) seedStudioPipelineTemplates() error {
+	templates, err := tm.ListStudioPipelineTemplates()
+	if err != nil {
+		return err
+	}
+	if len(templates) != 0 {
+		return nil
+	}
+	for _, template := range defaultStudioPipelineTemplates {
+		if _, err := tm.SaveStudioPipelineTemplate(template); err != nil {
+			return fmt.Errorf("seed Studio pipeline %q: %w", template.Name, err)
+		}
+	}
+	return nil
+}
 
 func (tm *TaskManager) StartStudioPipeline(req StudioPipelineRequest, modelsDir string) (*Task, error) {
 	return tm.startStudioPipeline(req, modelsDir, tm.dispatchStudioPipelineStep)

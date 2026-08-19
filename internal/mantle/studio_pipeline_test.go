@@ -3,9 +3,43 @@ package mantle
 import (
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/mostlygeek/llama-swap/internal/store"
 )
+
+func TestTaskManager_SeedsStudioPipelineTemplates(t *testing.T) {
+	tm := NewTaskManager(nil)
+	st, err := store.New(filepath.Join(t.TempDir(), "studio.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := tm.SetStudioStore(st); err != nil {
+		t.Fatal(err)
+	}
+
+	templates, err := tm.ListStudioPipelineTemplates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(templates) != len(defaultStudioPipelineTemplates) {
+		t.Fatalf("got %d seeded pipelines, want %d", len(templates), len(defaultStudioPipelineTemplates))
+	}
+
+	if err := tm.SetStudioStore(st); err != nil {
+		t.Fatal(err)
+	}
+	templates, err = tm.ListStudioPipelineTemplates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(templates) != len(defaultStudioPipelineTemplates) {
+		t.Fatalf("second attachment produced %d pipelines, want %d", len(templates), len(defaultStudioPipelineTemplates))
+	}
+}
 
 func TestTaskManager_StudioPipelineChainsPreviousOutput(t *testing.T) {
 	tm := NewTaskManager(nil)

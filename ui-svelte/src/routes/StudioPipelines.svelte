@@ -312,9 +312,13 @@
   }
 
   onMount(() => {
-    const preselectedModel = new URLSearchParams(window.location.search).get("model") ?? "";
+    const params = new URLSearchParams(window.location.search);
+    const preselectedModel = params.get("model") ?? "";
+    const preselectedTemplate = params.get("template") ?? "";
     void Promise.all([listStudioResources(), listStudioPipelineTemplates()]).then(([foundResources, foundTemplates]) => {
       resources = foundResources; templates = foundTemplates;
+      const selected = foundTemplates.find((template) => template.id === preselectedTemplate);
+      if (selected) load(selected);
       if (preselectedModel && foundResources.some((resource) => resource.path === preselectedModel)) input = preselectedModel;
     });
   });
