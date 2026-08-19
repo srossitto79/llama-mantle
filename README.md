@@ -69,6 +69,12 @@ Built in Go for performance and simplicity, llama-swap has zero dependencies and
 
 llama-swap includes a real time web interface with a playground for testing out all sorts of local models:
 
+The unified image also includes **Llama Studio**, a local GGUF lifecycle workspace for
+hardware-aware quantization, merging, pruning, QLoRA training, evaluations, datasets,
+pipelines, artifacts, and serving promotion. Start with the
+[Llama Studio getting-started guide](docs/llama-studio-getting-started.md); its intended
+deployment boundary is one user on a workstation or trusted LAN.
+
 <img width="1094" height="667" alt="image" src="https://github.com/user-attachments/assets/a79b3cea-5ee1-45f1-8db9-5f5331690e64" />
 
 View detailed token metrics:
@@ -116,6 +122,10 @@ $ docker run -it --rm --runtime nvidia -p 9292:8080 \
  -v /path/to/custom/config.yaml:/etc/llama-swap/config/config.yaml \
  ghcr.io/mostlygeek/llama-swap:unified-cuda
 ```
+
+For Llama Studio, use a file-backed `store.path` inside `/models` so jobs, evaluations,
+templates, and projects survive container restarts. See the
+[Studio onboarding guide](docs/llama-studio-getting-started.md#run-locally).
 
 #### Legacy container
 

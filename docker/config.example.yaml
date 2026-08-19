@@ -2,6 +2,11 @@
 healthCheckTimeout: 300
 logRequests: true
 
+# Keep Studio jobs, artifacts, evaluations, templates, and projects across restarts.
+# /models is the persistent writable volume in the unified image.
+store:
+  path: /models/studio.sqlite
+
 models:
   "llama":
     cmd: >

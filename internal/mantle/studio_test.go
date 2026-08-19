@@ -150,6 +150,24 @@ func TestInspectStudioModel_ReadsMetadata(t *testing.T) {
 	}
 }
 
+func TestGGUFPositiveInt_ConvertsContextLengths(t *testing.T) {
+	for _, test := range []struct {
+		value any
+		want  int
+	}{
+		{uint32(75008), 75008},
+		{uint64(131072), 131072},
+		{int32(4096), 4096},
+		{int64(8192), 8192},
+		{int64(-1), 0},
+		{"75008", 0},
+	} {
+		if got := ggufPositiveInt(test.value); got != test.want {
+			t.Errorf("ggufPositiveInt(%T(%v)) = %d, want %d", test.value, test.value, got, test.want)
+		}
+	}
+}
+
 func TestQuantizeArgs_RequantizeDryRun(t *testing.T) {
 	req := QuantizeRequest{
 		Type:              "Q5_K_M",

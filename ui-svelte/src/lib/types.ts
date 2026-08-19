@@ -535,6 +535,7 @@ export interface PruneRequest {
 	evaluate?: boolean;
 	contextSize?: number;
 	batchSize?: number;
+	ubatchSize?: number;
 	threads?: number;
 	datasetThreads?: number;
 	gpuLayers?: number;
@@ -564,6 +565,7 @@ export interface TrainQLoRARequest {
 	criticalTokenMode?: string;
 	contextSize?: number;
 	batchSize?: number;
+	ubatchSize?: number;
 	threads?: number;
 	datasetThreads?: number;
 	gpuLayers?: number;

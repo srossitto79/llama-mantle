@@ -569,6 +569,22 @@ func (tm *TaskManager) StartTrainQLoRA(req TrainQLoRARequest, modelsDir string) 
 	if req.LearningRate < 0 || req.ValidationSplit < 0 || req.ValidationSplit >= 1 || req.Alpha < 0 {
 		return nil, fmt.Errorf("floating-point training options are outside their supported range")
 	}
+	if req.BatchSize > 0 && req.UBatchSize > req.BatchSize {
+		return nil, fmt.Errorf("training micro-batch size must not exceed logical batch size")
+	}
+	if req.ContextSize > 0 && req.BatchSize > 0 && req.ContextSize%req.BatchSize != 0 {
+		return nil, fmt.Errorf("training context size must be divisible by logical batch size")
+	}
+	if req.ContextSize == 0 && req.BatchSize > 0 {
+		metadata, metadataErr := ReadGGUFMetadata(modelPath)
+		if metadataErr != nil {
+			return nil, fmt.Errorf("read model context length: %w", metadataErr)
+		}
+		architecture, _ := metadata.KV["general.architecture"].(string)
+		if contextLength := ggufPositiveInt(metadata.KV[architecture+".context_length"]); contextLength > 0 && contextLength%req.BatchSize != 0 {
+			return nil, fmt.Errorf("model training context %d must be divisible by logical batch size %d; choose a divisor such as 256 or set an explicit context size", contextLength, req.BatchSize)
+		}
+	}
 	if req.Targets != "" && !loraTargetsPattern.MatchString(req.Targets) {
 		return nil, fmt.Errorf("LoRA targets may only contain tensor-name characters and commas")
 	}
@@ -676,6 +692,26 @@ func (tm *TaskManager) StartTrainQLoRA(req TrainQLoRARequest, modelsDir string) 
 		return nil, err
 	}
 	return task, nil
+}
+
+func ggufPositiveInt(value any) int {
+	switch number := value.(type) {
+	case uint32:
+		return int(number)
+	case uint64:
+		if number <= uint64(^uint(0)>>1) {
+			return int(number)
+		}
+	case int32:
+		if number > 0 {
+			return int(number)
+		}
+	case int64:
+		if number > 0 && uint64(number) <= uint64(^uint(0)>>1) {
+			return int(number)
+		}
+	}
+	return 0
 }
 
 func (tm *TaskManager) StartExportLoRA(req ExportLoRARequest, modelsDir string) (*Task, error) {

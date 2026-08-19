@@ -73,6 +73,9 @@
   let trainShuffle = $state(true);
   let trainOnPrompt = $state(false);
   let trainVerboseLoss = $state(true);
+  let trainContextSize = $state(0);
+  let trainBatchSize = $state(256);
+  let trainUBatchSize = $state(256);
   let datasetInspection = $state<DatasetInspection | null>(null);
   let inspectingDataset = $state(false);
   let exportAdapters = $state<string[]>([]);
@@ -158,10 +161,18 @@
     if (typeof recommendation.quantizationType === "string") selectQuantType(recommendation.quantizationType);
     if (typeof recommendation.threads === "number") threads = recommendation.threads;
     if (typeof recommendation.rank === "number") trainRank = recommendation.rank;
-    if (typeof recommendation.batchSize === "number") batchSize = recommendation.batchSize;
+    if (typeof recommendation.batchSize === "number") {
+      if (preflight.operation === "train-qlora") {
+        trainBatchSize = recommendation.batchSize;
+        trainUBatchSize = Math.min(trainUBatchSize, trainBatchSize);
+      } else batchSize = recommendation.batchSize;
+    }
     if (typeof recommendation.gradientCheckpointing === "number") trainGradCheckpoint = recommendation.gradientCheckpointing;
     if (typeof recommendation.gpuLayers === "number") gpuLayers = recommendation.gpuLayers;
-    if (typeof recommendation.contextSize === "number") contextSize = recommendation.contextSize;
+    if (typeof recommendation.contextSize === "number") {
+      if (preflight.operation === "train-qlora") trainContextSize = recommendation.contextSize;
+      else contextSize = recommendation.contextSize;
+    }
   }
 
   function selectOperation(value: typeof operation) {
@@ -306,7 +317,9 @@
         rank: trainRank, alpha: trainAlpha || undefined, optimizer: trainOptimizer,
         saveEvery: trainSaveEvery || undefined, gradCheckpoint: trainGradCheckpoint || undefined,
         loraQat: trainQAT, scheduler: trainScheduler, shuffleDataset: trainShuffle,
-        trainOnPrompt, verboseLoss: trainVerboseLoss, threads: threads || undefined, gpuLayers,
+        trainOnPrompt, verboseLoss: trainVerboseLoss,
+        contextSize: trainContextSize || undefined, batchSize: trainBatchSize,
+        ubatchSize: trainUBatchSize, threads: threads || undefined, gpuLayers,
       });
       else if (operation === "export-lora") task = await startExportLoRA({
         base: input, adapters: exportAdapters, output, tensorType: exportType,
@@ -592,6 +605,11 @@
             <div class="space-y-2"><Label.Root for="train-optimizer">Optimizer</Label.Root><select id="train-optimizer" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={trainOptimizer}><option value="adamw">AdamW</option><option value="adamw_f16">AdamW F16</option><option value="adamw_q8_0">AdamW Q8_0</option><option value="adamw_q6_k">AdamW Q6_K</option><option value="adamw_iq4_nl">AdamW IQ4_NL</option><option value="sgd">SGD</option></select></div>
             <div class="space-y-2"><Label.Root for="train-qat">LoRA fake quantization</Label.Root><select id="train-qat" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={trainQAT}><option value="none">None</option><option value="q4_k">Q4_K</option><option value="q4_0">Q4_0</option><option value="q3_k">Q3_K</option><option value="mxfp4">MXFP4</option><option value="q6_k">Q6_K</option><option value="q8_0">Q8_0</option></select></div>
             <div class="space-y-2"><Label.Root for="train-scheduler">LR scheduler</Label.Root><select id="train-scheduler" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={trainScheduler}><option value="constant">Constant</option><option value="cosine">Cosine</option></select></div>
+          </div>
+          <div class="grid gap-3 sm:grid-cols-3">
+            <div class="space-y-2"><Label.Root for="train-context">Context size</Label.Root><Input id="train-context" type="number" min="0" bind:value={trainContextSize} /><p class="text-muted-foreground text-xs">0 uses the model training context.</p></div>
+            <div class="space-y-2"><Label.Root for="train-batch">Logical batch</Label.Root><Input id="train-batch" type="number" min="1" bind:value={trainBatchSize} /><p class="text-muted-foreground text-xs">Must divide the model training context exactly.</p></div>
+            <div class="space-y-2"><Label.Root for="train-ubatch">Physical micro-batch</Label.Root><Input id="train-ubatch" type="number" min="1" max={trainBatchSize} bind:value={trainUBatchSize} /><p class="text-muted-foreground text-xs">Lower this to reduce peak VRAM.</p></div>
           </div>
           <div class="grid gap-3 sm:grid-cols-2">
             <label class="flex items-center gap-2 text-sm"><Switch.Root checked={trainShuffle} onCheckedChange={(value) => trainShuffle = value} />Shuffle dataset each epoch</label>

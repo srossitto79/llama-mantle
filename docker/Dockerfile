@@ -254,8 +254,8 @@ RUN echo "llama.cpp: ${LLAMA_COMMIT_HASH}" > /versions.txt && \
     echo "backend: ${BACKEND}" >> /versions.txt && \
     echo "build_timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> /versions.txt
 
-RUN mkdir -p /models && chown ${RUN_UID}:${RUN_UID} /models
+RUN mkdir -p /models/.llama-swap/backends && chown -R ${RUN_UID}:${RUN_UID} /models
 WORKDIR /models
 USER ${RUN_UID}
 ENTRYPOINT ["llama-swap"]
-CMD ["-config", "/etc/llama-swap/config/config.yaml", "-listen", "0.0.0.0:8080", "-watch-config"]
+CMD ["-config", "/etc/llama-swap/config/config.yaml", "-models-dir", "/models", "-backends-dir", "/models/.llama-swap/backends", "-build-script", "/usr/local/bin/build-llamacpp.sh", "-listen", "0.0.0.0:8080", "-watch-config"]

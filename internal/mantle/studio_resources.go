@@ -94,7 +94,7 @@ func (tm *TaskManager) StudioPreflight(modelsDir string, req StudioPreflightRequ
 		report.EstimatedRAMBytes = modelBytes * 2
 		report.EstimatedVRAMBytes = modelBytes + modelBytes/3
 		report.Recommendations["rank"] = 16
-		report.Recommendations["batchSize"] = 512
+		report.Recommendations["batchSize"] = 256
 		report.Recommendations["gradientCheckpointing"] = 1
 	case "merge", "prune":
 		report.EstimatedOutputBytes = modelBytes

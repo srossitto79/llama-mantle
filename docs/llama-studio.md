@@ -4,6 +4,9 @@ Llama Studio extends llama-swap from model serving into a GGUF lifecycle
 workspace. It treats command-line tools as typed operations rather than exposing
 arbitrary process execution.
 
+For installation and the first end-to-end workflow, see
+[Getting started with Llama Studio](llama-studio-getting-started.md).
+
 ## Product areas
 
 - **Models**: local model inventory, GGUF metadata, variants, hashes, and lineage.
@@ -154,8 +157,6 @@ Jobs found in a running state after process restart are marked interrupted. Oper
 that support checkpoints can offer resume; transformations with partial outputs must
 clean or quarantine those outputs before retrying.
 
-## Job scheduler configuration
-
 ## Hardware advisor
 
 Studio preflight combines the selected model and dataset sizes with live RAM, VRAM,
@@ -165,6 +166,8 @@ applied to the current form. Current recommendations cover quantization type and
 threads, QLoRA rank/batch/checkpointing, and evaluation or serving offload/context.
 These are conservative planning estimates rather than a substitute for the final
 operation admission checks.
+
+## Job scheduler configuration
 
 - `LLAMA_STUDIO_MAX_JOBS` controls total concurrent Studio jobs (default `2`).
 - `LLAMA_STUDIO_MAX_HEAVY_JOBS` limits concurrent training, merge, prune,
