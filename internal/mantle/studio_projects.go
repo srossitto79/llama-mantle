@@ -115,3 +115,32 @@ func (tm *TaskManager) DeleteStudioProject(id string) (bool, error) {
 	}
 	return st.DeleteStudioProject(context.Background(), id)
 }
+
+// AssignStudioTaskProject associates a job and its eventual artifacts with a project.
+func (tm *TaskManager) AssignStudioTaskProject(task *Task, projectID string) error {
+	projectID = strings.TrimSpace(projectID)
+	if projectID == "" {
+		return nil
+	}
+	if !isSafeBackendName(projectID) {
+		return fmt.Errorf("invalid project ID")
+	}
+	tm.mu.Lock()
+	st := tm.studioStore
+	tm.mu.Unlock()
+	if st == nil {
+		return fmt.Errorf("Studio storage is not configured")
+	}
+	exists, err := st.StudioProjectExists(context.Background(), projectID)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("Studio project %q was not found", projectID)
+	}
+	task.mu.Lock()
+	task.ProjectID = projectID
+	task.mu.Unlock()
+	task.persistNow()
+	return nil
+}

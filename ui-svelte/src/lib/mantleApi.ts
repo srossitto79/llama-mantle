@@ -1,6 +1,7 @@
 import type { MantleTask, HFModel, HFFile, LocalModel, BackendEntry, DatasetInspection, EvaluateRequest, ExportLoRARequest, HashRequest, MergeRequest, PruneRequest, QuantizeRequest, RegisterStudioModelRequest, SplitRequest, StudioCatalogArtifact, StudioEvaluation, StudioLineageEdge, StudioModelInspection, StudioPipelineRequest, StudioPipelineTemplate, StudioRetentionPolicy, StudioRetentionPreview, StudioSchedulerStatus, TrainQLoRARequest } from "../lib/types";
 import type { DatasetPreview, HFDataset, StudioDataset } from "../lib/types";
 import type { StudioPreflightReport, StudioProject, StudioResource } from "../lib/types";
+import { studioProjectHeaders } from "../stores/studioProject";
 
 // --- HF Model search ---
 
@@ -271,13 +272,13 @@ export async function listHFDatasetFiles(datasetID: string): Promise<HFFile[]> {
 }
 
 export async function downloadHFDatasetFile(datasetID: string, filename: string): Promise<MantleTask> {
-	return studioDatasetResponse(await fetch("/api/mantle/studio/datasets/hub/download", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ datasetID, filename }) }));
+	return studioDatasetResponse(await fetch("/api/mantle/studio/datasets/hub/download", { method: "POST", headers: { "Content-Type": "application/json", ...studioProjectHeaders() }, body: JSON.stringify({ datasetID, filename }) }));
 }
 
 export async function startQuantize(request: QuantizeRequest): Promise<MantleTask> {
   const res = await fetch("/api/mantle/studio/quantize", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...studioProjectHeaders() },
     body: JSON.stringify(request),
   });
   if (!res.ok) {
@@ -318,7 +319,7 @@ export async function startEvaluate(request: EvaluateRequest): Promise<MantleTas
 export async function startStudioPipeline(request: StudioPipelineRequest): Promise<MantleTask> {
 	const res = await fetch("/api/mantle/studio/pipelines", {
 		method: "POST",
-		headers: { "Content-Type": "application/json" },
+		headers: { "Content-Type": "application/json", ...studioProjectHeaders() },
 		body: JSON.stringify(request),
 	});
 	if (!res.ok) {
@@ -329,7 +330,7 @@ export async function startStudioPipeline(request: StudioPipelineRequest): Promi
 }
 
 export async function retryStudioPipeline(jobID: string, fromStep: number): Promise<MantleTask> {
-	const res = await fetch(`/api/mantle/studio/pipelines/${encodeURIComponent(jobID)}/retry`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fromStep }) });
+	const res = await fetch(`/api/mantle/studio/pipelines/${encodeURIComponent(jobID)}/retry`, { method: "POST", headers: { "Content-Type": "application/json", ...studioProjectHeaders() }, body: JSON.stringify({ fromStep }) });
 	if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body.error || `HTTP ${res.status}`); }
 	return await res.json();
 }
@@ -346,7 +347,7 @@ export async function listStudioPipelineTemplates(): Promise<StudioPipelineTempl
 
 export async function saveStudioPipelineTemplate(template: Omit<StudioPipelineTemplate, "createdAt" | "updatedAt">): Promise<StudioPipelineTemplate> {
 	const res = await fetch("/api/mantle/studio/pipeline-templates", {
-		method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(template),
+		method: "POST", headers: { "Content-Type": "application/json", ...studioProjectHeaders() }, body: JSON.stringify(template),
 	});
 	if (!res.ok) {
 		const body = await res.json().catch(() => ({}));
@@ -427,7 +428,7 @@ export async function applyStudioRetention(policy: StudioRetentionPolicy, token:
 async function startStudioOperation(operation: string, request: HashRequest | SplitRequest | MergeRequest | PruneRequest | TrainQLoRARequest | ExportLoRARequest | EvaluateRequest | RegisterStudioModelRequest): Promise<MantleTask> {
 	const res = await fetch(`/api/mantle/studio/${operation}`, {
 		method: "POST",
-		headers: { "Content-Type": "application/json" },
+		headers: { "Content-Type": "application/json", ...studioProjectHeaders() },
 		body: JSON.stringify(request),
 	});
 	if (!res.ok) {

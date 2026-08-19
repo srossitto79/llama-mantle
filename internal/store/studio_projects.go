@@ -12,6 +12,14 @@ type StudioProjectRecord struct {
 	Resources             []string
 }
 
+func (s *Store) StudioProjectExists(ctx context.Context, id string) (bool, error) {
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM studio_projects WHERE id=?`, id).Scan(&count); err != nil {
+		return false, fmt.Errorf("check Studio project: %w", err)
+	}
+	return count > 0, nil
+}
+
 func (s *Store) SaveStudioProject(ctx context.Context, project StudioProjectRecord) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO studio_projects (id,name,description,ts_created,ts_updated) VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,ts_updated=excluded.ts_updated`, project.ID, project.Name, project.Description, project.CreatedAt.UnixMilli(), project.UpdatedAt.UnixMilli())
 	if err != nil {

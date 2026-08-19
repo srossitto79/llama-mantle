@@ -88,7 +88,7 @@
     {#if status}<p class="text-muted-foreground text-sm">{status}</p>{/if}
 
     <div class="grid gap-4 xl:grid-cols-[1fr_1.4fr]">
-      <div class="space-y-4">
+      <div class="min-w-0 space-y-4">
         <Card.Root><Card.Header><Card.Title>Import local file</Card.Title><Card.Description>Files are copied atomically below <code>datasets/</code>. Existing files are never overwritten.</Card.Description></Card.Header><Card.Content class="space-y-3">
           <div class="space-y-1"><Label.Root for="dataset-file">Dataset file</Label.Root><Input id="dataset-file" type="file" accept=".jsonl,.json,.txt,.text,.csv,.parquet" bind:files={uploadFiles} /></div>
           <div class="space-y-1"><Label.Root for="dataset-destination">Destination (optional)</Label.Root><Input id="dataset-destination" bind:value={destination} placeholder="datasets/my-project/train.jsonl" /></div>
@@ -105,9 +105,9 @@
         </Card.Content></Card.Root>
       </div>
 
-      <div class="space-y-4">
-        <Card.Root><Card.Header><Card.Title>Preview and validation</Card.Title><Card.Description>JSONL records are parsed and checked for messages, text, or prompt/response structure.</Card.Description></Card.Header><Card.Content>
-          {#if preview}<div class="space-y-3"><p class="text-sm">{preview.recordsScanned}{preview.truncated ? "+" : ""} records · {Object.entries(preview.formats).map(([key, count]) => `${key}: ${count}`).join(" · ")}</p><div class="max-h-96 space-y-2 overflow-auto">{#each preview.records as record, index}<pre class="bg-muted overflow-auto rounded-md p-3 text-xs"><span class="text-muted-foreground">#{index + 1}</span>
+      <div class="min-w-0 space-y-4">
+        <Card.Root class="min-w-0"><Card.Header><Card.Title>Preview and validation</Card.Title><Card.Description>JSONL records are parsed and checked for messages, text, or prompt/response structure.</Card.Description></Card.Header><Card.Content class="min-w-0">
+          {#if preview}<div class="min-w-0 space-y-3"><p class="text-sm">{preview.recordsScanned}{preview.truncated ? "+" : ""} records · {Object.entries(preview.formats).map(([key, count]) => `${key}: ${count}`).join(" · ")}</p><div class="max-h-96 min-w-0 space-y-2 overflow-y-auto">{#each preview.records as record, index}<pre class="bg-muted max-w-full overflow-x-auto rounded-md p-3 text-xs"><span class="text-muted-foreground">#{index + 1}</span>
 {JSON.stringify(record, null, 2)}</pre>{/each}</div></div>{:else}<p class="text-muted-foreground text-sm">Select a JSONL dataset to preview it.</p>{/if}
         </Card.Content></Card.Root>
 

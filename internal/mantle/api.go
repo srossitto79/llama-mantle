@@ -49,6 +49,15 @@ func NewHandler(tm *TaskManager, cfg *config.Config, configPath, modelsDir, back
 	return h
 }
 
+func (h *Handler) jsonStudioTaskResponse(w http.ResponseWriter, r *http.Request, task *Task) {
+	if err := h.tm.AssignStudioTaskProject(task, r.Header.Get("X-Studio-Project")); err != nil {
+		h.tm.CancelTask(task.ID)
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusAccepted, task.Snapshot())
+}
+
 // RegisterRoutes adds all mantle API endpoints to the given mux.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// HF model browsing
@@ -305,7 +314,7 @@ func (h *Handler) handleDownloadHFDataset(w http.ResponseWriter, r *http.Request
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusAccepted, task)
+	h.jsonStudioTaskResponse(w, r, task)
 }
 
 func (h *Handler) handleStartQuantize(w http.ResponseWriter, r *http.Request) {
@@ -319,7 +328,7 @@ func (h *Handler) handleStartQuantize(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusAccepted, task)
+	h.jsonStudioTaskResponse(w, r, task)
 }
 
 func (h *Handler) handleStartHash(w http.ResponseWriter, r *http.Request) {
@@ -333,7 +342,7 @@ func (h *Handler) handleStartHash(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusAccepted, task)
+	h.jsonStudioTaskResponse(w, r, task)
 }
 
 func (h *Handler) handleStartSplit(w http.ResponseWriter, r *http.Request) {
@@ -347,7 +356,7 @@ func (h *Handler) handleStartSplit(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusAccepted, task)
+	h.jsonStudioTaskResponse(w, r, task)
 }
 
 func (h *Handler) handleStartMerge(w http.ResponseWriter, r *http.Request) {
@@ -361,7 +370,7 @@ func (h *Handler) handleStartMerge(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusAccepted, task)
+	h.jsonStudioTaskResponse(w, r, task)
 }
 
 func (h *Handler) handleStartPrune(w http.ResponseWriter, r *http.Request) {
@@ -375,7 +384,7 @@ func (h *Handler) handleStartPrune(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusAccepted, task)
+	h.jsonStudioTaskResponse(w, r, task)
 }
 
 func (h *Handler) handleStartTrainQLoRA(w http.ResponseWriter, r *http.Request) {
@@ -389,7 +398,7 @@ func (h *Handler) handleStartTrainQLoRA(w http.ResponseWriter, r *http.Request) 
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusAccepted, task)
+	h.jsonStudioTaskResponse(w, r, task)
 }
 
 func (h *Handler) handleStartExportLoRA(w http.ResponseWriter, r *http.Request) {
@@ -403,7 +412,7 @@ func (h *Handler) handleStartExportLoRA(w http.ResponseWriter, r *http.Request) 
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusAccepted, task)
+	h.jsonStudioTaskResponse(w, r, task)
 }
 
 func (h *Handler) handleStartEvaluate(w http.ResponseWriter, r *http.Request) {
@@ -417,7 +426,7 @@ func (h *Handler) handleStartEvaluate(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusAccepted, task)
+	h.jsonStudioTaskResponse(w, r, task)
 }
 
 func (h *Handler) handleStartStudioPipeline(w http.ResponseWriter, r *http.Request) {
@@ -428,12 +437,15 @@ func (h *Handler) handleStartStudioPipeline(w http.ResponseWriter, r *http.Reque
 		jsonError(w, http.StatusBadRequest, "invalid pipeline request: "+err.Error())
 		return
 	}
+	if req.ProjectID == "" {
+		req.ProjectID = r.Header.Get("X-Studio-Project")
+	}
 	task, err := h.tm.StartStudioPipeline(req, h.modelsDir)
 	if err != nil {
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusAccepted, task.Snapshot())
+	h.jsonStudioTaskResponse(w, r, task)
 }
 
 func (h *Handler) handleRetryStudioPipeline(w http.ResponseWriter, r *http.Request) {
@@ -449,7 +461,7 @@ func (h *Handler) handleRetryStudioPipeline(w http.ResponseWriter, r *http.Reque
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusAccepted, task)
+	h.jsonStudioTaskResponse(w, r, task)
 }
 
 func (h *Handler) handleListStudioPipelineTemplates(w http.ResponseWriter, _ *http.Request) {
@@ -468,6 +480,9 @@ func (h *Handler) handleSaveStudioPipelineTemplate(w http.ResponseWriter, r *htt
 	if err := decoder.Decode(&template); err != nil {
 		jsonError(w, http.StatusBadRequest, "invalid pipeline template: "+err.Error())
 		return
+	}
+	if template.ProjectID == "" {
+		template.ProjectID = r.Header.Get("X-Studio-Project")
 	}
 	saved, err := h.tm.SaveStudioPipelineTemplate(template)
 	if err != nil {
@@ -717,7 +732,7 @@ func (h *Handler) handleRegisterStudioModel(w http.ResponseWriter, r *http.Reque
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusAccepted, task.Snapshot())
+	h.jsonStudioTaskResponse(w, r, task)
 }
 
 func (h *Handler) handleListStudioArtifacts(w http.ResponseWriter, r *http.Request) {
@@ -770,7 +785,7 @@ func (h *Handler) handleVerifyStudioArtifact(w http.ResponseWriter, r *http.Requ
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusAccepted, task.Snapshot())
+	h.jsonStudioTaskResponse(w, r, task)
 }
 
 func (h *Handler) handleVerifyStudioArtifacts(w http.ResponseWriter, r *http.Request) {
@@ -786,7 +801,7 @@ func (h *Handler) handleVerifyStudioArtifacts(w http.ResponseWriter, r *http.Req
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusAccepted, task.Snapshot())
+	h.jsonStudioTaskResponse(w, r, task)
 }
 
 func (h *Handler) handleCleanupStudioArtifact(w http.ResponseWriter, r *http.Request) {
@@ -800,7 +815,7 @@ func (h *Handler) handleCleanupStudioArtifact(w http.ResponseWriter, r *http.Req
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusAccepted, task.Snapshot())
+	h.jsonStudioTaskResponse(w, r, task)
 }
 
 func (h *Handler) handlePreviewStudioRetention(w http.ResponseWriter, r *http.Request) {
@@ -831,7 +846,7 @@ func (h *Handler) handleApplyStudioRetention(w http.ResponseWriter, r *http.Requ
 		jsonError(w, http.StatusConflict, err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusAccepted, task.Snapshot())
+	h.jsonStudioTaskResponse(w, r, task)
 }
 
 func (h *Handler) handleListStudioEvaluations(w http.ResponseWriter, r *http.Request) {

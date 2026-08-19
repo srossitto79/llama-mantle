@@ -8,6 +8,7 @@
   import * as Switch from "$lib/components/ui/switch/index.js";
   import { deleteStudioPipelineTemplate, listLocalModels, listStudioPipelineTemplates, saveStudioPipelineTemplate, startStudioPipeline } from "../lib/mantleApi";
   import type { LocalModel, StudioPipelineStep, StudioPipelineTemplate } from "../lib/types";
+  import { activeStudioProject } from "../stores/studioProject";
 
   type Operation = StudioPipelineStep["operation"];
   type DraftStep = { operation: Operation; usePrevious: boolean; requestText: string; variantsText: string; continueOnFailure: boolean; gateMetric: string; gateMin: string; gateMax: string };
@@ -15,14 +16,14 @@
   const operations: Operation[] = ["quantize", "hash", "split", "merge", "prune", "train-qlora", "export-lora", "evaluate", "register"];
   const variantsPlaceholder = '[{"output":"q4.gguf","type":"Q4_K_M"},{"output":"q6.gguf","type":"Q6_K"}]';
   const defaults: Record<Operation, Record<string, unknown>> = {
-    quantize: { output: "output-Q4_K_M.gguf", type: "Q4_K_M" },
-    hash: { algorithm: "sha256", noLayer: true },
-    split: { output: "output-split.gguf", maxTensors: 128 },
-    merge: { models: [], output: "merged.gguf", method: "ties", density: 0.5 },
-    prune: { phase: "hard", profile: "pruning/profile.json", output: "pruned.gguf" },
-    "train-qlora": { dataset: "datasets/train.jsonl", output: "adapter.gguf", epochs: 2, rank: 16 },
+    quantize: { output: "output-Q4_K_M.gguf", type: "Q4_K_M", importanceMatrix: "", allowRequantize: false, leaveOutputTensor: false, pure: false, dryRun: false, threads: 0 },
+    hash: { algorithm: "sha256", noLayer: true, uuid: false },
+    split: { output: "output-split.gguf", maxTensors: 128, maxSize: "", noTensorFirstSplit: false, dryRun: false },
+    merge: { models: [], output: "merged.gguf", method: "ties", density: 0.5, threads: 0, memoryBudget: "2G", calibration: "", targetType: "q4_k", population: 0, generations: 0, gpuLayers: -1, device: "", mergeGpu: false },
+    prune: { phase: "hard", dataset: "", ratios: [], outputDir: "pruning", importanceCache: "", profile: "pruning/profile.json", output: "pruned.gguf", validate: true, maxPplDeltaPercent: 5, maxLayerRatio: 0, evaluate: true, contextSize: 0, batchSize: 0, ubatchSize: 0, threads: 0, datasetThreads: 0, gpuLayers: -1 },
+    "train-qlora": { dataset: "datasets/train.jsonl", output: "adapter.gguf", resume: "", epochs: 2, learningRate: 0.0002, validationSplit: 0.05, rank: 16, alpha: 32, targets: "", optimizer: "adamw", saveEvery: 100, freezeLayers: 0, gradCheckpoint: 1, loraQat: "", scheduler: "cosine", warmupSteps: 0, verboseLoss: false, trainOnPrompt: false, shuffleDataset: true, criticalTokenMode: "", contextSize: 0, batchSize: 256, ubatchSize: 256, threads: 0, datasetThreads: 0, gpuLayers: -1 },
     "export-lora": { adapters: [], output: "lora-merged.gguf", tensorType: "F16" },
-    evaluate: { mode: "benchmark", promptTokens: 512, genTokens: 128, repetitions: 5 },
+    evaluate: { mode: "benchmark", dataset: "", promptTokens: 512, genTokens: 128, repetitions: 5, chunks: 0, contextSize: 0, batchSize: 0, ubatchSize: 0, threads: 0, gpuLayers: -1, baselineJobID: "", maxRegressionPercent: 0 },
     register: { modelID: "studio-model", contextSize: 4096, gpuLayers: -1 },
   };
   const fields: Record<Operation, FieldSpec[]> = {
@@ -47,6 +48,7 @@
   let error = $state("");
   let message = $state("");
   let importInput: HTMLInputElement;
+  let visibleTemplates = $derived(templates.filter((template) => !$activeStudioProject || template.projectID === $activeStudioProject));
 
   function draft(operation: Operation, usePrevious: boolean): DraftStep {
     return { operation, usePrevious, requestText: JSON.stringify(defaults[operation], null, 2), variantsText: "", continueOnFailure: false, gateMetric: "", gateMin: "", gateMax: "" };
@@ -100,7 +102,7 @@
   async function run() {
     busy = true; error = ""; message = "";
     try {
-      const task = await startStudioPipeline({ name, input: input || undefined, steps: buildSteps() });
+      const task = await startStudioPipeline({ name, input: input || undefined, projectID: $activeStudioProject || undefined, steps: buildSteps() });
       message = `Pipeline queued as ${task.id}. Follow it on Studio Jobs.`;
     } catch (cause) { error = cause instanceof Error ? cause.message : String(cause); }
     finally { busy = false; }
@@ -109,10 +111,10 @@
   async function save() {
     busy = true; error = ""; message = "";
     try {
-      const saved = await saveStudioPipelineTemplate({ id: templateID, name, pipeline: { name, input: input || undefined, steps: buildSteps() } });
+      const saved = await saveStudioPipelineTemplate({ id: templateID, projectID: $activeStudioProject || undefined, name, pipeline: { name, input: input || undefined, projectID: $activeStudioProject || undefined, steps: buildSteps() } });
       templateID = saved.id;
       templates = await listStudioPipelineTemplates();
-      message = "Pipeline template saved.";
+      message = $activeStudioProject ? "Recipe saved to the active project." : "Recipe template saved.";
     } catch (cause) { error = cause instanceof Error ? cause.message : String(cause); }
     finally { busy = false; }
   }
@@ -164,10 +166,10 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-2">
-  <div class="flex items-center gap-2"><Workflow class="size-5" /><h2 class="text-lg font-semibold">Pipeline builder</h2><span class="text-muted-foreground text-sm">Typed Studio operations only</span></div>
+  <div class="flex items-center gap-2"><Workflow class="size-5" /><h2 class="text-lg font-semibold">Recipes &amp; pipelines</h2><span class="text-muted-foreground text-sm">One operation is a recipe; add steps to build a pipeline.</span></div>
   <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
     <Card.Root>
-      <Card.Header><Card.Title>Workflow</Card.Title></Card.Header>
+      <Card.Header><Card.Title>Custom recipe</Card.Title><Card.Description>Common settings have controls. Advanced request JSON exposes every argument supported by the Studio operation API and is validated by the backend before execution.</Card.Description></Card.Header>
       <Card.Content class="space-y-4">
         <div class="grid gap-3 sm:grid-cols-2">
           <div class="space-y-2"><Label.Root for="pipeline-name">Name</Label.Root><Input id="pipeline-name" bind:value={name} /></div>
@@ -206,9 +208,9 @@
         <div class="flex flex-wrap justify-end gap-2"><Button variant="outline" onclick={() => importInput.click()}><Upload class="size-4" />Import</Button><Button variant="outline" onclick={exportTemplate}><Download class="size-4" />Export</Button><Button variant="outline" onclick={save} disabled={busy || !name.trim()}><Save class="size-4" />Save template</Button><Button onclick={run} disabled={busy}>{#if busy}<Loader2 class="size-4 animate-spin" />{:else}<Play class="size-4" />{/if}Run pipeline</Button></div>
       </Card.Content>
     </Card.Root>
-    <Card.Root class="h-fit"><Card.Header><Card.Title>Saved templates</Card.Title></Card.Header><Card.Content class="space-y-2">
-      {#if templates.length === 0}<p class="text-muted-foreground text-sm">No saved templates.</p>{/if}
-      {#each templates as template}<div class="border-border flex items-center gap-2 rounded-md border p-2"><button class="min-w-0 flex-1 truncate text-left text-sm" onclick={() => load(template)}>{template.name}<span class="text-muted-foreground block text-xs">{template.pipeline.steps.length} steps</span></button><Button variant="ghost" size="icon" onclick={() => remove(template)}><Trash2 class="size-4" /></Button></div>{/each}
+    <Card.Root class="h-fit"><Card.Header><Card.Title>Saved recipes</Card.Title><Card.Description>{#if $activeStudioProject}Showing the active project only.{:else}Showing all unscoped and project recipes.{/if}</Card.Description></Card.Header><Card.Content class="space-y-2">
+      {#if visibleTemplates.length === 0}<p class="text-muted-foreground text-sm">No saved recipes in this scope.</p>{/if}
+      {#each visibleTemplates as template}<div class="border-border flex items-center gap-2 rounded-md border p-2"><button class="min-w-0 flex-1 truncate text-left text-sm" onclick={() => load(template)}>{template.name}<span class="text-muted-foreground block text-xs">{template.pipeline.steps.length === 1 ? "1 operation" : `${template.pipeline.steps.length} steps`}</span></button><Button variant="ghost" size="icon" onclick={() => remove(template)}><Trash2 class="size-4" /></Button></div>{/each}
     </Card.Content></Card.Root>
   </div>
 </div>

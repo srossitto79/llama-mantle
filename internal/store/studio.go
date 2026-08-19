@@ -10,6 +10,7 @@ import (
 // StudioJobRecord is the durable representation of a Studio task.
 type StudioJobRecord struct {
 	ID             string
+	ProjectID      string
 	Operation      string
 	State          string
 	Message        string
@@ -48,18 +49,19 @@ func (s *Store) SaveStudioJob(ctx context.Context, job StudioJobRecord) error {
 		INSERT INTO studio_jobs (
 			id, operation, state, message, pct, input_path, output_path,
 			parameters_json, logs_json, exit_code, ts_created, ts_updated,
-			job_class, ts_queued, ts_started, ts_finished
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			job_class, ts_queued, ts_started, ts_finished, project_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			operation=excluded.operation, state=excluded.state, message=excluded.message,
 			pct=excluded.pct, input_path=excluded.input_path, output_path=excluded.output_path,
 			parameters_json=excluded.parameters_json, logs_json=excluded.logs_json,
 			exit_code=excluded.exit_code, ts_updated=excluded.ts_updated,
 			job_class=excluded.job_class, ts_queued=excluded.ts_queued,
-			ts_started=excluded.ts_started, ts_finished=excluded.ts_finished`,
+			ts_started=excluded.ts_started, ts_finished=excluded.ts_finished,
+			project_id=excluded.project_id`,
 		job.ID, job.Operation, job.State, job.Message, job.Pct, job.Input, job.Output,
 		job.ParametersJSON, job.LogsJSON, job.ExitCode, job.CreatedAt.UnixMilli(), job.UpdatedAt.UnixMilli(),
-		job.JobClass, nullableTimeMillis(job.QueuedAt), nullableTimeMillis(job.StartedAt), nullableTimeMillis(job.FinishedAt))
+		job.JobClass, nullableTimeMillis(job.QueuedAt), nullableTimeMillis(job.StartedAt), nullableTimeMillis(job.FinishedAt), job.ProjectID)
 	if err != nil {
 		return fmt.Errorf("upsert studio job: %w", err)
 	}
@@ -116,7 +118,7 @@ func (s *Store) ListStudioJobs(ctx context.Context, limit int) ([]StudioJobRecor
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, operation, state, message, pct, input_path, output_path,
 		       parameters_json, logs_json, exit_code, ts_created, ts_updated,
-		       job_class, ts_queued, ts_started, ts_finished
+		       job_class, ts_queued, ts_started, ts_finished, project_id
 		FROM studio_jobs ORDER BY ts_updated DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list studio jobs: %w", err)
@@ -131,7 +133,7 @@ func (s *Store) ListStudioJobs(ctx context.Context, limit int) ([]StudioJobRecor
 		var queued, started, finished sql.NullInt64
 		if err := rows.Scan(&job.ID, &job.Operation, &job.State, &job.Message, &job.Pct,
 			&job.Input, &job.Output, &job.ParametersJSON, &job.LogsJSON, &exitCode,
-			&created, &updated, &job.JobClass, &queued, &started, &finished); err != nil {
+			&created, &updated, &job.JobClass, &queued, &started, &finished, &job.ProjectID); err != nil {
 			return nil, fmt.Errorf("scan studio job: %w", err)
 		}
 		if exitCode.Valid {

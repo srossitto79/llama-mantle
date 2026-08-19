@@ -14,6 +14,7 @@ type StudioCatalogArtifact struct {
 	Kind         string
 	MetadataJSON string
 	JobID        string
+	ProjectID    string
 	Operation    string
 	Input        string
 	CreatedAt    time.Time
@@ -52,7 +53,7 @@ func (s *Store) ListStudioCatalogArtifacts(ctx context.Context, limit int, kind 
 	rows, err := s.db.QueryContext(ctx, `
 		WITH ranked AS (
 			SELECT a.name, a.path, a.size, a.kind, a.metadata_json,
-			       j.id AS job_id, j.operation, j.input_path, j.ts_created,
+			       j.id AS job_id, j.project_id, j.operation, j.input_path, j.ts_created,
 			       ROW_NUMBER() OVER (
 				   PARTITION BY a.path
 				   ORDER BY CASE WHEN j.operation IN ('pipeline', 'register') THEN 1 ELSE 0 END, j.ts_updated DESC
@@ -61,7 +62,7 @@ func (s *Store) ListStudioCatalogArtifacts(ctx context.Context, limit int, kind 
 			JOIN studio_jobs j ON j.id = a.job_id
 			WHERE j.state = 'completed' AND (? = '' OR a.kind = ?)
 		)
-		SELECT r.name, r.path, r.size, r.kind, r.metadata_json, r.job_id, r.operation, r.input_path, r.ts_created,
+		SELECT r.name, r.path, r.size, r.kind, r.metadata_json, r.job_id, r.project_id, r.operation, r.input_path, r.ts_created,
 		       COALESCE(n.sha256, ''), n.gguf_valid, COALESCE(n.verification_error, ''),
 		       COALESCE(n.tags_json, '[]'), COALESCE(n.notes, ''), n.ts_verified,
 		       EXISTS(SELECT 1 FROM studio_artifacts registered
@@ -79,7 +80,7 @@ func (s *Store) ListStudioCatalogArtifacts(ctx context.Context, limit int, kind 
 		var valid sql.NullBool
 		var verified sql.NullInt64
 		if err := rows.Scan(&artifact.Name, &artifact.Path, &artifact.Size, &artifact.Kind,
-			&artifact.MetadataJSON, &artifact.JobID, &artifact.Operation, &artifact.Input, &created,
+			&artifact.MetadataJSON, &artifact.JobID, &artifact.ProjectID, &artifact.Operation, &artifact.Input, &created,
 			&artifact.SHA256, &valid, &artifact.VerifyError, &artifact.TagsJSON, &artifact.Notes, &verified,
 			&artifact.Registered); err != nil {
 			return nil, fmt.Errorf("scan Studio catalog artifact: %w", err)

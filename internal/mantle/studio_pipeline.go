@@ -13,9 +13,10 @@ import (
 const maxStudioPipelineSteps = 20
 
 type StudioPipelineRequest struct {
-	Name  string               `json:"name,omitempty"`
-	Input string               `json:"input,omitempty"`
-	Steps []StudioPipelineStep `json:"steps"`
+	Name      string               `json:"name,omitempty"`
+	Input     string               `json:"input,omitempty"`
+	ProjectID string               `json:"projectID,omitempty"`
+	Steps     []StudioPipelineStep `json:"steps"`
 }
 
 type StudioPipelineStep struct {
@@ -35,6 +36,7 @@ type StudioPipelineGate struct {
 
 type StudioPipelineTemplate struct {
 	ID        string                `json:"id"`
+	ProjectID string                `json:"projectID,omitempty"`
 	Name      string                `json:"name"`
 	Pipeline  StudioPipelineRequest `json:"pipeline"`
 	CreatedAt time.Time             `json:"createdAt"`
@@ -57,6 +59,9 @@ func (tm *TaskManager) startStudioPipeline(req StudioPipelineRequest, modelsDir 
 	task.mu.Lock()
 	task.JobClass = "workflow"
 	task.mu.Unlock()
+	if err := tm.AssignStudioTaskProject(task, req.ProjectID); err != nil {
+		return nil, err
+	}
 	tm.PersistStudioTask(task)
 	go tm.runStudioPipeline(task, req, modelsDir, dispatch)
 	return task, nil
@@ -113,6 +118,18 @@ func (tm *TaskManager) SaveStudioPipelineTemplate(template StudioPipelineTemplat
 	if st == nil {
 		return nil, fmt.Errorf("Studio storage is not configured")
 	}
+	if template.ProjectID != "" {
+		if !isSafeBackendName(template.ProjectID) {
+			return nil, fmt.Errorf("invalid project ID")
+		}
+		exists, err := st.StudioProjectExists(context.Background(), template.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, fmt.Errorf("Studio project %q was not found", template.ProjectID)
+		}
+	}
 	definition, err := json.Marshal(template.Pipeline)
 	if err != nil {
 		return nil, err
@@ -123,7 +140,7 @@ func (tm *TaskManager) SaveStudioPipelineTemplate(template StudioPipelineTemplat
 	}
 	template.UpdatedAt = now
 	if err := st.SaveStudioPipelineTemplate(context.Background(), store.StudioPipelineTemplateRecord{
-		ID: template.ID, Name: template.Name, DefinitionJSON: string(definition),
+		ID: template.ID, ProjectID: template.ProjectID, Name: template.Name, DefinitionJSON: string(definition),
 		CreatedAt: template.CreatedAt, UpdatedAt: template.UpdatedAt,
 	}); err != nil {
 		return nil, err
@@ -149,7 +166,7 @@ func (tm *TaskManager) ListStudioPipelineTemplates() ([]StudioPipelineTemplate, 
 			return nil, fmt.Errorf("decode pipeline template %s: %w", record.ID, err)
 		}
 		templates = append(templates, StudioPipelineTemplate{
-			ID: record.ID, Name: record.Name, Pipeline: pipeline,
+			ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, Pipeline: pipeline,
 			CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt,
 		})
 	}
@@ -220,6 +237,11 @@ func (tm *TaskManager) runStudioPipeline(parent *Task, req StudioPipelineRequest
 					parent.UpdateProgress(TaskFailed, fmt.Sprintf("pipeline step %d variant %d: %v", index+1, variantIndex+1, dispatchErr), index*100/len(req.Steps))
 					return
 				}
+				if projectErr := tm.AssignStudioTaskProject(child, parent.Snapshot().ProjectID); projectErr != nil {
+					tm.CancelTask(child.ID)
+					parent.UpdateProgress(TaskFailed, fmt.Sprintf("pipeline step %d variant %d project: %v", index+1, variantIndex+1, projectErr), index*100/len(req.Steps))
+					return
+				}
 				children = append(children, child)
 				childIDs = append(childIDs, child.ID)
 			}
@@ -269,6 +291,11 @@ func (tm *TaskManager) runStudioPipeline(parent *Task, req StudioPipelineRequest
 		child, err := dispatch(step, modelsDir)
 		if err != nil {
 			parent.UpdateProgress(TaskFailed, fmt.Sprintf("pipeline step %d (%s): %v", index+1, step.Operation, err), index*100/len(req.Steps))
+			return
+		}
+		if err := tm.AssignStudioTaskProject(child, parent.Snapshot().ProjectID); err != nil {
+			tm.CancelTask(child.ID)
+			parent.UpdateProgress(TaskFailed, fmt.Sprintf("pipeline step %d project: %v", index+1, err), index*100/len(req.Steps))
 			return
 		}
 		childIDs = append(childIDs, child.ID)
@@ -362,7 +389,7 @@ func (tm *TaskManager) RetryStudioPipeline(jobID string, fromStep int, modelsDir
 		input = previous.Snapshot().Output
 	}
 	name, _ := snapshot.Parameters["name"].(string)
-	return tm.StartStudioPipeline(StudioPipelineRequest{Name: name + " retry", Input: input, Steps: steps[fromStep:]}, modelsDir)
+	return tm.StartStudioPipeline(StudioPipelineRequest{Name: name + " retry", Input: input, ProjectID: snapshot.ProjectID, Steps: steps[fromStep:]}, modelsDir)
 }
 
 func (tm *TaskManager) waitForPipelineChild(parent, child *Task) (*Task, bool) {

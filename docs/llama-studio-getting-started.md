@@ -138,12 +138,16 @@ same base model and compatible training settings.
 
 ## Pipelines, evaluations, and projects
 
-- **Pipelines** compose typed operations, save/import/export templates, fan out up to
-  eight variants, apply evaluation metric gates, and retry failed work from Jobs.
+- **Recipes & pipelines** exposes all request arguments supported by each typed Studio
+  operation. Use one step for a reusable custom recipe or compose multiple steps,
+  save/import/export templates, fan out up to eight variants, apply evaluation metric
+  gates, and retry failed work from Jobs.
 - **Evaluations** compare benchmark or perplexity runs. Positive displayed deltas mean
   improvement, including perplexity where a lower value is better.
 - **Projects** group references to models, datasets, adapters, checkpoints, and outputs.
-  Projects do not move files; deleting a project never deletes its resources.
+  Select the active project in the sidebar before running work. New jobs, artifacts,
+  evaluations, and saved recipes are associated with it and their pages are filtered
+  to that workspace. Projects do not move files; deleting one never deletes resources.
 - **Artifacts** retain provenance, verification results, tags, notes, and lineage.
   Retention previews exclude serving registrations and tagged artifacts by default.
 

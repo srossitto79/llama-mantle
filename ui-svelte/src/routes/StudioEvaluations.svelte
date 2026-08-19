@@ -7,6 +7,7 @@
   import * as Label from "$lib/components/ui/label/index.js";
   import { listStudioEvaluations, registerStudioModel, streamTaskProgress } from "../lib/mantleApi";
   import type { StudioEvaluation } from "../lib/types";
+  import { activeStudioProject } from "../stores/studioProject";
 
   let evaluations = $state<StudioEvaluation[]>([]);
   let baselineID = $state("");
@@ -27,7 +28,7 @@
   function formatMetric(value: number | undefined): string { return value === undefined ? "—" : value.toLocaleString(undefined, { maximumFractionDigits: 3 }); }
 
   async function refresh() {
-    busy = true; try { evaluations = await listStudioEvaluations(); if (!candidateID && evaluations[0]) candidateID = evaluations[0].jobID; if (!baselineID && evaluations[1]) baselineID = evaluations[1].jobID; error = ""; }
+    busy = true; try { evaluations = (await listStudioEvaluations()).filter((item) => !$activeStudioProject || item.projectID === $activeStudioProject); if (!candidateID && evaluations[0]) candidateID = evaluations[0].jobID; if (!baselineID && evaluations[1]) baselineID = evaluations[1].jobID; error = ""; }
     catch (cause) { error = cause instanceof Error ? cause.message : String(cause); } finally { busy = false; }
   }
   async function promote() {

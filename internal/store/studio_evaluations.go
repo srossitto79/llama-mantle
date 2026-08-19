@@ -9,6 +9,7 @@ import (
 
 type StudioEvaluationRecord struct {
 	JobID          string
+	ProjectID      string
 	Model          string
 	Mode           string
 	MetricsJSON    string
@@ -20,9 +21,9 @@ func (s *Store) GetStudioEvaluation(ctx context.Context, jobID string) (StudioEv
 	var evaluation StudioEvaluationRecord
 	var created int64
 	err := s.db.QueryRowContext(ctx, `
-		SELECT job_id, model_path, mode, metrics_json, parameters_json, ts_created
-		FROM studio_evaluations WHERE job_id = ?`, jobID).Scan(
-		&evaluation.JobID, &evaluation.Model, &evaluation.Mode, &evaluation.MetricsJSON,
+		SELECT e.job_id, j.project_id, e.model_path, e.mode, e.metrics_json, e.parameters_json, e.ts_created
+		FROM studio_evaluations e JOIN studio_jobs j ON j.id=e.job_id WHERE e.job_id = ?`, jobID).Scan(
+		&evaluation.JobID, &evaluation.ProjectID, &evaluation.Model, &evaluation.Mode, &evaluation.MetricsJSON,
 		&evaluation.ParametersJSON, &created)
 	if err == sql.ErrNoRows {
 		return evaluation, fmt.Errorf("evaluation job %q was not found", jobID)
@@ -52,9 +53,9 @@ func (s *Store) ListStudioEvaluations(ctx context.Context, model string, limit i
 		limit = 100
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT job_id, model_path, mode, metrics_json, parameters_json, ts_created
-		FROM studio_evaluations WHERE (? = '' OR model_path = ?)
-		ORDER BY ts_created DESC LIMIT ?`, model, model, limit)
+		SELECT e.job_id, j.project_id, e.model_path, e.mode, e.metrics_json, e.parameters_json, e.ts_created
+		FROM studio_evaluations e JOIN studio_jobs j ON j.id=e.job_id WHERE (? = '' OR e.model_path = ?)
+		ORDER BY e.ts_created DESC LIMIT ?`, model, model, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list Studio evaluations: %w", err)
 	}
@@ -63,7 +64,7 @@ func (s *Store) ListStudioEvaluations(ctx context.Context, model string, limit i
 	for rows.Next() {
 		var evaluation StudioEvaluationRecord
 		var created int64
-		if err := rows.Scan(&evaluation.JobID, &evaluation.Model, &evaluation.Mode,
+		if err := rows.Scan(&evaluation.JobID, &evaluation.ProjectID, &evaluation.Model, &evaluation.Mode,
 			&evaluation.MetricsJSON, &evaluation.ParametersJSON, &created); err != nil {
 			return nil, fmt.Errorf("scan Studio evaluation: %w", err)
 		}

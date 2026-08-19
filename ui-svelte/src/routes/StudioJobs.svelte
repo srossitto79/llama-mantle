@@ -5,6 +5,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { cancelStudioJob, getStudioScheduler, listTasks, retryStudioPipeline } from "../lib/mantleApi";
   import type { MantleTask, StudioSchedulerStatus } from "../lib/types";
+  import { activeStudioProject } from "../stores/studioProject";
 
   let jobs = $state<MantleTask[]>([]);
   let scheduler = $state<StudioSchedulerStatus | null>(null);
@@ -14,7 +15,7 @@
   async function refresh() {
     try {
       const [tasks, status] = await Promise.all([listTasks(), getStudioScheduler()]);
-      jobs = tasks.filter((task) => task.type === "studio").sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+      jobs = tasks.filter((task) => task.type === "studio" && (!$activeStudioProject || task.projectID === $activeStudioProject)).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
       scheduler = status;
       error = "";
     } catch (cause) {

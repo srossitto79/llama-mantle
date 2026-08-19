@@ -47,6 +47,7 @@ type Task struct {
 
 	// Studio operation metadata. Legacy download/build tasks leave these empty.
 	Operation  string         `json:"operation,omitempty"`
+	ProjectID  string         `json:"projectID,omitempty"`
 	Input      string         `json:"input,omitempty"`
 	Output     string         `json:"output,omitempty"`
 	Parameters map[string]any `json:"parameters,omitempty"`
@@ -132,7 +133,7 @@ func (t *Task) Snapshot() *Task {
 		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, QueuedAt: t.QueuedAt,
 		StartedAt: t.StartedAt, FinishedAt: t.FinishedAt, Repo: t.Repo,
 		Branch: t.Branch, ModelID: t.ModelID, Operation: t.Operation,
-		Input: t.Input, Output: t.Output, ExitCode: t.ExitCode, JobClass: t.JobClass,
+		Input: t.Input, Output: t.Output, ExitCode: t.ExitCode, JobClass: t.JobClass, ProjectID: t.ProjectID,
 		Parameters: make(map[string]any, len(t.Parameters)),
 	}
 	for key, value := range t.Parameters {
@@ -326,7 +327,7 @@ func (tm *TaskManager) taskFromStudioRecord(job store.StudioJobRecord) (*Task, e
 	task := &Task{
 		ID: job.ID, Type: "studio", State: TaskState(job.State), Message: job.Message,
 		Pct: job.Pct, CreatedAt: job.CreatedAt, UpdatedAt: job.UpdatedAt,
-		Operation: job.Operation, Input: job.Input, Output: job.Output,
+		Operation: job.Operation, Input: job.Input, Output: job.Output, ProjectID: job.ProjectID,
 		Parameters: parameters, Logs: logs, ExitCode: job.ExitCode,
 		JobClass: job.JobClass, QueuedAt: job.QueuedAt, StartedAt: job.StartedAt, FinishedAt: job.FinishedAt,
 		ctx: ctx, cancel: cancel, cancelCh: make(chan struct{}), persist: tm.persistStudioTask,
@@ -350,7 +351,7 @@ func (tm *TaskManager) persistStudioTask(task *Task) {
 	parameters, err1 := json.Marshal(task.Parameters)
 	logs, err2 := json.Marshal(task.Logs)
 	record := store.StudioJobRecord{
-		ID: task.ID, Operation: task.Operation, State: string(task.State), Message: task.Message,
+		ID: task.ID, ProjectID: task.ProjectID, Operation: task.Operation, State: string(task.State), Message: task.Message,
 		Pct: task.Pct, Input: task.Input, Output: task.Output,
 		ParametersJSON: string(parameters), LogsJSON: string(logs), ExitCode: task.ExitCode,
 		CreatedAt: task.CreatedAt, UpdatedAt: task.UpdatedAt,

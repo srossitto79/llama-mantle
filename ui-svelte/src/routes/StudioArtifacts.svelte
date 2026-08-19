@@ -7,6 +7,7 @@
   import * as Label from "$lib/components/ui/label/index.js";
   import { applyStudioRetention, cleanupStudioArtifact, getStudioLineage, listStudioArtifacts, listStudioEvaluations, previewStudioRetention, saveStudioArtifactAnnotation, streamTaskProgress, verifyStudioArtifact, verifyStudioArtifacts } from "../lib/mantleApi";
   import type { StudioCatalogArtifact, StudioEvaluation, StudioLineageEdge, StudioRetentionPreview } from "../lib/types";
+  import { activeStudioProject } from "../stores/studioProject";
 
   let artifacts = $state<StudioCatalogArtifact[]>([]);
   let lineage = $state<StudioLineageEdge[]>([]);
@@ -21,8 +22,9 @@
   let retentionDays = $state(30);
   let includeTagged = $state(false);
   let retentionPreview = $state<StudioRetentionPreview | null>(null);
-  let kinds = $derived([...new Set(artifacts.map((artifact) => artifact.kind))].sort());
-  let visible = $derived(filter ? artifacts.filter((artifact) => artifact.kind === filter) : artifacts);
+  let projectArtifacts = $derived(artifacts.filter((artifact) => !$activeStudioProject || artifact.projectID === $activeStudioProject));
+  let kinds = $derived([...new Set(projectArtifacts.map((artifact) => artifact.kind))].sort());
+  let visible = $derived(filter ? projectArtifacts.filter((artifact) => artifact.kind === filter) : projectArtifacts);
   let selectedArtifact = $derived(artifacts.find((artifact) => artifact.path === selected));
 
   function formatSize(bytes: number): string {

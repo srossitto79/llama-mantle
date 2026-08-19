@@ -8,6 +8,7 @@ import (
 
 type StudioPipelineTemplateRecord struct {
 	ID             string
+	ProjectID      string
 	Name           string
 	DefinitionJSON string
 	CreatedAt      time.Time
@@ -16,11 +17,12 @@ type StudioPipelineTemplateRecord struct {
 
 func (s *Store) SaveStudioPipelineTemplate(ctx context.Context, template StudioPipelineTemplateRecord) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO studio_pipeline_templates (id, name, definition_json, ts_created, ts_updated)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO studio_pipeline_templates (id, name, definition_json, ts_created, ts_updated, project_id)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
-			name=excluded.name, definition_json=excluded.definition_json, ts_updated=excluded.ts_updated`,
-		template.ID, template.Name, template.DefinitionJSON, template.CreatedAt.UnixMilli(), template.UpdatedAt.UnixMilli())
+			name=excluded.name, definition_json=excluded.definition_json, ts_updated=excluded.ts_updated,
+			project_id=excluded.project_id`,
+		template.ID, template.Name, template.DefinitionJSON, template.CreatedAt.UnixMilli(), template.UpdatedAt.UnixMilli(), template.ProjectID)
 	if err != nil {
 		return fmt.Errorf("save Studio pipeline template: %w", err)
 	}
@@ -29,7 +31,7 @@ func (s *Store) SaveStudioPipelineTemplate(ctx context.Context, template StudioP
 
 func (s *Store) ListStudioPipelineTemplates(ctx context.Context) ([]StudioPipelineTemplateRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, definition_json, ts_created, ts_updated
+		SELECT id, name, definition_json, ts_created, ts_updated, project_id
 		FROM studio_pipeline_templates ORDER BY ts_updated DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list Studio pipeline templates: %w", err)
@@ -39,7 +41,7 @@ func (s *Store) ListStudioPipelineTemplates(ctx context.Context) ([]StudioPipeli
 	for rows.Next() {
 		var template StudioPipelineTemplateRecord
 		var created, updated int64
-		if err := rows.Scan(&template.ID, &template.Name, &template.DefinitionJSON, &created, &updated); err != nil {
+		if err := rows.Scan(&template.ID, &template.Name, &template.DefinitionJSON, &created, &updated, &template.ProjectID); err != nil {
 			return nil, fmt.Errorf("scan Studio pipeline template: %w", err)
 		}
 		template.CreatedAt = time.UnixMilli(created)

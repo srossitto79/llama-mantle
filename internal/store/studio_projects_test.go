@@ -28,3 +28,18 @@ func TestStore_StudioProjectPersistsResources(t *testing.T) {
 		t.Fatalf("unexpected projects: %#v", projects)
 	}
 }
+
+func TestStore_StudioProjectExists(t *testing.T) {
+	st, err := New(filepath.Join(t.TempDir(), "projects.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.SaveStudioProject(context.Background(), StudioProjectRecord{ID: "project-1", Name: "Experiment", CreatedAt: time.Now(), UpdatedAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	exists, err := st.StudioProjectExists(context.Background(), "project-1")
+	if err != nil || !exists {
+		t.Fatalf("exists = %v, err = %v", exists, err)
+	}
+}

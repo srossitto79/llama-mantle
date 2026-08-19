@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { link } from "svelte-spa-router";
   import { FerrisWheel, Boxes, Activity, ScrollText, Gauge, Sun, Moon, Monitor, ChevronRight, Settings, PackageSearch, Cog, Server, Wrench, Workflow, Database, BarChart3, FolderKanban } from "@lucide/svelte";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
@@ -11,7 +12,19 @@
   import { showUnlistedModels } from "../stores/modelDisplay";
   import { modelsMenuOpen } from "../stores/sidebar";
   import type { Model } from "../lib/types";
+  import type { StudioProject } from "../lib/types";
+  import { listStudioProjects } from "../lib/mantleApi";
+  import { activeStudioProject } from "../stores/studioProject";
   import ConnectionStatus from "./ConnectionStatus.svelte";
+
+  let studioProjects = $state<StudioProject[]>([]);
+
+  onMount(() => {
+    void listStudioProjects().then((projects) => {
+      studioProjects = projects;
+      if ($activeStudioProject && !projects.some((project) => project.id === $activeStudioProject)) activeStudioProject.set("");
+    });
+  });
 
   function handleTitleChange(newTitle: string): void {
     const sanitized = newTitle.replace(/\n/g, "").trim().substring(0, 64) || "llama-swap";
@@ -178,6 +191,16 @@
           </Sidebar.MenuItem>
 
           <Sidebar.MenuItem>
+            <div class="px-2 py-1">
+              <label class="text-muted-foreground mb-1 block text-[0.65rem] font-medium uppercase tracking-wide" for="active-studio-project">Active project</label>
+              <select id="active-studio-project" class="border-input bg-background h-8 w-full min-w-0 rounded-md border px-2 text-xs" value={$activeStudioProject} onchange={(event) => activeStudioProject.set(event.currentTarget.value)}>
+                <option value="">All Studio work</option>
+                {#each studioProjects as project (project.id)}<option value={project.id}>{project.name}</option>{/each}
+              </select>
+            </div>
+          </Sidebar.MenuItem>
+
+          <Sidebar.MenuItem>
             <Sidebar.MenuButton isActive={isActive("/studio/datasets", $currentRoute)} tooltipContent="Studio Datasets">
               {#snippet child({ props })}
                 <a href="/studio/datasets" use:link {...props}>
@@ -216,7 +239,7 @@
               {#snippet child({ props })}
                 <a href="/studio/pipelines" use:link {...props}>
                   <Workflow />
-                  <span>Pipelines</span>
+                  <span>Recipes &amp; pipelines</span>
                 </a>
               {/snippet}
             </Sidebar.MenuButton>

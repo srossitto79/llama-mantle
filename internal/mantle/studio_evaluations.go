@@ -14,6 +14,7 @@ import (
 
 type StudioEvaluation struct {
 	JobID      string         `json:"jobID"`
+	ProjectID  string         `json:"projectID,omitempty"`
 	Model      string         `json:"model"`
 	Mode       string         `json:"mode"`
 	Metrics    map[string]any `json:"metrics"`
@@ -158,7 +159,7 @@ func (tm *TaskManager) ListStudioEvaluations(model string) ([]StudioEvaluation, 
 			return nil, err
 		}
 		evaluations = append(evaluations, StudioEvaluation{
-			JobID: record.JobID, Model: record.Model, Mode: record.Mode,
+			JobID: record.JobID, ProjectID: record.ProjectID, Model: record.Model, Mode: record.Mode,
 			Metrics: metrics, Parameters: parameters, CreatedAt: record.CreatedAt,
 		})
 	}

@@ -323,6 +323,7 @@ export interface MantleTask {
 	branch?: string;
 	modelID?: string;
 	operation?: string;
+	projectID?: string;
 	input?: string;
 	output?: string;
 	parameters?: Record<string, unknown>;
@@ -361,11 +362,13 @@ export interface StudioPipelineStep {
 export interface StudioPipelineRequest {
 	name?: string;
 	input?: string;
+	projectID?: string;
 	steps: StudioPipelineStep[];
 }
 
 export interface StudioPipelineTemplate {
 	id: string;
+	projectID?: string;
 	name: string;
 	pipeline: StudioPipelineRequest;
 	createdAt?: string;
@@ -390,6 +393,7 @@ export interface StudioCatalogArtifact {
 	kind: string;
 	metadata?: Record<string, unknown>;
 	jobID: string;
+	projectID?: string;
 	operation: string;
 	input?: string;
 	createdAt: string;
@@ -413,6 +417,7 @@ export interface StudioLineageEdge {
 
 export interface StudioEvaluation {
 	jobID: string;
+	projectID?: string;
 	model: string;
 	mode: "benchmark" | "perplexity";
 	metrics: Record<string, unknown>;

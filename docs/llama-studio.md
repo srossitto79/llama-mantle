@@ -127,12 +127,17 @@ can be selected for resume, while persisted structured-loss logs reconstruct the
 training-loss chart whenever the fork emits them.
 
 Outcome recipes provide editable starting points for quantize-and-evaluate, QLoRA,
-merge, prune, and comparison workflows. The first-run path connects resource selection,
-hardware preflight, execution, artifact review, and serving promotion.
+merge, prune, and comparison workflows. **Recipes & pipelines** is the power-user
+editor: a one-step workflow is a custom recipe, while additional steps create a
+pipeline. Common arguments have form controls and the advanced request JSON starts
+with every argument supported by the selected Studio operation API. Recipes can be
+saved, imported, exported, fanned out into variants, and guarded by evaluation gates.
 
-Projects are durable named collections of catalog resource paths. They organize models,
-datasets, adapters, checkpoints, and variants without moving files or changing
-provenance. Deleting a project never deletes its resources.
+Projects are durable named workspaces and collections of catalog resource paths. The
+active project is selected in the sidebar; new jobs, generated artifacts, evaluations,
+and saved recipes inherit that project, and their pages are scoped accordingly.
+Projects organize resources without moving files or changing provenance. Deleting a
+project never deletes its resources or job history.
 
 The dataset manager catalogs JSONL, JSON, text, CSV, and Parquet files under the
 model root's `datasets/` directory. Browser imports use a temporary file and atomic

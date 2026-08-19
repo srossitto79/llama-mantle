@@ -23,6 +23,7 @@ type StudioCatalogArtifact struct {
 	Kind        string         `json:"kind"`
 	Metadata    map[string]any `json:"metadata,omitempty"`
 	JobID       string         `json:"jobID"`
+	ProjectID   string         `json:"projectID,omitempty"`
 	Operation   string         `json:"operation"`
 	Input       string         `json:"input,omitempty"`
 	CreatedAt   time.Time      `json:"createdAt"`
@@ -86,7 +87,7 @@ func (tm *TaskManager) ListStudioCatalogArtifacts(modelsDir, kind string, limit 
 		_ = json.Unmarshal([]byte(record.MetadataJSON), &metadata)
 		artifact := StudioCatalogArtifact{
 			Name: record.Name, Path: record.Path, Size: record.Size, Kind: record.Kind,
-			Metadata: metadata, JobID: record.JobID, Operation: record.Operation,
+			Metadata: metadata, JobID: record.JobID, ProjectID: record.ProjectID, Operation: record.Operation,
 			Input: record.Input, CreatedAt: record.CreatedAt, SHA256: record.SHA256,
 			GGUFValid: record.GGUFValid, VerifyError: record.VerifyError, Notes: record.Notes,
 			VerifiedAt: record.VerifiedAt, Registered: record.Registered,
