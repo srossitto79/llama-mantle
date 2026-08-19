@@ -33,10 +33,13 @@ type StudioSchedulerStatus struct {
 }
 
 type StudioResourceSnapshot struct {
-	FreeRAMBytes  int64
-	FreeVRAMBytes int64
-	RAMKnown      bool
-	VRAMKnown     bool
+	TotalRAMBytes  int64
+	FreeRAMBytes   int64
+	TotalVRAMBytes int64
+	FreeVRAMBytes  int64
+	GPUCount       int
+	RAMKnown       bool
+	VRAMKnown      bool
 }
 
 func studioJobLimit(envName string, fallback int) int {

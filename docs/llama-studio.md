@@ -81,6 +81,9 @@ Pipeline requests contain only typed Studio operation requests. A step may set
 `usePrevious` to inject the preceding generated model into its operation-specific
 input field. Pipeline parents retain child job IDs, aggregate artifacts, stop on
 the first failed step, and propagate cancellation to the active child.
+Steps may also fan out into as many as eight typed request variants. Evaluation
+steps can gate continuation on minimum or maximum stored metrics, and failed
+pipelines can be retried from the failed child through Jobs.
 
 Pipeline templates are stored in SQLite and managed from the Pipeline Builder.
 Templates can also be imported and exported as versioned JSON documents. The
@@ -111,6 +114,22 @@ llama-bench result rows and exact operation parameters. An evaluation may select
 job as its baseline and set a maximum regression percentage. Throughput regressions use
 generation speed (falling back to prompt speed), while perplexity regressions account for
 lower values being better; exceeding the threshold fails the evaluation job.
+The evaluation workspace compares same-mode baseline and candidate jobs, normalizes
+the direction of improvement, and can promote the candidate into serving.
+
+Studio exposes one resource catalog across local models, generated artifacts,
+datasets, adapters, and training checkpoints. Forms use this catalog for searchable
+selection and display resource type, size, and producing operation. QLoRA checkpoints
+can be selected for resume, while persisted structured-loss logs reconstruct the
+training-loss chart whenever the fork emits them.
+
+Outcome recipes provide editable starting points for quantize-and-evaluate, QLoRA,
+merge, prune, and comparison workflows. The first-run path connects resource selection,
+hardware preflight, execution, artifact review, and serving promotion.
+
+Projects are durable named collections of catalog resource paths. They organize models,
+datasets, adapters, checkpoints, and variants without moving files or changing
+provenance. Deleting a project never deletes its resources.
 
 The dataset manager catalogs JSONL, JSON, text, CSV, and Parquet files under the
 model root's `datasets/` directory. Browser imports use a temporary file and atomic
@@ -122,17 +141,30 @@ structured CSV, JSON-array, and Parquet previews remain future format adapters.
 
 ## Persistence model
 
-Studio persistence uses three related records:
+Studio persistence is centered on three related records:
 
 - `studio_jobs`: operation, state, parameters, progress, exit status, and timestamps.
 - `studio_artifacts`: root-relative path, type, size, hash, metadata, and creation time.
 - `studio_lineage`: input/output artifact relationships and the producing job.
+
+Additional tables retain annotations, evaluations, pipeline templates, projects,
+and project-to-resource membership without duplicating artifact files.
 
 Jobs found in a running state after process restart are marked interrupted. Operations
 that support checkpoints can offer resume; transformations with partial outputs must
 clean or quarantine those outputs before retrying.
 
 ## Job scheduler configuration
+
+## Hardware advisor
+
+Studio preflight combines the selected model and dataset sizes with live RAM, VRAM,
+GPU, CPU, and output-filesystem telemetry. It estimates output size and peak memory,
+reports whether the operation is expected to fit, and supplies settings that can be
+applied to the current form. Current recommendations cover quantization type and
+threads, QLoRA rank/batch/checkpointing, and evaluation or serving offload/context.
+These are conservative planning estimates rather than a substitute for the final
+operation admission checks.
 
 - `LLAMA_STUDIO_MAX_JOBS` controls total concurrent Studio jobs (default `2`).
 - `LLAMA_STUDIO_MAX_HEAVY_JOBS` limits concurrent training, merge, prune,

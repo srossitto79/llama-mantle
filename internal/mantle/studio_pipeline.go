@@ -19,9 +19,18 @@ type StudioPipelineRequest struct {
 }
 
 type StudioPipelineStep struct {
-	Operation   string          `json:"operation"`
-	UsePrevious bool            `json:"usePrevious,omitempty"`
-	Request     json.RawMessage `json:"request"`
+	Operation         string              `json:"operation"`
+	UsePrevious       bool                `json:"usePrevious,omitempty"`
+	Request           json.RawMessage     `json:"request"`
+	Variants          []json.RawMessage   `json:"variants,omitempty"`
+	ContinueOnFailure bool                `json:"continueOnFailure,omitempty"`
+	Gate              *StudioPipelineGate `json:"gate,omitempty"`
+}
+
+type StudioPipelineGate struct {
+	Metric string   `json:"metric"`
+	Min    *float64 `json:"min,omitempty"`
+	Max    *float64 `json:"max,omitempty"`
 }
 
 type StudioPipelineTemplate struct {
@@ -64,8 +73,22 @@ func validateStudioPipeline(req StudioPipelineRequest) error {
 		if !studioPipelineOperationAllowed(step.Operation) {
 			return fmt.Errorf("pipeline step %d has unsupported operation %q", i+1, step.Operation)
 		}
-		if len(step.Request) == 0 || !json.Valid(step.Request) {
+		if len(step.Variants) > 8 {
+			return fmt.Errorf("pipeline step %d may contain at most 8 variants", i+1)
+		}
+		if len(step.Request) == 0 && len(step.Variants) == 0 {
+			return fmt.Errorf("pipeline step %d requires a request or variants", i+1)
+		}
+		if len(step.Request) > 0 && !json.Valid(step.Request) {
 			return fmt.Errorf("pipeline step %d has an invalid request", i+1)
+		}
+		for _, variant := range step.Variants {
+			if !json.Valid(variant) {
+				return fmt.Errorf("pipeline step %d has an invalid variant request", i+1)
+			}
+		}
+		if step.Gate != nil && step.Operation != "evaluate" {
+			return fmt.Errorf("pipeline step %d gates require an evaluation operation", i+1)
 		}
 	}
 	return nil
@@ -162,7 +185,7 @@ func (tm *TaskManager) runStudioPipeline(parent *Task, req StudioPipelineRequest
 		if parent.Context().Err() != nil {
 			return
 		}
-		if step.UsePrevious {
+		if step.UsePrevious && len(step.Variants) == 0 {
 			if previous == "" {
 				parent.UpdateProgress(TaskFailed, fmt.Sprintf("pipeline step %d has no previous artifact", index+1), index*100/len(req.Steps))
 				return
@@ -173,6 +196,74 @@ func (tm *TaskManager) runStudioPipeline(parent *Task, req StudioPipelineRequest
 				parent.UpdateProgress(TaskFailed, fmt.Sprintf("pipeline step %d: %v", index+1, err), index*100/len(req.Steps))
 				return
 			}
+		}
+		if len(step.Variants) > 0 {
+			children := make([]*Task, 0, len(step.Variants))
+			for variantIndex, request := range step.Variants {
+				variant := step
+				variant.Request = request
+				variant.Variants = nil
+				if variant.UsePrevious {
+					var applyErr error
+					variant, applyErr = studioPipelineApplyPrevious(variant, previous)
+					if applyErr != nil {
+						parent.UpdateProgress(TaskFailed, applyErr.Error(), index*100/len(req.Steps))
+						return
+					}
+				}
+				child, dispatchErr := dispatch(variant, modelsDir)
+				if dispatchErr != nil {
+					if step.ContinueOnFailure {
+						parent.AppendLog(fmt.Sprintf("variant %d: %v", variantIndex+1, dispatchErr))
+						continue
+					}
+					parent.UpdateProgress(TaskFailed, fmt.Sprintf("pipeline step %d variant %d: %v", index+1, variantIndex+1, dispatchErr), index*100/len(req.Steps))
+					return
+				}
+				children = append(children, child)
+				childIDs = append(childIDs, child.ID)
+			}
+			parent.mu.Lock()
+			parent.Parameters["childTaskIDs"] = append([]string(nil), childIDs...)
+			parent.mu.Unlock()
+			parent.persistNow()
+			succeeded := 0
+			for _, child := range children {
+				result, cancelled := tm.waitForPipelineChild(parent, child)
+				if cancelled {
+					return
+				}
+				if result.State != TaskCompleted {
+					if step.ContinueOnFailure {
+						parent.AppendLog(result.Message)
+						continue
+					}
+					parent.UpdateProgress(TaskFailed, result.Message, index*100/len(req.Steps))
+					return
+				}
+				if gateErr := tm.checkStudioPipelineGate(result.ID, step.Gate); gateErr != nil {
+					parent.UpdateProgress(TaskFailed, gateErr.Error(), index*100/len(req.Steps))
+					return
+				}
+				for _, artifact := range result.Artifacts {
+					parent.AddArtifact(artifact)
+				}
+				succeeded++
+				if previous == "" || previous == req.Input {
+					previous = result.Output
+				}
+			}
+			if succeeded == 0 {
+				parent.UpdateProgress(TaskFailed, fmt.Sprintf("pipeline step %d: every variant failed", index+1), index*100/len(req.Steps))
+				return
+			}
+			if previous != "" {
+				parent.mu.Lock()
+				parent.Output = previous
+				parent.mu.Unlock()
+				parent.persistNow()
+			}
+			continue
 		}
 		parent.UpdateProgress(TaskRunning, fmt.Sprintf("Starting step %d/%d: %s", index+1, len(req.Steps), step.Operation), index*100/len(req.Steps))
 		child, err := dispatch(step, modelsDir)
@@ -193,6 +284,10 @@ func (tm *TaskManager) runStudioPipeline(parent *Task, req StudioPipelineRequest
 			parent.UpdateProgress(TaskFailed, fmt.Sprintf("pipeline step %d (%s) %s: %s", index+1, step.Operation, result.State, result.Message), index*100/len(req.Steps))
 			return
 		}
+		if err := tm.checkStudioPipelineGate(result.ID, step.Gate); err != nil {
+			parent.UpdateProgress(TaskFailed, fmt.Sprintf("pipeline step %d gate: %v", index+1, err), index*100/len(req.Steps))
+			return
+		}
 		for _, artifact := range result.Artifacts {
 			parent.AddArtifact(artifact)
 		}
@@ -205,6 +300,69 @@ func (tm *TaskManager) runStudioPipeline(parent *Task, req StudioPipelineRequest
 		}
 	}
 	parent.UpdateProgress(TaskCompleted, fmt.Sprintf("Pipeline completed (%d steps)", len(req.Steps)), 100)
+}
+
+func (tm *TaskManager) checkStudioPipelineGate(jobID string, gate *StudioPipelineGate) error {
+	if gate == nil {
+		return nil
+	}
+	tm.mu.Lock()
+	st := tm.studioStore
+	tm.mu.Unlock()
+	if st == nil {
+		return fmt.Errorf("Studio storage is not configured")
+	}
+	evaluation, err := st.GetStudioEvaluation(context.Background(), jobID)
+	if err != nil {
+		return err
+	}
+	var metrics map[string]any
+	if err := json.Unmarshal([]byte(evaluation.MetricsJSON), &metrics); err != nil {
+		return err
+	}
+	value, ok := numberValue(metrics[gate.Metric])
+	if !ok {
+		return fmt.Errorf("evaluation metric %q is unavailable", gate.Metric)
+	}
+	if gate.Min != nil && value < *gate.Min {
+		return fmt.Errorf("%s %.4g is below minimum %.4g", gate.Metric, value, *gate.Min)
+	}
+	if gate.Max != nil && value > *gate.Max {
+		return fmt.Errorf("%s %.4g exceeds maximum %.4g", gate.Metric, value, *gate.Max)
+	}
+	return nil
+}
+
+func (tm *TaskManager) RetryStudioPipeline(jobID string, fromStep int, modelsDir string) (*Task, error) {
+	original := tm.GetTask(jobID)
+	if original == nil || original.Operation != "pipeline" {
+		return nil, fmt.Errorf("pipeline job %q was not found", jobID)
+	}
+	snapshot := original.Snapshot()
+	encoded, _ := json.Marshal(snapshot.Parameters["steps"])
+	var steps []StudioPipelineStep
+	if err := json.Unmarshal(encoded, &steps); err != nil {
+		return nil, fmt.Errorf("decode original pipeline: %w", err)
+	}
+	if fromStep < 0 || fromStep >= len(steps) {
+		return nil, fmt.Errorf("retry step is out of range")
+	}
+	input := snapshot.Input
+	if fromStep > 0 {
+		idsJSON, _ := json.Marshal(snapshot.Parameters["childTaskIDs"])
+		var ids []string
+		_ = json.Unmarshal(idsJSON, &ids)
+		if len(ids) < fromStep {
+			return nil, fmt.Errorf("previous pipeline output is unavailable")
+		}
+		previous := tm.GetTask(ids[fromStep-1])
+		if previous == nil || previous.Snapshot().Output == "" {
+			return nil, fmt.Errorf("previous pipeline output is unavailable")
+		}
+		input = previous.Snapshot().Output
+	}
+	name, _ := snapshot.Parameters["name"].(string)
+	return tm.StartStudioPipeline(StudioPipelineRequest{Name: name + " retry", Input: input, Steps: steps[fromStep:]}, modelsDir)
 }
 
 func (tm *TaskManager) waitForPipelineChild(parent, child *Task) (*Task, bool) {

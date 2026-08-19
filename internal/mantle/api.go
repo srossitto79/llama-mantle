@@ -86,6 +86,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/mantle/studio/export/lora", h.handleStartExportLoRA)
 	mux.HandleFunc("POST /api/mantle/studio/evaluate", h.handleStartEvaluate)
 	mux.HandleFunc("POST /api/mantle/studio/pipelines", h.handleStartStudioPipeline)
+	mux.HandleFunc("POST /api/mantle/studio/pipelines/{id}/retry", h.handleRetryStudioPipeline)
 	mux.HandleFunc("GET /api/mantle/studio/pipeline-templates", h.handleListStudioPipelineTemplates)
 	mux.HandleFunc("POST /api/mantle/studio/pipeline-templates", h.handleSaveStudioPipelineTemplate)
 	mux.HandleFunc("DELETE /api/mantle/studio/pipeline-templates/{id}", h.handleDeleteStudioPipelineTemplate)
@@ -101,6 +102,12 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/mantle/studio/evaluations", h.handleListStudioEvaluations)
 	mux.HandleFunc("DELETE /api/mantle/studio/jobs/{id}", h.handleCancelStudioJob)
 	mux.HandleFunc("GET /api/mantle/studio/scheduler", h.handleStudioScheduler)
+	mux.HandleFunc("POST /api/mantle/studio/preflight", h.handleStudioPreflight)
+	mux.HandleFunc("GET /api/mantle/studio/resources", h.handleListStudioResources)
+	mux.HandleFunc("GET /api/mantle/studio/projects", h.handleListStudioProjects)
+	mux.HandleFunc("POST /api/mantle/studio/projects", h.handleSaveStudioProject)
+	mux.HandleFunc("PUT /api/mantle/studio/projects/{id}/resources", h.handleSetStudioProjectResources)
+	mux.HandleFunc("DELETE /api/mantle/studio/projects/{id}", h.handleDeleteStudioProject)
 
 	// Config management
 	mux.HandleFunc("GET /api/mantle/config", h.handleGetConfig)
@@ -127,6 +134,77 @@ func (h *Handler) handleInspectStudioModel(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	jsonResponse(w, http.StatusOK, inspection)
+}
+
+func (h *Handler) handleStudioPreflight(w http.ResponseWriter, r *http.Request) {
+	var req StudioPreflightRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	report, err := h.tm.StudioPreflight(h.modelsDir, req)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, report)
+}
+
+func (h *Handler) handleListStudioResources(w http.ResponseWriter, _ *http.Request) {
+	resources, err := h.tm.ListStudioResources(h.modelsDir)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, resources)
+}
+
+func (h *Handler) handleListStudioProjects(w http.ResponseWriter, _ *http.Request) {
+	projects, err := h.tm.ListStudioProjects()
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, projects)
+}
+func (h *Handler) handleSaveStudioProject(w http.ResponseWriter, r *http.Request) {
+	var project StudioProject
+	if err := json.NewDecoder(r.Body).Decode(&project); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	saved, err := h.tm.SaveStudioProject(project)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusCreated, saved)
+}
+func (h *Handler) handleSetStudioProjectResources(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Paths []string `json:"paths"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if err := h.tm.SetStudioProjectResources(r.PathValue("id"), req.Paths, h.modelsDir); err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+func (h *Handler) handleDeleteStudioProject(w http.ResponseWriter, r *http.Request) {
+	deleted, err := h.tm.DeleteStudioProject(r.PathValue("id"))
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !deleted {
+		jsonError(w, http.StatusNotFound, "project not found")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) handleInspectStudioDataset(w http.ResponseWriter, r *http.Request) {
@@ -356,6 +434,22 @@ func (h *Handler) handleStartStudioPipeline(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	jsonResponse(w, http.StatusAccepted, task.Snapshot())
+}
+
+func (h *Handler) handleRetryStudioPipeline(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		FromStep int `json:"fromStep"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	task, err := h.tm.RetryStudioPipeline(r.PathValue("id"), req.FromStep, h.modelsDir)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusAccepted, task)
 }
 
 func (h *Handler) handleListStudioPipelineTemplates(w http.ResponseWriter, _ *http.Request) {

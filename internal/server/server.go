@@ -190,6 +190,7 @@ func New(cfg config.Config, muxlog *logmon.Monitor, proxylog *logmon.Monitor, up
 			snapshot := mantle.StudioResourceSnapshot{}
 			if len(sysStats) > 0 {
 				latest := sysStats[len(sysStats)-1]
+				snapshot.TotalRAMBytes = int64(latest.MemTotalMB) * 1024 * 1024
 				availableMB := latest.MemAvailableMB
 				if availableMB == 0 {
 					availableMB = latest.MemFreeMB
@@ -206,6 +207,8 @@ func New(cfg config.Config, muxlog *logmon.Monitor, proxylog *logmon.Monitor, up
 			}
 			for _, stat := range latestGPU {
 				if stat.MemTotalMB > 0 {
+					snapshot.GPUCount++
+					snapshot.TotalVRAMBytes += int64(stat.MemTotalMB) * 1024 * 1024
 					snapshot.VRAMKnown = true
 					snapshot.FreeVRAMBytes += int64(stat.MemTotalMB-stat.MemUsedMB) * 1024 * 1024
 				}

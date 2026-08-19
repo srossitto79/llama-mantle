@@ -89,6 +89,60 @@ func TestTaskManager_StudioPipelineCancellationCancelsChild(t *testing.T) {
 	waitForTaskState(t, child, TaskCancelled)
 }
 
+func TestTaskManager_StudioPipelineRunsFanOutVariants(t *testing.T) {
+	tm := NewTaskManager(nil)
+	dispatched := make(chan string, 2)
+	request := StudioPipelineRequest{Steps: []StudioPipelineStep{{Operation: "quantize", Variants: []json.RawMessage{
+		json.RawMessage(`{"input":"model.gguf","output":"q4.gguf","type":"Q4_K_M"}`),
+		json.RawMessage(`{"input":"model.gguf","output":"q6.gguf","type":"Q6_K"}`),
+	}}}}
+	parent, err := tm.startStudioPipeline(request, "", func(step StudioPipelineStep, _ string) (*Task, error) {
+		var body map[string]any
+		_ = json.Unmarshal(step.Request, &body)
+		output, _ := body["output"].(string)
+		dispatched <- output
+		child := tm.newStudioTask(step.Operation, "model.gguf", output, nil)
+		child.AddArtifact(Artifact{Name: output, Path: output, Kind: "gguf"})
+		child.UpdateProgress(TaskCompleted, "done", 100)
+		return child, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := waitForTaskState(t, parent, TaskCompleted)
+	if len(result.Artifacts) != 2 || len(dispatched) != 2 {
+		t.Fatalf("fan-out did not retain both variants: %#v", result)
+	}
+}
+
+func TestValidateStudioPipeline_RejectsGateOnNonEvaluation(t *testing.T) {
+	minimum := 1.0
+	err := validateStudioPipeline(StudioPipelineRequest{Steps: []StudioPipelineStep{{Operation: "quantize", Request: json.RawMessage(`{"input":"model.gguf"}`), Gate: &StudioPipelineGate{Metric: "speed", Min: &minimum}}}})
+	if err == nil {
+		t.Fatal("expected non-evaluation gate to fail validation")
+	}
+}
+
+func TestTaskManager_RetryStudioPipelineUsesPreviousOutput(t *testing.T) {
+	tm := NewTaskManager(nil)
+	child := tm.newStudioTask("quantize", "source.gguf", "quantized.gguf", nil)
+	child.UpdateProgress(TaskCompleted, "done", 100)
+	original := tm.newStudioTask("pipeline", "source.gguf", "", map[string]any{
+		"name": "workflow", "childTaskIDs": []string{child.ID}, "steps": []StudioPipelineStep{
+			{Operation: "quantize", Request: json.RawMessage(`{"output":"quantized.gguf","type":"Q4_K_M"}`)},
+			{Operation: "evaluate", UsePrevious: true, Request: json.RawMessage(`{"mode":"benchmark"}`)},
+		},
+	})
+	original.UpdateProgress(TaskFailed, "step 2 failed", 50)
+	retry, err := tm.RetryStudioPipeline(original.ID, 1, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retry.Snapshot().Input != "quantized.gguf" {
+		t.Fatalf("retry input = %q", retry.Snapshot().Input)
+	}
+}
+
 func waitForTaskState(t *testing.T, task *Task, state TaskState) *Task {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)

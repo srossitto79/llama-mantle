@@ -7,16 +7,23 @@
   import * as Label from "$lib/components/ui/label/index.js";
   import * as Switch from "$lib/components/ui/switch/index.js";
   import LogPanel from "../components/LogPanel.svelte";
-  import { cancelStudioJob, inspectStudioDataset, inspectStudioModel, listLocalModels, listStudioDatasets, listTasks, startEvaluate, startExportLoRA, startHash, startMerge, startPrune, startQuantize, startSplit, startStudioPipeline, startTrainQLoRA, streamTaskProgress } from "../lib/mantleApi";
-  import type { DatasetInspection, LocalModel, MantleTask, StudioDataset, StudioModelInspection } from "../lib/types";
+  import StudioResourcePicker from "../components/StudioResourcePicker.svelte";
+  import { cancelStudioJob, getStudioPreflight, inspectStudioDataset, inspectStudioModel, listStudioResources, listTasks, startEvaluate, startExportLoRA, startHash, startMerge, startPrune, startQuantize, startSplit, startStudioPipeline, startTrainQLoRA, streamTaskProgress } from "../lib/mantleApi";
+  import type { DatasetInspection, MantleTask, StudioModelInspection, StudioPreflightReport, StudioResource } from "../lib/types";
 
   const quantTypes = [
     "Q4_K_M", "Q5_K_M", "Q6_K", "Q8_0", "Q4_0", "Q5_0",
     "IQ4_XS", "IQ4_NL", "IQ3_M", "IQ2_M", "TQ1_0", "TQ2_0", "F16", "BF16",
   ];
+  const recipes = [
+    { id: "quantize", title: "Fit a model to my hardware", description: "Inspect, recommend a quantization, then benchmark the result.", operation: "pipeline" as const },
+    { id: "train", title: "Fine-tune with QLoRA", description: "Validate a dataset, train an adapter, and retain checkpoints.", operation: "train" as const },
+    { id: "merge", title: "Merge model variants", description: "Combine compatible variants with TIES or evolutionary merging.", operation: "merge" as const },
+    { id: "prune", title: "Prune with a quality gate", description: "Analyze importance, create profiles, and bound perplexity loss.", operation: "prune" as const },
+    { id: "evaluate", title: "Compare a model", description: "Benchmark throughput or measure dataset perplexity against a baseline.", operation: "evaluate" as const },
+  ];
 
-  let models = $state<LocalModel[]>([]);
-  let datasets = $state<StudioDataset[]>([]);
+  let resources = $state<StudioResource[]>([]);
   let operation = $state<"pipeline" | "quantize" | "hash" | "split" | "merge" | "prune" | "train" | "export-lora" | "evaluate">("quantize");
   let loadingModels = $state(true);
   let input = $state("");
@@ -88,9 +95,23 @@
   let error = $state("");
   let job = $state<MantleTask | null>(null);
   let stopStream: (() => void) | null = null;
+  let preflight = $state<StudioPreflightReport | null>(null);
+  let preflightBusy = $state(false);
+  let showWelcome = $state(false);
+  let activeRecipe = $state("");
 
-  let ggufModels = $derived(models.filter((model) => model.kind === "gguf"));
   let jobLogs = $derived(job?.logs?.join("\n") ?? "");
+  let trainingMetrics = $derived.by(() => (job?.logs ?? []).flatMap((line, index) => {
+    const loss = line.match(/(?:^|[\s"{])(?:train[_ -]?)?loss"?\s*[:=]\s*([0-9]+(?:\.[0-9]+)?(?:e[-+]?\d+)?)/i);
+    const rate = line.match(/(?:^|[\s"{])(?:lr|learning[_ -]?rate)"?\s*[:=]\s*([0-9]+(?:\.[0-9]+)?(?:e[-+]?\d+)?)/i);
+    return loss ? [{ step: index + 1, loss: Number(loss[1]), learningRate: rate ? Number(rate[1]) : undefined }] : [];
+  }));
+  let lossPoints = $derived.by(() => {
+    if (!trainingMetrics.length) return "";
+    const values = trainingMetrics.map((metric) => metric.loss); const minLoss = Math.min(...values); const maxLoss = Math.max(...values); const range = Math.max(maxLoss - minLoss, 0.000001);
+    return trainingMetrics.map((metric, index) => `${trainingMetrics.length === 1 ? 0 : index * 300 / (trainingMetrics.length - 1)},${80 - (metric.loss - minLoss) * 72 / range}`).join(" ");
+  });
+  let latestCheckpoint = $derived(resources.filter((resource) => resource.type === "checkpoint" && resource.exists).sort((a, b) => Date.parse(b.createdAt ?? "") - Date.parse(a.createdAt ?? ""))[0]);
   let jobActive = $derived(job?.state === "queued" || job?.state === "running");
   let canStart = $derived.by(() => {
     if (jobActive) return false;
@@ -114,8 +135,38 @@
     return `${base}-${type}.gguf`;
   }
 
+  function preflightOperation(): string {
+    if (operation === "pipeline") return "quantize";
+    if (operation === "train") return "train-qlora";
+    if (operation === "export-lora") return "merge";
+    return operation;
+  }
+
+  async function runPreflight() {
+    const supported = ["quantize", "train-qlora", "merge", "prune", "evaluate", "serve"];
+    const target = preflightOperation();
+    if (!input || !supported.includes(target)) return;
+    preflightBusy = true;
+    try { preflight = await getStudioPreflight(target, input, target === "train-qlora" ? trainDataset : target === "prune" ? pruneDataset : target === "evaluate" ? evaluateDataset : mergeCalibration); error = ""; }
+    catch (cause) { error = cause instanceof Error ? cause.message : String(cause); }
+    finally { preflightBusy = false; }
+  }
+
+  function applyPreflight() {
+    if (!preflight) return;
+    const recommendation = preflight.recommendations;
+    if (typeof recommendation.quantizationType === "string") selectQuantType(recommendation.quantizationType);
+    if (typeof recommendation.threads === "number") threads = recommendation.threads;
+    if (typeof recommendation.rank === "number") trainRank = recommendation.rank;
+    if (typeof recommendation.batchSize === "number") batchSize = recommendation.batchSize;
+    if (typeof recommendation.gradientCheckpointing === "number") trainGradCheckpoint = recommendation.gradientCheckpointing;
+    if (typeof recommendation.gpuLayers === "number") gpuLayers = recommendation.gpuLayers;
+    if (typeof recommendation.contextSize === "number") contextSize = recommendation.contextSize;
+  }
+
   function selectOperation(value: typeof operation) {
     operation = value;
+    preflight = null;
     if (value === "quantize") output = defaultOutput(input, quantType);
     if (value === "split" && input) output = defaultOutput(input, "split");
     if (value === "merge" && input) output = defaultOutput(input, "merged");
@@ -128,7 +179,20 @@
     }
   }
 
+  function applyRecipe(recipe: (typeof recipes)[number]) {
+    activeRecipe = recipe.id;
+    selectOperation(recipe.operation);
+    if (recipe.id === "quantize") { dryRun = false; pipelineEvaluate = true; evaluateMode = "benchmark"; quantType = "Q4_K_M"; }
+    if (recipe.id === "train") { trainEpochs = 2; trainRank = 16; trainValidationSplit = 0.05; trainSaveEvery = 100; trainGradCheckpoint = 1; }
+    if (recipe.id === "merge") { mergeMethod = "ties"; mergeDensity = 0.5; }
+    if (recipe.id === "prune") { prunePhase = "analyze"; pruneEvaluate = true; pruneValidate = true; }
+    if (recipe.id === "evaluate") { evaluateMode = "benchmark"; repetitions = 5; }
+  }
+
+  function dismissWelcome() { showWelcome = false; localStorage.setItem("llama-studio-welcome", "dismissed"); }
+
   async function selectModel(name: string) {
+    preflight = null;
     input = name;
     output = defaultOutput(name, quantType);
     inspection = null;
@@ -296,13 +360,13 @@
   }
 
   onMount(() => {
+	showWelcome = localStorage.getItem("llama-studio-welcome") !== "dismissed";
 	const preselectedModel = new URLSearchParams(window.location.search).get("model") ?? "";
-    void listLocalModels().then((items) => {
-      models = items;
+    void listStudioResources().then((items) => {
+      resources = items;
       loadingModels = false;
-	  if (preselectedModel && items.some((item) => item.name === preselectedModel)) void selectModel(preselectedModel);
+	  if (preselectedModel && items.some((item) => item.path === preselectedModel && item.type === "model")) void selectModel(preselectedModel);
     });
-    void listStudioDatasets().then((items) => datasets = items);
     void listTasks().then((tasks) => {
       const latest = tasks
         .filter((task) => task.type === "studio")
@@ -313,11 +377,13 @@
   });
 </script>
 
-<datalist id="studio-dataset-paths">
-  {#each datasets as dataset (dataset.path)}<option value={dataset.path}>{dataset.name}</option>{/each}
-</datalist>
-
 <div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-2">
+  {#if showWelcome}
+    <Card.Root class="border-primary/40 bg-primary/5 shrink-0"><Card.Header><div class="flex gap-3"><div class="min-w-0 flex-1"><Card.Title>Welcome to Llama Studio</Card.Title><Card.Description>Choose an outcome below. Studio will help select resources, check hardware fit, run the job, compare the result, and prepare it for serving.</Card.Description></div><Button size="sm" variant="ghost" onclick={dismissWelcome}>Dismiss</Button></div></Card.Header><Card.Content><ol class="grid gap-2 text-sm md:grid-cols-4"><li>1. Select or download a model</li><li>2. Choose a guided recipe</li><li>3. Check hardware fit</li><li>4. Run and review the artifacts</li></ol></Card.Content></Card.Root>
+  {/if}
+  <Card.Root class="shrink-0"><Card.Header><Card.Title>Start with an outcome</Card.Title><Card.Description>Recipes fill in safe defaults; every setting remains editable.</Card.Description></Card.Header><Card.Content class="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+    {#each recipes as recipe (recipe.id)}<button type="button" class="hover:bg-muted rounded-md border p-3 text-left" class:border-primary={activeRecipe === recipe.id} onclick={() => applyRecipe(recipe)}><span class="block text-sm font-medium">{recipe.title}</span><span class="text-muted-foreground mt-1 block text-xs">{recipe.description}</span></button>{/each}
+  </Card.Content></Card.Root>
   <Card.Root class="shrink-0 gap-0 py-0">
     <Card.Header class="border-b px-4 py-3">
       <div class="flex items-center gap-2">
@@ -343,21 +409,26 @@
             <option value="evaluate">Benchmark / perplexity</option>
           </select>
         </div>
-        <div class="space-y-2">
-          <Label.Root for="studio-model">Input model</Label.Root>
-          <select
-            id="studio-model"
-            class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-            value={input}
-            onchange={(event) => void selectModel(event.currentTarget.value)}
-            disabled={loadingModels || jobActive}
-          >
-            <option value="">{loadingModels ? "Loading models…" : "Select a GGUF model"}</option>
-            {#each ggufModels as model (model.name)}
-              <option value={model.name}>{model.name} · {formatSize(model.size)}</option>
-            {/each}
-          </select>
-        </div>
+        <StudioResourcePicker id="studio-model" label="Input model" bind:value={input} {resources} types={["model"]} placeholder={loadingModels ? "Loading models…" : "Search models and generated artifacts"} disabled={loadingModels || jobActive} onValueChange={(value) => void selectModel(value)} />
+
+        {#if input && ["quantize", "pipeline", "merge", "prune", "train", "export-lora", "evaluate"].includes(operation)}
+          <div class="border-border space-y-2 rounded-md border p-3">
+            <div class="flex items-center gap-2"><span class="text-sm font-medium">Hardware advisor</span><Button class="ml-auto" size="sm" variant="outline" onclick={runPreflight} disabled={preflightBusy}>{preflightBusy ? "Checking…" : "Check fit"}</Button></div>
+            {#if preflight}
+              <div class="grid gap-2 text-xs sm:grid-cols-3">
+                <span>RAM free: {preflight.hardware.ramKnown ? formatSize(preflight.hardware.freeRamBytes ?? 0) : "unknown"}</span>
+                <span>VRAM free: {preflight.hardware.vramKnown ? formatSize(preflight.hardware.freeVramBytes ?? 0) : "unknown"}</span>
+                <span>Disk free: {formatSize(preflight.hardware.diskFreeBytes ?? 0)}</span>
+                {#if preflight.estimatedOutputBytes}<span>Output: ~{formatSize(preflight.estimatedOutputBytes)}</span>{/if}
+                {#if preflight.estimatedRamBytes}<span>Peak RAM: ~{formatSize(preflight.estimatedRamBytes)}</span>{/if}
+                {#if preflight.estimatedVramBytes}<span>VRAM target: ~{formatSize(preflight.estimatedVramBytes)}</span>{/if}
+              </div>
+              <p class={preflight.fits ? "text-success text-sm" : "text-destructive text-sm"}>{preflight.fits ? "This operation is expected to fit." : "This operation is not expected to fit with the current resources."}</p>
+              {#each preflight.warnings ?? [] as warning}<p class="text-warning text-xs">{warning}</p>{/each}
+              {#if Object.keys(preflight.recommendations).length}<div class="flex items-center gap-2"><span class="text-muted-foreground text-xs">Recommended: {Object.entries(preflight.recommendations).map(([key, value]) => `${key}=${value}`).join(" · ")}</span><Button class="ml-auto" size="sm" variant="secondary" onclick={applyPreflight}>Apply</Button></div>{/if}
+            {/if}
+          </div>
+        {/if}
 
         {#if operation === "quantize" || operation === "pipeline"}
         <div class="grid gap-3 sm:grid-cols-2">
@@ -407,7 +478,7 @@
             <label class="flex items-center gap-2 text-sm font-medium"><Switch.Root checked={pipelineEvaluate} onCheckedChange={(value) => pipelineEvaluate = value} />Evaluate the generated model</label>
             {#if pipelineEvaluate}
               <div class="space-y-2"><Label.Root for="pipeline-evaluate-mode">Evaluation</Label.Root><select id="pipeline-evaluate-mode" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={evaluateMode}><option value="benchmark">Performance benchmark</option><option value="perplexity">Dataset perplexity</option></select></div>
-              {#if evaluateMode === "perplexity"}<div class="space-y-2"><Label.Root for="pipeline-dataset">Evaluation text file</Label.Root><Input id="pipeline-dataset" list="studio-dataset-paths" bind:value={evaluateDataset} placeholder="datasets/evaluation.txt" /></div>{/if}
+              {#if evaluateMode === "perplexity"}<StudioResourcePicker id="pipeline-dataset" label="Evaluation dataset" bind:value={evaluateDataset} {resources} types={["dataset"]} placeholder="Search datasets" />{/if}
             {/if}
           </div>
         {/if}
@@ -442,8 +513,8 @@
           <div class="space-y-2">
             <Label.Root for="merge-models">Models to merge</Label.Root>
             <select id="merge-models" multiple class="border-input bg-background min-h-28 w-full rounded-md border px-3 py-2 text-sm" bind:value={mergeModels} disabled={jobActive}>
-              {#each ggufModels.filter((model) => model.name !== input) as model (model.name)}
-                <option value={model.name}>{model.name} · {formatSize(model.size)}</option>
+              {#each resources.filter((resource) => resource.type === "model" && resource.exists && resource.path !== input) as model (model.path)}
+                <option value={model.path}>{model.path} · {formatSize(model.size)}</option>
               {/each}
             </select>
             <p class="text-muted-foreground text-xs">Use Ctrl/Cmd to select multiple compatible model variants.</p>
@@ -457,7 +528,7 @@
           </div>
           {#if mergeMethod === "evo"}
             <div class="grid gap-3 sm:grid-cols-2">
-              <div class="space-y-2"><Label.Root for="merge-calibration">Calibration dataset</Label.Root><Input id="merge-calibration" list="studio-dataset-paths" bind:value={mergeCalibration} placeholder="datasets/calibration.jsonl" /></div>
+              <StudioResourcePicker id="merge-calibration" label="Calibration dataset" bind:value={mergeCalibration} {resources} types={["dataset"]} placeholder="Search datasets" />
               <div class="space-y-2"><Label.Root for="merge-target">Target type</Label.Root><select id="merge-target" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={mergeTargetType}><option value="q4_k">Q4_K</option><option value="q4_0">Q4_0</option><option value="q3_k">Q3_K</option><option value="mxfp4">MXFP4</option></select></div>
             </div>
           {/if}
@@ -472,7 +543,7 @@
             </select>
           </div>
           {#if prunePhase === "analyze"}
-            <div class="space-y-2"><Label.Root for="prune-dataset">Training / calibration dataset</Label.Root><Input id="prune-dataset" list="studio-dataset-paths" bind:value={pruneDataset} placeholder="datasets/train.jsonl" /></div>
+            <StudioResourcePicker id="prune-dataset" label="Training / calibration dataset" bind:value={pruneDataset} {resources} types={["dataset"]} placeholder="Search datasets" />
           {:else if prunePhase === "profiles"}
             <div class="space-y-2"><Label.Root for="prune-cache">Importance cache</Label.Root><Input id="prune-cache" bind:value={pruneCache} placeholder="pruning/importance.cache" /></div>
           {:else}
@@ -489,7 +560,7 @@
             <label class="flex items-center gap-2 text-sm"><Switch.Root checked={pruneValidate} onCheckedChange={(value) => pruneValidate = value} />Reject output if perplexity regression exceeds threshold</label>
             {#if pruneValidate}
               <div class="grid gap-3 sm:grid-cols-2">
-                <div class="space-y-2"><Label.Root for="prune-validation-dataset">Validation dataset</Label.Root><Input id="prune-validation-dataset" list="studio-dataset-paths" bind:value={pruneDataset} placeholder="datasets/validation.jsonl" /></div>
+                <StudioResourcePicker id="prune-validation-dataset" label="Validation dataset" bind:value={pruneDataset} {resources} types={["dataset"]} placeholder="Search datasets" />
                 <div class="space-y-2"><Label.Root for="prune-ppl-delta">Maximum perplexity increase (%)</Label.Root><Input id="prune-ppl-delta" type="number" min="0" step="0.5" bind:value={pruneMaxPPLDelta} /></div>
               </div>
             {/if}
@@ -503,14 +574,14 @@
           {/if}
         {:else if operation === "train"}
           <div class="space-y-2">
-            <Label.Root for="train-dataset">JSONL training dataset</Label.Root>
-            <div class="flex gap-2"><Input id="train-dataset" list="studio-dataset-paths" bind:value={trainDataset} placeholder="datasets/train.jsonl" /><Button variant="outline" onclick={inspectDataset} disabled={!trainDataset.trim() || inspectingDataset}>{inspectingDataset ? "Inspecting…" : "Inspect"}</Button></div>
+            <StudioResourcePicker id="train-dataset" label="JSONL training dataset" bind:value={trainDataset} {resources} types={["dataset"]} placeholder="Search datasets" />
+            <Button variant="outline" onclick={inspectDataset} disabled={!trainDataset.trim() || inspectingDataset}>{inspectingDataset ? "Inspecting…" : "Inspect selected dataset"}</Button>
             {#if datasetInspection}
               <p class="text-muted-foreground text-xs">{datasetInspection.recordsScanned}{datasetInspection.truncated ? "+" : ""} records checked · {Object.entries(datasetInspection.formats).map(([format, count]) => `${format}: ${count}`).join(" · ")}</p>
             {/if}
           </div>
           <div class="space-y-2"><Label.Root for="train-output">LoRA adapter output</Label.Root><Input id="train-output" bind:value={output} /></div>
-          <div class="space-y-2"><Label.Root for="train-resume">Resume checkpoint <span class="text-muted-foreground">(optional)</span></Label.Root><Input id="train-resume" bind:value={trainResume} placeholder="adapters/checkpoint.gguf" /></div>
+          <div class="space-y-2"><StudioResourcePicker id="train-resume" label="Resume checkpoint (optional)" bind:value={trainResume} {resources} types={["checkpoint"]} placeholder="Search training checkpoints" />{#if latestCheckpoint}<Button size="sm" variant="outline" onclick={() => trainResume = latestCheckpoint.path}>Resume latest checkpoint</Button>{/if}</div>
           <div class="grid gap-3 sm:grid-cols-3">
             <div class="space-y-2"><Label.Root for="train-epochs">Epochs</Label.Root><Input id="train-epochs" type="number" min="1" bind:value={trainEpochs} /></div>
             <div class="space-y-2"><Label.Root for="train-rate">Learning rate</Label.Root><Input id="train-rate" type="number" min="0" step="0.000001" bind:value={trainLearningRate} /></div>
@@ -536,8 +607,8 @@
           <div class="space-y-2">
             <Label.Root for="export-adapters">LoRA adapters</Label.Root>
             <select id="export-adapters" multiple class="border-input bg-background min-h-28 w-full rounded-md border px-3 py-2 text-sm" bind:value={exportAdapters}>
-              {#each ggufModels.filter((model) => model.name !== input) as model (model.name)}
-                <option value={model.name}>{model.name} · {formatSize(model.size)}</option>
+              {#each resources.filter((resource) => ["adapter", "checkpoint"].includes(resource.type) && resource.exists) as model (model.path)}
+                <option value={model.path}>{model.path} · {model.kind} · {formatSize(model.size)}</option>
               {/each}
             </select>
           </div>
@@ -546,7 +617,7 @@
         {:else}
           <div class="space-y-2"><Label.Root for="evaluate-mode">Evaluation</Label.Root><select id="evaluate-mode" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={evaluateMode}><option value="benchmark">Performance benchmark</option><option value="perplexity">Dataset perplexity</option></select></div>
           {#if evaluateMode === "perplexity"}
-            <div class="space-y-2"><Label.Root for="evaluate-dataset">Evaluation text file</Label.Root><Input id="evaluate-dataset" list="studio-dataset-paths" bind:value={evaluateDataset} placeholder="datasets/evaluation.txt" /></div>
+            <StudioResourcePicker id="evaluate-dataset" label="Evaluation dataset" bind:value={evaluateDataset} {resources} types={["dataset"]} placeholder="Search datasets" />
             <div class="grid gap-3 sm:grid-cols-2">
               <div class="space-y-2"><Label.Root for="evaluate-context">Context size</Label.Root><Input id="evaluate-context" type="number" min="1" bind:value={contextSize} /></div>
               <div class="space-y-2"><Label.Root for="evaluate-chunks">Maximum chunks</Label.Root><Input id="evaluate-chunks" type="number" min="0" bind:value={chunks} placeholder="All" /></div>
@@ -622,6 +693,9 @@
               <span class="bg-muted rounded px-2 py-1 text-xs">{artifact.name} · {formatSize(artifact.size)}</span>
             {/each}
           </div>
+        {/if}
+        {#if job.operation === "train-qlora" && trainingMetrics.length}
+          <div class="border-border rounded-md border p-2"><div class="mb-1 flex text-xs"><span>Training loss</span><span class="text-muted-foreground ml-auto">latest {trainingMetrics.at(-1)?.loss.toPrecision(4)}{trainingMetrics.at(-1)?.learningRate ? ` · lr ${trainingMetrics.at(-1)?.learningRate}` : ""}</span></div><svg viewBox="0 0 300 84" class="h-20 w-full" role="img" aria-label="Training loss over time"><polyline points={lossPoints} fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" /></svg></div>
         {/if}
       </Card.Header>
       <Card.Content class="min-h-0 flex-1 p-0">

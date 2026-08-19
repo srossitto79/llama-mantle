@@ -10,9 +10,10 @@
   import type { LocalModel, StudioPipelineStep, StudioPipelineTemplate } from "../lib/types";
 
   type Operation = StudioPipelineStep["operation"];
-  type DraftStep = { operation: Operation; usePrevious: boolean; requestText: string };
+  type DraftStep = { operation: Operation; usePrevious: boolean; requestText: string; variantsText: string; continueOnFailure: boolean; gateMetric: string; gateMin: string; gateMax: string };
   type FieldSpec = { key: string; label: string; type?: "text" | "number" | "boolean" | "list"; options?: string[] };
   const operations: Operation[] = ["quantize", "hash", "split", "merge", "prune", "train-qlora", "export-lora", "evaluate", "register"];
+  const variantsPlaceholder = '[{"output":"q4.gguf","type":"Q4_K_M"},{"output":"q6.gguf","type":"Q6_K"}]';
   const defaults: Record<Operation, Record<string, unknown>> = {
     quantize: { output: "output-Q4_K_M.gguf", type: "Q4_K_M" },
     hash: { algorithm: "sha256", noLayer: true },
@@ -48,7 +49,7 @@
   let importInput: HTMLInputElement;
 
   function draft(operation: Operation, usePrevious: boolean): DraftStep {
-    return { operation, usePrevious, requestText: JSON.stringify(defaults[operation], null, 2) };
+    return { operation, usePrevious, requestText: JSON.stringify(defaults[operation], null, 2), variantsText: "", continueOnFailure: false, gateMetric: "", gateMin: "", gateMax: "" };
   }
 
   function changeOperation(index: number, operation: Operation) {
@@ -89,7 +90,10 @@
       try { request = JSON.parse(step.requestText); }
       catch { throw new Error(`Step ${index + 1} contains invalid JSON`); }
       if (!request || Array.isArray(request) || typeof request !== "object") throw new Error(`Step ${index + 1} request must be a JSON object`);
-      return { operation: step.operation, usePrevious: step.usePrevious, request };
+      let variants: Record<string, unknown>[] | undefined;
+      if (step.variantsText.trim()) { const parsed = JSON.parse(step.variantsText); if (!Array.isArray(parsed) || parsed.some((item) => !item || Array.isArray(item) || typeof item !== "object")) throw new Error(`Step ${index + 1} variants must be a JSON array of request objects`); variants = parsed; }
+      const gate = step.gateMetric.trim() ? { metric: step.gateMetric.trim(), min: step.gateMin === "" ? undefined : Number(step.gateMin), max: step.gateMax === "" ? undefined : Number(step.gateMax) } : undefined;
+      return { operation: step.operation, usePrevious: step.usePrevious, request, variants, continueOnFailure: step.continueOnFailure || undefined, gate };
     });
   }
 
@@ -115,7 +119,7 @@
 
   function load(template: StudioPipelineTemplate) {
     templateID = template.id; name = template.name; input = template.pipeline.input ?? "";
-    steps = template.pipeline.steps.map((step) => ({ operation: step.operation, usePrevious: step.usePrevious ?? false, requestText: JSON.stringify(step.request, null, 2) }));
+    steps = template.pipeline.steps.map((step) => ({ operation: step.operation, usePrevious: step.usePrevious ?? false, requestText: JSON.stringify(step.request, null, 2), variantsText: step.variants?.length ? JSON.stringify(step.variants, null, 2) : "", continueOnFailure: step.continueOnFailure ?? false, gateMetric: step.gate?.metric ?? "", gateMin: step.gate?.min?.toString() ?? "", gateMax: step.gate?.max?.toString() ?? "" }));
     error = ""; message = `Loaded ${template.name}.`;
   }
 
@@ -192,6 +196,7 @@
               {/each}
             </div>
             <details><summary class="text-muted-foreground cursor-pointer text-xs">Advanced request JSON</summary><textarea class="border-input bg-background mt-2 min-h-32 w-full rounded-md border p-3 font-mono text-xs" bind:value={step.requestText} spellcheck="false"></textarea></details>
+            <details><summary class="text-muted-foreground cursor-pointer text-xs">Fan-out variants and quality gate</summary><div class="mt-2 space-y-2"><Label.Root>Variant request array (optional, maximum 8)</Label.Root><textarea class="border-input bg-background min-h-28 w-full rounded-md border p-3 font-mono text-xs" bind:value={step.variantsText} placeholder={variantsPlaceholder}></textarea><label class="flex items-center gap-2 text-sm"><Switch.Root checked={step.continueOnFailure} onCheckedChange={(value) => step.continueOnFailure = value} />Continue when one variant fails</label>{#if step.operation === "evaluate"}<div class="grid gap-2 sm:grid-cols-3"><Input bind:value={step.gateMetric} placeholder="Metric, e.g. perplexity" /><Input bind:value={step.gateMin} type="number" placeholder="Minimum" /><Input bind:value={step.gateMax} type="number" placeholder="Maximum" /></div>{/if}</div></details>
           </div>
         {/each}
         <Button variant="outline" onclick={() => steps = [...steps, draft("evaluate", steps.length > 0)]}><Plus class="size-4" />Add step</Button>

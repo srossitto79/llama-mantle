@@ -46,6 +46,8 @@
     "/studio/pipelines": wrap({ asyncComponent: () => import("./routes/StudioPipelines.svelte"), loadingComponent: RouteLoading }),
     "/studio/artifacts": wrap({ asyncComponent: () => import("./routes/StudioArtifacts.svelte"), loadingComponent: RouteLoading }),
     "/studio/datasets": wrap({ asyncComponent: () => import("./routes/StudioDatasets.svelte"), loadingComponent: RouteLoading }),
+    "/studio/evaluations": wrap({ asyncComponent: () => import("./routes/StudioEvaluations.svelte"), loadingComponent: RouteLoading }),
+    "/studio/projects": wrap({ asyncComponent: () => import("./routes/StudioProjects.svelte"), loadingComponent: RouteLoading }),
     "/performance": wrap({ asyncComponent: () => import("./routes/Performance.svelte"), loadingComponent: RouteLoading }),
     "*": wrap({ asyncComponent: () => import("./routes/Activity.svelte"), loadingComponent: RouteLoading }),
   };
@@ -65,6 +67,8 @@
     "/studio/pipelines": "Studio Pipelines",
     "/studio/artifacts": "Studio Artifacts",
     "/studio/datasets": "Studio Datasets",
+    "/studio/evaluations": "Studio Evaluations",
+    "/studio/projects": "Studio Projects",
     "/performance": "Performance",
   };
 

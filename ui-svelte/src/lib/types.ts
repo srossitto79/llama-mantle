@@ -353,6 +353,9 @@ export interface StudioPipelineStep {
 	operation: "quantize" | "hash" | "split" | "merge" | "prune" | "train-qlora" | "export-lora" | "evaluate" | "register";
 	usePrevious?: boolean;
 	request: Record<string, unknown>;
+	variants?: Record<string, unknown>[];
+	continueOnFailure?: boolean;
+	gate?: { metric: string; min?: number; max?: number };
 }
 
 export interface StudioPipelineRequest {
@@ -435,6 +438,41 @@ export interface StudioModelInspection {
 	modifiedAt: string;
 	version: number;
 	metadata: Record<string, unknown>;
+}
+
+export interface StudioPreflightReport {
+	operation: string;
+	model?: string;
+	modelBytes?: number;
+	datasetBytes?: number;
+	estimatedOutputBytes?: number;
+	estimatedRamBytes?: number;
+	estimatedVramBytes?: number;
+	fits: boolean;
+	hardware: { cpuThreads: number; gpuCount: number; totalRamBytes?: number; freeRamBytes?: number; totalVramBytes?: number; freeVramBytes?: number; diskFreeBytes?: number; ramKnown: boolean; vramKnown: boolean };
+	recommendations: Record<string, string | number | boolean>;
+	warnings?: string[];
+}
+
+export interface StudioResource {
+	name: string;
+	path: string;
+	type: "model" | "dataset" | "artifact" | "adapter" | "checkpoint";
+	kind: string;
+	size: number;
+	exists: boolean;
+	jobID?: string;
+	operation?: string;
+	createdAt?: string;
+}
+
+export interface StudioProject {
+	id: string;
+	name: string;
+	description?: string;
+	resources: string[];
+	createdAt?: string;
+	updatedAt?: string;
 }
 
 export interface QuantizeRequest {

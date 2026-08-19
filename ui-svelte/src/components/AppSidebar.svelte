@@ -1,6 +1,6 @@
 <script lang="ts">
   import { link } from "svelte-spa-router";
-  import { FerrisWheel, Boxes, Activity, ScrollText, Gauge, Sun, Moon, Monitor, ChevronRight, Settings, PackageSearch, Cog, Server, Wrench, Workflow, Database } from "@lucide/svelte";
+  import { FerrisWheel, Boxes, Activity, ScrollText, Gauge, Sun, Moon, Monitor, ChevronRight, Settings, PackageSearch, Cog, Server, Wrench, Workflow, Database, BarChart3, FolderKanban } from "@lucide/svelte";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -185,6 +185,18 @@
                   <span>Datasets</span>
                 </a>
               {/snippet}
+            </Sidebar.MenuButton>
+          </Sidebar.MenuItem>
+
+          <Sidebar.MenuItem>
+            <Sidebar.MenuButton isActive={isActive("/studio/projects", $currentRoute)} tooltipContent="Studio Projects">
+              {#snippet child({ props })}<a href="/studio/projects" use:link {...props}><FolderKanban /><span>Projects</span></a>{/snippet}
+            </Sidebar.MenuButton>
+          </Sidebar.MenuItem>
+
+          <Sidebar.MenuItem>
+            <Sidebar.MenuButton isActive={isActive("/studio/evaluations", $currentRoute)} tooltipContent="Studio Evaluations">
+              {#snippet child({ props })}<a href="/studio/evaluations" use:link {...props}><BarChart3 /><span>Evaluations</span></a>{/snippet}
             </Sidebar.MenuButton>
           </Sidebar.MenuItem>
 

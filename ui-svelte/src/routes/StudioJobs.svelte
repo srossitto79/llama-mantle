@@ -3,7 +3,7 @@
   import { Loader2, RefreshCw, Square, Timer, Workflow } from "@lucide/svelte";
   import * as Card from "$lib/components/ui/card/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
-  import { cancelStudioJob, getStudioScheduler, listTasks } from "../lib/mantleApi";
+  import { cancelStudioJob, getStudioScheduler, listTasks, retryStudioPipeline } from "../lib/mantleApi";
   import type { MantleTask, StudioSchedulerStatus } from "../lib/types";
 
   let jobs = $state<MantleTask[]>([]);
@@ -31,6 +31,11 @@
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
     }
+  }
+
+  async function retryPipeline(job: MantleTask) {
+    try { const childIDs = Array.isArray(job.parameters?.childTaskIDs) ? job.parameters.childTaskIDs : []; const fromStep = Math.max(0, childIDs.length - 1); await retryStudioPipeline(job.id, fromStep); await refresh(); }
+    catch (cause) { error = cause instanceof Error ? cause.message : String(cause); }
   }
 
   function duration(job: MantleTask): string {
@@ -95,7 +100,7 @@
                 <td class="min-w-28 px-3 py-2"><div class="bg-muted h-1.5 overflow-hidden rounded-full"><div class="bg-primary h-full" style:width={Math.max(0, job.pct) + "%"}></div></div><div class="text-muted-foreground mt-1 truncate text-xs">{job.message}</div></td>
                 <td class="px-3 py-2"><span class="inline-flex items-center gap-1"><Timer class="size-3" />{duration(job)}</span></td>
                 <td class="px-3 py-2 text-xs">{new Date(job.createdAt).toLocaleString()}</td>
-                <td class="px-3 py-2"><div class="flex gap-1">{#if isActive(job)}<Button variant="destructive" size="sm" onclick={() => cancel(job)}><Square class="size-3" />Cancel</Button>{:else if job.state === "completed" && job.output}<Button variant="outline" size="sm" onclick={() => useOutput(job)}>Use output</Button>{/if}</div></td>
+                <td class="px-3 py-2"><div class="flex gap-1">{#if isActive(job)}<Button variant="destructive" size="sm" onclick={() => cancel(job)}><Square class="size-3" />Cancel</Button>{:else if job.state === "failed" && job.operation === "pipeline"}<Button variant="outline" size="sm" onclick={() => retryPipeline(job)}>Retry failed step</Button>{:else if job.state === "completed" && job.output}<Button variant="outline" size="sm" onclick={() => useOutput(job)}>Use output</Button>{/if}</div></td>
               </tr>
             {/each}
           </tbody>

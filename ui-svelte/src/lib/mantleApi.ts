@@ -1,5 +1,6 @@
 import type { MantleTask, HFModel, HFFile, LocalModel, BackendEntry, DatasetInspection, EvaluateRequest, ExportLoRARequest, HashRequest, MergeRequest, PruneRequest, QuantizeRequest, RegisterStudioModelRequest, SplitRequest, StudioCatalogArtifact, StudioEvaluation, StudioLineageEdge, StudioModelInspection, StudioPipelineRequest, StudioPipelineTemplate, StudioRetentionPolicy, StudioRetentionPreview, StudioSchedulerStatus, TrainQLoRARequest } from "../lib/types";
 import type { DatasetPreview, HFDataset, StudioDataset } from "../lib/types";
+import type { StudioPreflightReport, StudioProject, StudioResource } from "../lib/types";
 
 // --- HF Model search ---
 
@@ -214,6 +215,23 @@ export async function inspectStudioModel(name: string): Promise<StudioModelInspe
   return await res.json();
 }
 
+export async function getStudioPreflight(operation: string, model: string, dataset = ""): Promise<StudioPreflightReport> {
+	const res = await fetch("/api/mantle/studio/preflight", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation, model, dataset: dataset || undefined }) });
+	if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body.error || `HTTP ${res.status}`); }
+	return await res.json();
+}
+
+export async function listStudioResources(): Promise<StudioResource[]> {
+	const res = await fetch("/api/mantle/studio/resources");
+	if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body.error || `HTTP ${res.status}`); }
+	return await res.json();
+}
+
+export async function listStudioProjects(): Promise<StudioProject[]> { const res = await fetch("/api/mantle/studio/projects"); if (!res.ok) throw new Error(`HTTP ${res.status}`); return await res.json(); }
+export async function saveStudioProject(project: Partial<StudioProject>): Promise<StudioProject> { const res = await fetch("/api/mantle/studio/projects",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(project)});if(!res.ok){const body=await res.json().catch(()=>({}));throw new Error(body.error||`HTTP ${res.status}`)}return await res.json(); }
+export async function setStudioProjectResources(id:string,paths:string[]):Promise<void>{const res=await fetch(`/api/mantle/studio/projects/${encodeURIComponent(id)}/resources`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({paths})});if(!res.ok){const body=await res.json().catch(()=>({}));throw new Error(body.error||`HTTP ${res.status}`)}}
+export async function deleteStudioProject(id:string):Promise<void>{const res=await fetch(`/api/mantle/studio/projects/${encodeURIComponent(id)}`,{method:"DELETE"});if(!res.ok)throw new Error(`HTTP ${res.status}`)}
+
 export async function inspectStudioDataset(name: string): Promise<DatasetInspection> {
 	const res = await fetch(`/api/mantle/studio/datasets/inspect?name=${encodeURIComponent(name)}`);
 	if (!res.ok) {
@@ -307,6 +325,12 @@ export async function startStudioPipeline(request: StudioPipelineRequest): Promi
 		const body = await res.json().catch(() => ({}));
 		throw new Error(body.error || `HTTP ${res.status}`);
 	}
+	return await res.json();
+}
+
+export async function retryStudioPipeline(jobID: string, fromStep: number): Promise<MantleTask> {
+	const res = await fetch(`/api/mantle/studio/pipelines/${encodeURIComponent(jobID)}/retry`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fromStep }) });
+	if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body.error || `HTTP ${res.status}`); }
 	return await res.json();
 }
 
