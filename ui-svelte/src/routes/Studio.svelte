@@ -694,7 +694,7 @@
   </Card.Root>
 
   {#if job}
-    <Card.Root class="min-h-72 flex-1 gap-0 overflow-hidden py-0">
+    <Card.Root class="h-[min(40rem,70vh)] min-h-72 shrink-0 gap-0 py-0">
       <Card.Header class="border-b px-4 py-3">
         <div class="flex items-center gap-3">
           <Card.Title class="text-sm capitalize">{job.operation ?? "Studio job"}</Card.Title>
