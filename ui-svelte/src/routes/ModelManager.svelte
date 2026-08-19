@@ -286,8 +286,9 @@
   {#if selectedModel === null}
     <div class="flex-1 overflow-y-auto min-h-0">
       {#each searchResults as model (model.id)}
-        <div
-          class="flex items-center justify-between p-3 border-b border-border hover:bg-secondary-hover cursor-pointer"
+        <button
+          type="button"
+          class="flex w-full items-center justify-between border-b border-border p-3 text-left hover:bg-secondary-hover cursor-pointer"
           onclick={() => selectModel(model)}
         >
           <div>
@@ -297,7 +298,7 @@
             {/if}
           </div>
           <span class="text-xs text-txtsecondary shrink-0">{model.downloads.toLocaleString()} dl · {model.likes.toLocaleString()} ♥</span>
-        </div>
+        </button>
       {/each}
       {#if searchResults.length === 0 && !searching}
         <p class="text-txtsecondary text-center mt-8 text-sm">Search for models to get started</p>
@@ -409,12 +410,12 @@
               {#if addConfigFor === model.path}
                 <div class="mt-2 pt-2 border-t border-border flex flex-col gap-1.5 text-xs">
                   <div class="flex gap-2 items-center">
-                    <label class="w-20 text-txtsecondary">Model ID</label>
-                    <input class="input flex-1 px-2 py-1 border rounded bg-surface text-xs" bind:value={formModelId} onblur={regenerateYaml} />
+                    <label for="model-config-id" class="w-20 text-txtsecondary">Model ID</label>
+                    <input id="model-config-id" class="input flex-1 px-2 py-1 border rounded bg-surface text-xs" bind:value={formModelId} onblur={regenerateYaml} />
                   </div>
                   <div class="flex gap-2 items-center">
-                    <label class="w-20 text-txtsecondary">Type</label>
-                    <select class="input flex-1 px-2 py-1 border rounded bg-surface text-xs" value={formType} onchange={(e) => changeType(e.currentTarget.value as ConfigType)}>
+                    <label for="model-config-type" class="w-20 text-txtsecondary">Type</label>
+                    <select id="model-config-type" class="input flex-1 px-2 py-1 border rounded bg-surface text-xs" value={formType} onchange={(e) => changeType(e.currentTarget.value as ConfigType)}>
                       <option value="text">Text / LLM (llama-server)</option>
                       <option value="image">Image (sd-server)</option>
                       <option value="transcription">Transcription (whisper-server)</option>
@@ -423,8 +424,8 @@
                   </div>
                   {#if formType === "text" || formType === "tts"}
                     <div class="flex gap-2 items-center">
-                      <label class="w-20 text-txtsecondary">Backend</label>
-                      <select class="input flex-1 px-2 py-1 border rounded bg-surface text-xs" bind:value={formBackend} onchange={regenerateYaml}>
+                      <label for="model-config-backend" class="w-20 text-txtsecondary">Backend</label>
+                      <select id="model-config-backend" class="input flex-1 px-2 py-1 border rounded bg-surface text-xs" bind:value={formBackend} onchange={regenerateYaml}>
                         <option value="llama-server">llama-server (default)</option>
                         <option value="ik-llama-server">ik-llama-server (bundled)</option>
                         {#each backends as be}
@@ -433,21 +434,21 @@
                       </select>
                     </div>
                     <div class="flex gap-2 items-center">
-                      <label class="w-20 text-txtsecondary">GPU Layers</label>
-                      <input class="input w-16 px-2 py-1 border rounded bg-surface text-xs" type="number" bind:value={formGpuLayers} onblur={regenerateYaml} />
+                      <label for="model-config-gpu-layers" class="w-20 text-txtsecondary">GPU Layers</label>
+                      <input id="model-config-gpu-layers" class="input w-16 px-2 py-1 border rounded bg-surface text-xs" type="number" bind:value={formGpuLayers} onblur={regenerateYaml} />
                     </div>
                     <div class="flex gap-2 items-center">
-                      <label class="w-20 text-txtsecondary">MMProj</label>
-                      <input class="input flex-1 px-2 py-1 border rounded bg-surface text-xs" placeholder="optional path" bind:value={formMmproj} onblur={regenerateYaml} />
+                      <label for="model-config-mmproj" class="w-20 text-txtsecondary">MMProj</label>
+                      <input id="model-config-mmproj" class="input flex-1 px-2 py-1 border rounded bg-surface text-xs" placeholder="optional path" bind:value={formMmproj} onblur={regenerateYaml} />
                     </div>
                   {/if}
                   <div class="flex gap-2 items-center">
-                    <label class="w-20 text-txtsecondary">TTL (s)</label>
-                    <input class="input w-20 px-2 py-1 border rounded bg-surface text-xs" type="number" bind:value={formTtl} onblur={regenerateYaml} />
+                    <label for="model-config-ttl" class="w-20 text-txtsecondary">TTL (s)</label>
+                    <input id="model-config-ttl" class="input w-20 px-2 py-1 border rounded bg-surface text-xs" type="number" bind:value={formTtl} onblur={regenerateYaml} />
                   </div>
                   <div class="flex gap-2 items-start">
-                    <label class="w-20 text-txtsecondary pt-1">YAML</label>
-                    <textarea class="input flex-1 px-2 py-1 border rounded bg-surface text-xs font-mono" rows="9" bind:value={formYaml} spellcheck="false"></textarea>
+                    <label for="model-config-yaml" class="w-20 text-txtsecondary pt-1">YAML</label>
+                    <textarea id="model-config-yaml" class="input flex-1 px-2 py-1 border rounded bg-surface text-xs font-mono" rows="9" bind:value={formYaml} spellcheck="false"></textarea>
                   </div>
                   <div class="flex gap-2 self-end mt-1">
                     <button class="btn btn--sm" onclick={regenerateYaml} title="Rebuild YAML from the fields above">↻ Regenerate</button>

@@ -100,8 +100,9 @@
     <h3 class="text-sm font-semibold mb-3">Build llama.cpp Fork</h3>
     <div class="flex flex-col gap-2">
       <div class="flex gap-2 items-center">
-        <label class="text-sm text-txtsecondary w-12">Name:</label>
+        <label for="backend-name" class="text-sm text-txtsecondary w-12">Name:</label>
         <input
+          id="backend-name"
           type="text"
           class="input flex-1 px-3 py-1.5 border rounded bg-surface text-sm"
           placeholder="beellama-cuda"
@@ -109,8 +110,9 @@
         />
       </div>
       <div class="flex gap-2 items-center">
-        <label class="text-sm text-txtsecondary w-12">Repo:</label>
+        <label for="backend-repo" class="text-sm text-txtsecondary w-12">Repo:</label>
         <input
+          id="backend-repo"
           type="text"
           class="input flex-1 px-3 py-1.5 border rounded bg-surface text-sm"
           placeholder="https://github.com/user/llama.cpp"
@@ -118,8 +120,9 @@
         />
       </div>
       <div class="flex gap-2 items-center">
-        <label class="text-sm text-txtsecondary w-12">Branch:</label>
+        <label for="backend-branch" class="text-sm text-txtsecondary w-12">Branch:</label>
         <input
+          id="backend-branch"
           type="text"
           class="input flex-1 px-3 py-1.5 border rounded bg-surface text-sm"
           placeholder="main"
@@ -127,8 +130,9 @@
         />
       </div>
       <div class="flex gap-2 items-center">
-        <label class="text-sm text-txtsecondary w-12">CMake:</label>
+        <label for="backend-cmake" class="text-sm text-txtsecondary w-12">CMake:</label>
         <input
+          id="backend-cmake"
           type="text"
           class="input flex-1 px-3 py-1.5 border rounded bg-surface text-sm"
           placeholder='-DGGML_CUDA_FORCE_MMQ=ON -DLLAMA_CURL=OFF'
