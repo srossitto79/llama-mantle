@@ -6,13 +6,14 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Label from "$lib/components/ui/label/index.js";
   import * as Switch from "$lib/components/ui/switch/index.js";
-  import { deleteStudioPipelineTemplate, listLocalModels, listStudioPipelineTemplates, saveStudioPipelineTemplate, startStudioPipeline } from "../lib/mantleApi";
-  import type { LocalModel, StudioPipelineStep, StudioPipelineTemplate } from "../lib/types";
+  import StudioResourcePicker from "../components/StudioResourcePicker.svelte";
+  import { deleteStudioPipelineTemplate, listStudioPipelineTemplates, listStudioResources, saveStudioPipelineTemplate, startStudioPipeline } from "../lib/mantleApi";
+  import type { StudioPipelineStep, StudioPipelineTemplate, StudioResource } from "../lib/types";
   import { activeStudioProject } from "../stores/studioProject";
 
   type Operation = StudioPipelineStep["operation"];
   type DraftStep = { operation: Operation; usePrevious: boolean; requestText: string; variantsText: string; continueOnFailure: boolean; gateMetric: string; gateMin: string; gateMax: string };
-  type FieldSpec = { key: string; label: string; type?: "text" | "number" | "boolean" | "list"; options?: string[] };
+  type FieldSpec = { key: string; label: string; type?: "text" | "number" | "boolean" | "list" | "numberList" | "resource" | "resourceList"; options?: string[]; resourceTypes?: StudioResource["type"][]; placeholder?: string };
   const operations: Operation[] = ["quantize", "hash", "split", "merge", "prune", "train-qlora", "export-lora", "evaluate", "register"];
   const variantsPlaceholder = '[{"output":"q4.gguf","type":"Q4_K_M"},{"output":"q6.gguf","type":"Q6_K"}]';
   const defaults: Record<Operation, Record<string, unknown>> = {
@@ -20,25 +21,25 @@
     hash: { algorithm: "sha256", noLayer: true, uuid: false },
     split: { output: "output-split.gguf", maxTensors: 128, maxSize: "", noTensorFirstSplit: false, dryRun: false },
     merge: { models: [], output: "merged.gguf", method: "ties", density: 0.5, threads: 0, memoryBudget: "2G", calibration: "", targetType: "q4_k", population: 0, generations: 0, gpuLayers: -1, device: "", mergeGpu: false },
-    prune: { phase: "hard", dataset: "", ratios: [], outputDir: "pruning", importanceCache: "", profile: "pruning/profile.json", output: "pruned.gguf", validate: true, maxPplDeltaPercent: 5, maxLayerRatio: 0, evaluate: true, contextSize: 0, batchSize: 0, ubatchSize: 0, threads: 0, datasetThreads: 0, gpuLayers: -1 },
-    "train-qlora": { dataset: "datasets/train.jsonl", output: "adapter.gguf", resume: "", epochs: 2, learningRate: 0.0002, validationSplit: 0.05, rank: 16, alpha: 32, targets: "", optimizer: "adamw", saveEvery: 100, freezeLayers: 0, gradCheckpoint: 1, loraQat: "", scheduler: "cosine", warmupSteps: 0, verboseLoss: false, trainOnPrompt: false, shuffleDataset: true, criticalTokenMode: "", contextSize: 0, batchSize: 256, ubatchSize: 256, threads: 0, datasetThreads: 0, gpuLayers: -1 },
+    prune: { phase: "hard", dataset: "", ratios: [], outputDir: "pruning", importanceCache: "", profile: "pruning/profile.json", output: "pruned.gguf", validate: true, maxPplDeltaPercent: 5, metric: "ppl", pplMask: "", maxLayerRatio: 0, evaluate: true, seed: 0, contextSize: 0, batchSize: 0, ubatchSize: 0, threads: 0, datasetThreads: 0, gpuLayers: -1 },
+    "train-qlora": { dataset: "datasets/train.jsonl", output: "adapter.gguf", resume: "", epochs: 2, learningRate: 0.0002, learningRateMin: 0, decayEpochs: 0, weightDecay: 0, validationSplit: 0.05, rank: 16, alpha: 32, targets: "", optimizer: "adamw", optimizerRestartEvery: 0, saveEvery: 100, freezeLayers: 0, gradCheckpoint: 1, loraQat: "none", scheduler: "cosine", warmupSteps: 0, warmupInitRatio: 0.1, verboseLoss: false, trainOnPrompt: false, shuffleDataset: true, criticalTokenMode: "none", criticalTokenWeight: 3, criticalConfidenceThreshold: 0.25, criticalWeightShape: "constant", criticalWarmupSteps: 0, criticalMaxFraction: 1, criticalStatsEvery: 10, grpoMode: false, nGen: 8, nSteps: 500, grpoTemperature: 0.8, grpoMaxTokens: 512, contextSize: 0, batchSize: 256, ubatchSize: 256, threads: 0, datasetThreads: 0, gpuLayers: -1 },
     "export-lora": { adapters: [], output: "lora-merged.gguf", tensorType: "F16" },
     evaluate: { mode: "benchmark", dataset: "", promptTokens: 512, genTokens: 128, repetitions: 5, chunks: 0, contextSize: 0, batchSize: 0, ubatchSize: 0, threads: 0, gpuLayers: -1, baselineJobID: "", maxRegressionPercent: 0 },
-    register: { modelID: "studio-model", contextSize: 4096, gpuLayers: -1 },
+    register: { modelID: "studio-model", name: "", description: "", contextSize: 4096, gpuLayers: -1, ttl: 0, overwrite: false },
   };
   const fields: Record<Operation, FieldSpec[]> = {
-    quantize: [{ key: "output", label: "Output" }, { key: "type", label: "Tensor type", options: ["Q4_K_M", "Q5_K_M", "Q6_K", "Q8_0", "IQ4_XS", "F16", "BF16"] }, { key: "importanceMatrix", label: "Importance matrix" }, { key: "allowRequantize", label: "Allow requantization", type: "boolean" }],
-    hash: [{ key: "algorithm", label: "Algorithm", options: ["sha256", "sha1", "xxh64", "all"] }, { key: "noLayer", label: "Skip layer hashes", type: "boolean" }],
-    split: [{ key: "output", label: "Output prefix" }, { key: "maxTensors", label: "Maximum tensors", type: "number" }, { key: "maxSize", label: "Maximum size" }],
-    merge: [{ key: "models", label: "Models (comma separated)", type: "list" }, { key: "output", label: "Output" }, { key: "method", label: "Method", options: ["ties", "evo"] }, { key: "density", label: "Density", type: "number" }],
-    prune: [{ key: "phase", label: "Phase", options: ["analyze", "profiles", "inspect", "hard"] }, { key: "profile", label: "Profile" }, { key: "dataset", label: "Dataset" }, { key: "output", label: "Output model" }, { key: "outputDir", label: "Output directory" }],
-    "train-qlora": [{ key: "dataset", label: "Dataset" }, { key: "output", label: "Adapter output" }, { key: "epochs", label: "Epochs", type: "number" }, { key: "rank", label: "Rank", type: "number" }, { key: "optimizer", label: "Optimizer", options: ["adamw", "adamw_f16", "adamw_q8_0", "sgd"] }],
-    "export-lora": [{ key: "adapters", label: "Adapters (comma separated)", type: "list" }, { key: "output", label: "Output" }, { key: "tensorType", label: "Tensor type", options: ["F16", "BF16", "F32", "Q8_0", "Q6_K", "Q4_K", "Q4_0"] }],
-    evaluate: [{ key: "mode", label: "Mode", options: ["benchmark", "perplexity"] }, { key: "dataset", label: "Dataset" }, { key: "promptTokens", label: "Prompt tokens", type: "number" }, { key: "genTokens", label: "Generated tokens", type: "number" }, { key: "repetitions", label: "Repetitions", type: "number" }, { key: "baselineJobID", label: "Baseline job ID" }, { key: "maxRegressionPercent", label: "Maximum regression %", type: "number" }],
+    quantize: [{ key: "output", label: "Output" }, { key: "type", label: "Tensor type", options: ["Q4_K_M", "Q5_K_M", "Q6_K", "Q8_0", "Q4_0", "Q5_0", "IQ4_XS", "IQ4_NL", "IQ3_M", "IQ2_M", "TQ1_0", "TQ2_0", "F16", "BF16"] }, { key: "importanceMatrix", label: "Importance matrix", type: "resource", resourceTypes: ["artifact"] }, { key: "threads", label: "Threads (0 = automatic)", type: "number" }, { key: "allowRequantize", label: "Allow requantization", type: "boolean" }, { key: "leaveOutputTensor", label: "Leave output tensor unquantized", type: "boolean" }, { key: "pure", label: "Pure quantization", type: "boolean" }, { key: "dryRun", label: "Dry run", type: "boolean" }],
+    hash: [{ key: "algorithm", label: "Algorithm", options: ["sha256", "sha1", "xxh64", "all"] }, { key: "noLayer", label: "Skip layer hashes", type: "boolean" }, { key: "uuid", label: "Include UUID", type: "boolean" }],
+    split: [{ key: "output", label: "Output prefix" }, { key: "maxTensors", label: "Maximum tensors", type: "number" }, { key: "maxSize", label: "Maximum shard size", placeholder: "4G" }, { key: "noTensorFirstSplit", label: "No tensors in first split", type: "boolean" }, { key: "dryRun", label: "Dry run", type: "boolean" }],
+    merge: [{ key: "models", label: "Models", type: "resourceList", resourceTypes: ["model", "artifact"] }, { key: "output", label: "Output" }, { key: "method", label: "Method", options: ["ties", "evo"] }, { key: "density", label: "Density", type: "number" }, { key: "threads", label: "Threads", type: "number" }, { key: "memoryBudget", label: "Memory budget", placeholder: "2G" }, { key: "calibration", label: "Calibration dataset", type: "resource", resourceTypes: ["dataset"] }, { key: "targetType", label: "Evolution target type", options: ["q4_0", "q3_k", "q4_k", "mxfp4"] }, { key: "population", label: "Population", type: "number" }, { key: "generations", label: "Generations", type: "number" }, { key: "gpuLayers", label: "GPU layers", type: "number" }, { key: "device", label: "Device" }, { key: "mergeGpu", label: "Merge on GPU", type: "boolean" }],
+    prune: [{ key: "phase", label: "Phase", options: ["analyze", "profiles", "inspect", "hard"] }, { key: "dataset", label: "Training / calibration dataset", type: "resource", resourceTypes: ["dataset"] }, { key: "ratios", label: "Pruning ratios", type: "numberList", placeholder: "0.1, 0.2, 0.3" }, { key: "outputDir", label: "Output directory" }, { key: "importanceCache", label: "Importance cache", type: "resource", resourceTypes: ["artifact"] }, { key: "profile", label: "Pruning profile", type: "resource", resourceTypes: ["artifact"] }, { key: "output", label: "Output model" }, { key: "maxPplDeltaPercent", label: "Maximum perplexity delta %", type: "number" }, { key: "metric", label: "Validation metric" }, { key: "pplMask", label: "Perplexity mask" }, { key: "maxLayerRatio", label: "Maximum layer ratio", type: "number" }, { key: "seed", label: "Random seed", type: "number" }, { key: "contextSize", label: "Context size", type: "number" }, { key: "batchSize", label: "Logical batch size", type: "number" }, { key: "ubatchSize", label: "Physical micro-batch", type: "number" }, { key: "threads", label: "Threads", type: "number" }, { key: "datasetThreads", label: "Dataset workers", type: "number" }, { key: "gpuLayers", label: "GPU layers", type: "number" }, { key: "validate", label: "Validate result", type: "boolean" }, { key: "evaluate", label: "Evaluate profiles", type: "boolean" }],
+    "train-qlora": [{ key: "dataset", label: "Training dataset", type: "resource", resourceTypes: ["dataset"] }, { key: "output", label: "Adapter output" }, { key: "resume", label: "Resume checkpoint", type: "resource", resourceTypes: ["checkpoint"] }, { key: "epochs", label: "Epochs", type: "number" }, { key: "learningRate", label: "Learning rate", type: "number" }, { key: "learningRateMin", label: "Minimum learning rate", type: "number" }, { key: "decayEpochs", label: "Learning-rate decay epochs", type: "number" }, { key: "weightDecay", label: "Weight decay", type: "number" }, { key: "validationSplit", label: "Validation split", type: "number" }, { key: "rank", label: "LoRA rank", type: "number" }, { key: "alpha", label: "LoRA alpha", type: "number" }, { key: "targets", label: "Target modules" }, { key: "optimizer", label: "Optimizer", options: ["sgd", "adamw", "adamw_f16", "adamw_q8_0", "adamw_q6_k", "adamw_iq4_nl"] }, { key: "optimizerRestartEvery", label: "Optimizer restart every epochs", type: "number" }, { key: "scheduler", label: "Scheduler", options: ["constant", "cosine"] }, { key: "warmupSteps", label: "Warmup steps", type: "number" }, { key: "warmupInitRatio", label: "Warmup initial ratio", type: "number" }, { key: "saveEvery", label: "Checkpoint interval", type: "number" }, { key: "freezeLayers", label: "Freeze layers", type: "number" }, { key: "gradCheckpoint", label: "Gradient checkpointing", type: "number" }, { key: "loraQat", label: "LoRA QAT mode", options: ["none", "q3_k", "q4_k", "q4_0", "mxfp4", "q6_k", "q8_0"] }, { key: "criticalTokenMode", label: "Critical-token mode", options: ["none", "spans", "confidence", "hybrid"] }, { key: "criticalTokenWeight", label: "Critical-token weight", type: "number" }, { key: "criticalConfidenceThreshold", label: "Critical confidence threshold", type: "number" }, { key: "criticalWeightShape", label: "Critical weight shape", options: ["constant", "linear"] }, { key: "criticalWarmupSteps", label: "Critical warmup steps", type: "number" }, { key: "criticalMaxFraction", label: "Critical maximum fraction", type: "number" }, { key: "criticalStatsEvery", label: "Critical stats interval", type: "number" }, { key: "grpoMode", label: "Enable GRPO mode", type: "boolean" }, { key: "nGen", label: "GRPO generations per prompt", type: "number" }, { key: "nSteps", label: "GRPO optimizer steps", type: "number" }, { key: "grpoTemperature", label: "GRPO temperature", type: "number" }, { key: "grpoMaxTokens", label: "GRPO maximum tokens", type: "number" }, { key: "contextSize", label: "Context size (0 = model native)", type: "number" }, { key: "batchSize", label: "Logical batch size", type: "number" }, { key: "ubatchSize", label: "Physical micro-batch", type: "number" }, { key: "threads", label: "Threads", type: "number" }, { key: "datasetThreads", label: "Dataset workers", type: "number" }, { key: "gpuLayers", label: "GPU layers", type: "number" }, { key: "verboseLoss", label: "Verbose loss logging", type: "boolean" }, { key: "trainOnPrompt", label: "Train on prompt tokens", type: "boolean" }, { key: "shuffleDataset", label: "Shuffle dataset", type: "boolean" }],
+    "export-lora": [{ key: "adapters", label: "LoRA adapters", type: "resourceList", resourceTypes: ["adapter", "artifact"] }, { key: "output", label: "Output" }, { key: "tensorType", label: "Tensor type", options: ["F32", "F16", "BF16", "Q8_0", "Q8_1", "Q6_K", "Q5_K", "Q5_1", "Q5_0", "Q4_K", "Q4_1", "Q4_0", "Q3_K", "Q2_K", "IQ4_XS", "IQ4_NL", "IQ3_S", "IQ3_XXS", "IQ2_S", "TQ1_0", "TQ2_0", "MXFP4", "NVFP4", "Q1_0", "Q2_0"] }],
+    evaluate: [{ key: "mode", label: "Mode", options: ["benchmark", "perplexity"] }, { key: "dataset", label: "Evaluation dataset", type: "resource", resourceTypes: ["dataset"] }, { key: "promptTokens", label: "Prompt tokens", type: "number" }, { key: "genTokens", label: "Generated tokens", type: "number" }, { key: "repetitions", label: "Repetitions", type: "number" }, { key: "chunks", label: "Perplexity chunks", type: "number" }, { key: "contextSize", label: "Context size", type: "number" }, { key: "batchSize", label: "Logical batch size", type: "number" }, { key: "ubatchSize", label: "Physical micro-batch", type: "number" }, { key: "threads", label: "Threads", type: "number" }, { key: "gpuLayers", label: "GPU layers", type: "number" }, { key: "baselineJobID", label: "Baseline job ID" }, { key: "maxRegressionPercent", label: "Maximum regression %", type: "number" }],
     register: [{ key: "modelID", label: "Serving model ID" }, { key: "name", label: "Display name" }, { key: "description", label: "Description" }, { key: "contextSize", label: "Context size", type: "number" }, { key: "gpuLayers", label: "GPU layers", type: "number" }, { key: "ttl", label: "TTL seconds", type: "number" }, { key: "overwrite", label: "Replace existing ID", type: "boolean" }],
   };
 
-  let models = $state<LocalModel[]>([]);
+  let resources = $state<StudioResource[]>([]);
   let templates = $state<StudioPipelineTemplate[]>([]);
   let input = $state("");
   let name = $state("My pipeline");
@@ -65,7 +66,7 @@
 
   function fieldValue(step: DraftStep, field: FieldSpec): string | number | boolean {
     const value = requestObject(step)[field.key];
-    if (field.type === "list") return Array.isArray(value) ? value.join(", ") : "";
+    if (["list", "numberList", "resourceList"].includes(field.type ?? "")) return Array.isArray(value) ? value.join(", ") : "";
     if (field.type === "boolean") return Boolean(value);
     return typeof value === "string" || typeof value === "number" ? value : "";
   }
@@ -73,10 +74,18 @@
   function setField(step: DraftStep, field: FieldSpec, value: string | boolean) {
     const request = requestObject(step);
     if (field.type === "number") request[field.key] = value === "" ? undefined : Number(value);
-    else if (field.type === "list") request[field.key] = String(value).split(",").map((item) => item.trim()).filter(Boolean);
+    else if (field.type === "numberList") request[field.key] = String(value).split(",").map((item) => Number(item.trim())).filter((item) => Number.isFinite(item));
+    else if (field.type === "list" || field.type === "resourceList") request[field.key] = String(value).split(",").map((item) => item.trim()).filter(Boolean);
     else request[field.key] = value;
     if (request[field.key] === "" || request[field.key] === undefined) delete request[field.key];
     step.requestText = JSON.stringify(request, null, 2);
+  }
+
+  function addListResource(step: DraftStep, field: FieldSpec, path: string) {
+    if (!path) return;
+    const current = String(fieldValue(step, field)).split(",").map((item) => item.trim()).filter(Boolean);
+    if (!current.includes(path)) current.push(path);
+    setField(step, field, current.join(", "));
   }
 
   function move(index: number, offset: number) {
@@ -158,9 +167,9 @@
 
   onMount(() => {
     const preselectedModel = new URLSearchParams(window.location.search).get("model") ?? "";
-    void Promise.all([listLocalModels(), listStudioPipelineTemplates()]).then(([foundModels, foundTemplates]) => {
-      models = foundModels; templates = foundTemplates;
-      if (preselectedModel && foundModels.some((model) => model.name === preselectedModel)) input = preselectedModel;
+    void Promise.all([listStudioResources(), listStudioPipelineTemplates()]).then(([foundResources, foundTemplates]) => {
+      resources = foundResources; templates = foundTemplates;
+      if (preselectedModel && foundResources.some((resource) => resource.path === preselectedModel)) input = preselectedModel;
     });
   });
 </script>
@@ -173,7 +182,7 @@
       <Card.Content class="space-y-4">
         <div class="grid gap-3 sm:grid-cols-2">
           <div class="space-y-2"><Label.Root for="pipeline-name">Name</Label.Root><Input id="pipeline-name" bind:value={name} /></div>
-          <div class="space-y-2"><Label.Root for="pipeline-input">Initial model</Label.Root><select id="pipeline-input" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={input}><option value="">No initial model</option>{#each models.filter((model) => model.kind === "gguf") as model}<option value={model.name}>{model.name}</option>{/each}</select></div>
+          <StudioResourcePicker id="pipeline-input" label="Initial model" bind:value={input} {resources} types={["model", "artifact"]} placeholder="Search models and generated artifacts" />
         </div>
         {#each steps as step, index}
           <div class="border-border space-y-3 rounded-md border p-3">
@@ -189,10 +198,14 @@
               {#each fields[step.operation] as field}
                 {#if field.type === "boolean"}
                   <label class="flex items-center gap-2 self-end py-2 text-sm"><Switch.Root checked={Boolean(fieldValue(step, field))} onCheckedChange={(value) => setField(step, field, value)} />{field.label}</label>
+                {:else if field.type === "resource"}
+                  <StudioResourcePicker id={`recipe-${index}-${field.key}`} label={field.label} value={String(fieldValue(step, field))} {resources} types={field.resourceTypes ?? []} placeholder={field.placeholder ?? "Search catalog or enter a path"} onValueChange={(value) => setField(step, field, value)} />
+                {:else if field.type === "resourceList"}
+                  <div class="space-y-1"><Label.Root for={`recipe-${index}-${field.key}`}>{field.label}</Label.Root><Input id={`recipe-${index}-${field.key}`} value={String(fieldValue(step, field))} placeholder="Comma-separated paths" oninput={(event) => setField(step, field, event.currentTarget.value)} /><select aria-label={`Add ${field.label}`} class="border-input bg-background h-8 w-full rounded-md border px-2 text-xs" value="" onchange={(event) => { addListResource(step, field, event.currentTarget.value); event.currentTarget.value = ""; }}><option value="">Add from Studio catalog…</option>{#each resources.filter((resource) => resource.exists && (!field.resourceTypes?.length || field.resourceTypes.includes(resource.type))) as resource (resource.path)}<option value={resource.path}>{resource.path}</option>{/each}</select></div>
                 {:else}
                   <div class="space-y-1"><Label.Root>{field.label}</Label.Root>
                     {#if field.options}<select class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" value={String(fieldValue(step, field))} onchange={(event) => setField(step, field, event.currentTarget.value)}>{#each field.options as option}<option value={option}>{option}</option>{/each}</select>
-                    {:else}<Input type={field.type === "number" ? "number" : "text"} value={fieldValue(step, field) as string | number} oninput={(event) => setField(step, field, event.currentTarget.value)} />{/if}
+                    {:else}<Input type={field.type === "number" ? "number" : "text"} placeholder={field.placeholder} value={fieldValue(step, field) as string | number} oninput={(event) => setField(step, field, event.currentTarget.value)} />{/if}
                   </div>
                 {/if}
               {/each}

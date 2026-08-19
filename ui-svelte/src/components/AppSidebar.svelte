@@ -180,27 +180,6 @@
           </Sidebar.MenuItem>
 
           <Sidebar.MenuItem>
-            <Sidebar.MenuButton isActive={$currentRoute === "/studio"} tooltipContent="Llama Studio">
-              {#snippet child({ props })}
-                <a href="/studio" use:link {...props}>
-                  <Wrench />
-                  <span>Llama Studio</span>
-                </a>
-              {/snippet}
-            </Sidebar.MenuButton>
-          </Sidebar.MenuItem>
-
-          <Sidebar.MenuItem>
-            <div class="px-2 py-1">
-              <label class="text-muted-foreground mb-1 block text-[0.65rem] font-medium uppercase tracking-wide" for="active-studio-project">Active project</label>
-              <select id="active-studio-project" class="border-input bg-background h-8 w-full min-w-0 rounded-md border px-2 text-xs" value={$activeStudioProject} onchange={(event) => activeStudioProject.set(event.currentTarget.value)}>
-                <option value="">All Studio work</option>
-                {#each studioProjects as project (project.id)}<option value={project.id}>{project.name}</option>{/each}
-              </select>
-            </div>
-          </Sidebar.MenuItem>
-
-          <Sidebar.MenuItem>
             <Sidebar.MenuButton isActive={isActive("/studio/datasets", $currentRoute)} tooltipContent="Studio Datasets">
               {#snippet child({ props })}
                 <a href="/studio/datasets" use:link {...props}>
@@ -212,48 +191,21 @@
           </Sidebar.MenuItem>
 
           <Sidebar.MenuItem>
-            <Sidebar.MenuButton isActive={isActive("/studio/projects", $currentRoute)} tooltipContent="Studio Projects">
-              {#snippet child({ props })}<a href="/studio/projects" use:link {...props}><FolderKanban /><span>Projects</span></a>{/snippet}
-            </Sidebar.MenuButton>
-          </Sidebar.MenuItem>
-
-          <Sidebar.MenuItem>
-            <Sidebar.MenuButton isActive={isActive("/studio/evaluations", $currentRoute)} tooltipContent="Studio Evaluations">
-              {#snippet child({ props })}<a href="/studio/evaluations" use:link {...props}><BarChart3 /><span>Evaluations</span></a>{/snippet}
-            </Sidebar.MenuButton>
-          </Sidebar.MenuItem>
-
-          <Sidebar.MenuItem>
-            <Sidebar.MenuButton isActive={isActive("/studio/artifacts", $currentRoute)} tooltipContent="Studio Artifacts">
-              {#snippet child({ props })}
-                <a href="/studio/artifacts" use:link {...props}>
-                  <Boxes />
-                  <span>Artifacts</span>
-                </a>
-              {/snippet}
-            </Sidebar.MenuButton>
-          </Sidebar.MenuItem>
-
-          <Sidebar.MenuItem>
-            <Sidebar.MenuButton isActive={isActive("/studio/pipelines", $currentRoute)} tooltipContent="Studio Pipelines">
-              {#snippet child({ props })}
-                <a href="/studio/pipelines" use:link {...props}>
-                  <Workflow />
-                  <span>Recipes &amp; pipelines</span>
-                </a>
-              {/snippet}
-            </Sidebar.MenuButton>
-          </Sidebar.MenuItem>
-
-          <Sidebar.MenuItem>
-            <Sidebar.MenuButton isActive={isActive("/studio/jobs", $currentRoute)} tooltipContent="Studio Jobs">
-              {#snippet child({ props })}
-                <a href="/studio/jobs" use:link {...props}>
-                  <Workflow />
-                  <span>Studio Jobs</span>
-                </a>
-              {/snippet}
-            </Sidebar.MenuButton>
+            <div class="px-2 py-1">
+              <label class="text-muted-foreground mb-1 flex items-center gap-1 text-[0.65rem] font-medium uppercase tracking-wide" for="active-studio-project"><FolderKanban class="size-3" />Active project</label>
+              <select id="active-studio-project" class="border-input bg-background h-8 w-full min-w-0 rounded-md border px-2 text-xs" value={$activeStudioProject} onchange={(event) => activeStudioProject.set(event.currentTarget.value)}>
+                <option value="">All Studio work</option>
+                {#each studioProjects as project (project.id)}<option value={project.id}>{project.name}</option>{/each}
+              </select>
+            </div>
+            <Sidebar.MenuSub>
+              <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={$currentRoute === "/studio"}>{#snippet child({ props })}<a href="/studio" use:link {...props}><Wrench /><span>Llama Studio</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
+              <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={isActive("/studio/projects", $currentRoute)}>{#snippet child({ props })}<a href="/studio/projects" use:link {...props}><FolderKanban /><span>Projects</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
+              <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={isActive("/studio/evaluations", $currentRoute)}>{#snippet child({ props })}<a href="/studio/evaluations" use:link {...props}><BarChart3 /><span>Evaluations</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
+              <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={isActive("/studio/artifacts", $currentRoute)}>{#snippet child({ props })}<a href="/studio/artifacts" use:link {...props}><Boxes /><span>Artifacts</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
+              <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={isActive("/studio/pipelines", $currentRoute)}>{#snippet child({ props })}<a href="/studio/pipelines" use:link {...props}><Workflow /><span>Recipes &amp; pipelines</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
+              <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={isActive("/studio/jobs", $currentRoute)}>{#snippet child({ props })}<a href="/studio/jobs" use:link {...props}><Workflow /><span>Studio Jobs</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
+            </Sidebar.MenuSub>
           </Sidebar.MenuItem>
 
           <Sidebar.MenuItem>

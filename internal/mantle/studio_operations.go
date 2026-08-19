@@ -76,6 +76,9 @@ type TrainQLoRARequest struct {
 	Resume            string  `json:"resume,omitempty"`
 	Epochs            int     `json:"epochs,omitempty"`
 	LearningRate      float64 `json:"learningRate,omitempty"`
+	LearningRateMin   float64 `json:"learningRateMin,omitempty"`
+	DecayEpochs       float64 `json:"decayEpochs,omitempty"`
+	WeightDecay       float64 `json:"weightDecay,omitempty"`
 	ValidationSplit   float64 `json:"validationSplit,omitempty"`
 	Rank              int     `json:"rank,omitempty"`
 	Alpha             float64 `json:"alpha,omitempty"`
@@ -87,10 +90,23 @@ type TrainQLoRARequest struct {
 	LoRAQAT           string  `json:"loraQat,omitempty"`
 	Scheduler         string  `json:"scheduler,omitempty"`
 	WarmupSteps       int     `json:"warmupSteps,omitempty"`
+	WarmupInitRatio   float64 `json:"warmupInitRatio,omitempty"`
+	OptimizerRestart  int     `json:"optimizerRestartEvery,omitempty"`
 	VerboseLoss       bool    `json:"verboseLoss,omitempty"`
 	TrainOnPrompt     bool    `json:"trainOnPrompt,omitempty"`
 	ShuffleDataset    bool    `json:"shuffleDataset,omitempty"`
 	CriticalTokenMode string  `json:"criticalTokenMode,omitempty"`
+	CriticalWeight    float64 `json:"criticalTokenWeight,omitempty"`
+	CriticalThreshold float64 `json:"criticalConfidenceThreshold,omitempty"`
+	CriticalShape     string  `json:"criticalWeightShape,omitempty"`
+	CriticalWarmup    int     `json:"criticalWarmupSteps,omitempty"`
+	CriticalMaxFrac   float64 `json:"criticalMaxFraction,omitempty"`
+	CriticalStats     int     `json:"criticalStatsEvery,omitempty"`
+	GRPOMode          bool    `json:"grpoMode,omitempty"`
+	NGen              int     `json:"nGen,omitempty"`
+	NSteps            int     `json:"nSteps,omitempty"`
+	GRPOTemperature   float64 `json:"grpoTemperature,omitempty"`
+	GRPOMaxTokens     int     `json:"grpoMaxTokens,omitempty"`
 	ContextSize       int     `json:"contextSize,omitempty"`
 	BatchSize         int     `json:"batchSize,omitempty"`
 	UBatchSize        int     `json:"ubatchSize,omitempty"`
@@ -600,6 +616,12 @@ func (tm *TaskManager) StartTrainQLoRA(req TrainQLoRARequest, modelsDir string) 
 	if req.CriticalTokenMode != "" && !stringAllowed(req.CriticalTokenMode, "none", "spans", "confidence", "hybrid") {
 		return nil, fmt.Errorf("unsupported critical-token mode %q", req.CriticalTokenMode)
 	}
+	if req.CriticalShape != "" && !stringAllowed(req.CriticalShape, "constant", "linear") {
+		return nil, fmt.Errorf("unsupported critical-token weight shape %q", req.CriticalShape)
+	}
+	if req.WarmupInitRatio < 0 || req.WarmupInitRatio > 1 || req.CriticalThreshold < 0 || req.CriticalThreshold > 1 || req.CriticalMaxFrac < 0 || req.CriticalMaxFrac > 1 {
+		return nil, fmt.Errorf("warmup and critical-token ratios must be between 0 and 1")
+	}
 	binary, err := exec.LookPath("llama-finetune-qlora")
 	if err != nil {
 		return nil, fmt.Errorf("llama-finetune-qlora is not installed")
@@ -620,6 +642,9 @@ func (tm *TaskManager) StartTrainQLoRA(req TrainQLoRARequest, modelsDir string) 
 	}
 	appendIntArg("--epochs", req.Epochs)
 	appendFloatArg("--learning-rate", req.LearningRate)
+	appendFloatArg("--learning-rate-min", req.LearningRateMin)
+	appendFloatArg("--learning-rate-decay-epochs", req.DecayEpochs)
+	appendFloatArg("--weight-decay", req.WeightDecay)
 	appendFloatArg("--val-split", req.ValidationSplit)
 	appendIntArg("--lora-rank", req.Rank)
 	appendFloatArg("--lora-alpha", req.Alpha)
@@ -639,6 +664,8 @@ func (tm *TaskManager) StartTrainQLoRA(req TrainQLoRARequest, modelsDir string) 
 		args = append(args, "--lr-scheduler", req.Scheduler)
 	}
 	appendIntArg("--warmup-steps", req.WarmupSteps)
+	appendFloatArg("--warmup-init-ratio", req.WarmupInitRatio)
+	appendIntArg("--optimizer-restart-every", req.OptimizerRestart)
 	if req.VerboseLoss {
 		args = append(args, "--verbose-loss")
 	}
@@ -651,6 +678,21 @@ func (tm *TaskManager) StartTrainQLoRA(req TrainQLoRARequest, modelsDir string) 
 	if req.CriticalTokenMode != "" {
 		args = append(args, "--critical-token-mode", req.CriticalTokenMode)
 	}
+	appendFloatArg("--critical-token-weight", req.CriticalWeight)
+	appendFloatArg("--critical-confidence-threshold", req.CriticalThreshold)
+	if req.CriticalShape != "" {
+		args = append(args, "--critical-weight-shape", req.CriticalShape)
+	}
+	appendIntArg("--critical-warmup-steps", req.CriticalWarmup)
+	appendFloatArg("--critical-max-fraction", req.CriticalMaxFrac)
+	appendIntArg("--critical-stats-every", req.CriticalStats)
+	if req.GRPOMode {
+		args = append(args, "--grpo-mode")
+	}
+	appendIntArg("--n-gen", req.NGen)
+	appendIntArg("--n-steps", req.NSteps)
+	appendFloatArg("--grpo-temp", req.GRPOTemperature)
+	appendIntArg("--grpo-max-tokens", req.GRPOMaxTokens)
 	appendIntArg("--ctx-size", req.ContextSize)
 	appendIntArg("--batch-size", req.BatchSize)
 	appendIntArg("--ubatch-size", req.UBatchSize)
