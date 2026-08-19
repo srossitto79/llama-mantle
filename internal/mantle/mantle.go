@@ -7,17 +7,20 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/mostlygeek/llama-swap/internal/event"
 	"github.com/mostlygeek/llama-swap/internal/logmon"
 	"github.com/mostlygeek/llama-swap/internal/shared"
+	"github.com/mostlygeek/llama-swap/internal/store"
 )
 
 // TaskState is the current state of a long-running task.
 type TaskState string
 
 const (
+	TaskQueued    TaskState = "queued"
 	TaskRunning   TaskState = "running"
 	TaskCompleted TaskState = "completed"
 	TaskFailed    TaskState = "failed"
@@ -26,22 +29,46 @@ const (
 
 // Task tracks a long-running operation (download or build).
 type Task struct {
-	ID        string    `json:"id"`
-	Type      string    `json:"type"` // "download" or "build"
-	State     TaskState `json:"state"`
-	Message   string    `json:"message"`
-	Pct       int       `json:"pct"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID         string     `json:"id"`
+	Type       string     `json:"type"` // "download" or "build"
+	State      TaskState  `json:"state"`
+	Message    string     `json:"message"`
+	Pct        int        `json:"pct"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	UpdatedAt  time.Time  `json:"updatedAt"`
+	QueuedAt   *time.Time `json:"queuedAt,omitempty"`
+	StartedAt  *time.Time `json:"startedAt,omitempty"`
+	FinishedAt *time.Time `json:"finishedAt,omitempty"`
 
 	// Type-specific metadata
 	Repo    string `json:"repo,omitempty"`
 	Branch  string `json:"branch,omitempty"`
 	ModelID string `json:"modelID,omitempty"`
 
+	// Studio operation metadata. Legacy download/build tasks leave these empty.
+	Operation  string         `json:"operation,omitempty"`
+	Input      string         `json:"input,omitempty"`
+	Output     string         `json:"output,omitempty"`
+	Parameters map[string]any `json:"parameters,omitempty"`
+	Logs       []string       `json:"logs,omitempty"`
+	ExitCode   *int           `json:"exitCode,omitempty"`
+	Artifacts  []Artifact     `json:"artifacts,omitempty"`
+	JobClass   string         `json:"jobClass,omitempty"`
+
+	ctx      context.Context
 	cancel   context.CancelFunc
 	cancelCh chan struct{}
 	mu       sync.Mutex
+	persist  func(*Task)
+	logCount int
+}
+
+// Artifact is a file produced by a Studio operation.
+type Artifact struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+	Size int64  `json:"size"`
+	Kind string `json:"kind"`
 }
 
 // Done returns a channel that's closed when the task is cancelled.
@@ -49,11 +76,82 @@ func (t *Task) Done() <-chan struct{} {
 	return t.cancelCh
 }
 
+// Context is cancelled when the task is cancelled.
+func (t *Task) Context() context.Context {
+	return t.ctx
+}
+
+// AppendLog retains a bounded tail of operation output.
+func (t *Task) AppendLog(line string) {
+	const maxLines = 500
+	t.mu.Lock()
+	t.Logs = append(t.Logs, line)
+	if len(t.Logs) > maxLines {
+		t.Logs = append([]string(nil), t.Logs[len(t.Logs)-maxLines:]...)
+	}
+	t.UpdatedAt = time.Now()
+	t.logCount++
+	shouldPersist := t.logCount%25 == 0
+	t.mu.Unlock()
+	if shouldPersist {
+		t.persistNow()
+	}
+}
+
+// SetExitCode records the process exit status.
+func (t *Task) SetExitCode(code int) {
+	t.mu.Lock()
+	t.ExitCode = &code
+	t.UpdatedAt = time.Now()
+	t.mu.Unlock()
+	t.persistNow()
+}
+
+// AddArtifact records a generated file.
+func (t *Task) AddArtifact(artifact Artifact) {
+	t.mu.Lock()
+	t.Artifacts = append(t.Artifacts, artifact)
+	t.UpdatedAt = time.Now()
+	t.mu.Unlock()
+	t.persistNow()
+}
+
+// IsTerminal reports whether no further task updates are expected.
+func (t *Task) IsTerminal() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return isTerminalTaskState(t.State)
+}
+
+// Snapshot returns a serialization-safe copy of the task's public state.
+func (t *Task) Snapshot() *Task {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	copy := &Task{
+		ID: t.ID, Type: t.Type, State: t.State, Message: t.Message, Pct: t.Pct,
+		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, QueuedAt: t.QueuedAt,
+		StartedAt: t.StartedAt, FinishedAt: t.FinishedAt, Repo: t.Repo,
+		Branch: t.Branch, ModelID: t.ModelID, Operation: t.Operation,
+		Input: t.Input, Output: t.Output, ExitCode: t.ExitCode, JobClass: t.JobClass,
+		Parameters: make(map[string]any, len(t.Parameters)),
+	}
+	for key, value := range t.Parameters {
+		copy.Parameters[key] = value
+	}
+	copy.Logs = append([]string(nil), t.Logs...)
+	copy.Artifacts = append([]Artifact(nil), t.Artifacts...)
+	return copy
+}
+
+func isTerminalTaskState(state TaskState) bool {
+	return state == TaskCompleted || state == TaskFailed || state == TaskCancelled
+}
+
 // Cancel cancels the task.
 func (t *Task) Cancel() {
 	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.State != TaskRunning {
+	if t.State != TaskRunning && t.State != TaskQueued {
+		t.mu.Unlock()
 		return
 	}
 	if t.cancel != nil {
@@ -61,7 +159,11 @@ func (t *Task) Cancel() {
 	}
 	close(t.cancelCh)
 	t.State = TaskCancelled
-	t.UpdatedAt = time.Now()
+	now := time.Now()
+	t.UpdatedAt = now
+	t.FinishedAt = &now
+	t.mu.Unlock()
+	t.persistNow()
 }
 
 // UpdateProgress updates a task's state and emits a progress event.
@@ -70,8 +172,16 @@ func (t *Task) UpdateProgress(state TaskState, msg string, pct int) {
 	t.State = state
 	t.Message = msg
 	t.Pct = pct
-	t.UpdatedAt = time.Now()
+	now := time.Now()
+	t.UpdatedAt = now
+	if state == TaskRunning && t.StartedAt == nil {
+		t.StartedAt = &now
+	}
+	if isTerminalTaskState(state) {
+		t.FinishedAt = &now
+	}
 	t.mu.Unlock()
+	t.persistNow()
 
 	if t.Type == "build" {
 		event.Emit(shared.BackendBuildProgressEvent{
@@ -93,12 +203,30 @@ func (t *Task) UpdateProgress(state TaskState, msg string, pct int) {
 	}
 }
 
+func (t *Task) persistNow() {
+	if t.persist != nil && t.Type == "studio" {
+		t.persist(t)
+	}
+}
+
 // TaskManager holds all active and recent tasks.
 type TaskManager struct {
-	mu    sync.Mutex
-	tasks map[string]*Task
-	next  int
-	log   *logmon.Monitor
+	mu                 sync.Mutex
+	tasks              map[string]*Task
+	next               atomic.Uint64
+	log                *logmon.Monitor
+	studioStore        *store.Store
+	studioLoaded       bool
+	studioQueue        []*studioQueueItem
+	studioRunning      int
+	studioHeavyRunning int
+	studioMaxRunning   int
+	studioMaxHeavy     int
+	studioOutputs      map[string]string
+	studioResources    func() StudioResourceSnapshot
+	studioRetryPending bool
+	studioCleanupRoots map[string]struct{}
+	studioRegister     func(RegisterStudioModelRequest, string) error
 }
 
 // NewTaskManager creates a new task manager. log receives a line for every
@@ -106,8 +234,12 @@ type TaskManager struct {
 // endpoint (in addition to the task's own last-line progress message).
 func NewTaskManager(log *logmon.Monitor) *TaskManager {
 	return &TaskManager{
-		tasks: make(map[string]*Task),
-		log:   log,
+		tasks:              make(map[string]*Task),
+		log:                log,
+		studioMaxRunning:   studioJobLimit("LLAMA_STUDIO_MAX_JOBS", 2),
+		studioMaxHeavy:     studioJobLimit("LLAMA_STUDIO_MAX_HEAVY_JOBS", 1),
+		studioOutputs:      make(map[string]string),
+		studioCleanupRoots: make(map[string]struct{}),
 	}
 }
 
@@ -120,10 +252,7 @@ func (tm *TaskManager) logBuildLine(taskID, line string) {
 }
 
 func (tm *TaskManager) newID() string {
-	tm.mu.Lock()
-	defer tm.mu.Unlock()
-	tm.next++
-	return fmt.Sprintf("task-%d", tm.next)
+	return fmt.Sprintf("task-%d-%d", time.Now().UnixMilli(), tm.next.Add(1))
 }
 
 // CreateTask registers a new task with a cancellable context and returns it.
@@ -138,8 +267,10 @@ func (tm *TaskManager) CreateTask(taskType, repo, branch, modelID string) *Task 
 		Repo:      repo,
 		Branch:    branch,
 		ModelID:   modelID,
+		ctx:       ctx,
 		cancel:    cancel,
 		cancelCh:  make(chan struct{}),
+		persist:   tm.persistStudioTask,
 	}
 	_ = ctx // context is used via cancel()
 
@@ -147,6 +278,102 @@ func (tm *TaskManager) CreateTask(taskType, repo, branch, modelID string) *Task 
 	tm.tasks[t.ID] = t
 	tm.mu.Unlock()
 	return t
+}
+
+// SetStudioStore attaches durable Studio storage. The first attachment also
+// recovers interrupted work and hydrates recent tasks into memory.
+func (tm *TaskManager) SetStudioStore(st *store.Store) error {
+	tm.mu.Lock()
+	tm.studioStore = st
+	load := !tm.studioLoaded
+	if load {
+		tm.studioLoaded = true
+	}
+	tm.mu.Unlock()
+	if !load {
+		return nil
+	}
+	ctx := context.Background()
+	if err := st.RecoverStudioJobs(ctx); err != nil {
+		return err
+	}
+	jobs, err := st.ListStudioJobs(ctx, 100)
+	if err != nil {
+		return err
+	}
+	for _, job := range jobs {
+		task, err := tm.taskFromStudioRecord(job)
+		if err != nil {
+			return fmt.Errorf("restore studio job %s: %w", job.ID, err)
+		}
+		tm.mu.Lock()
+		tm.tasks[task.ID] = task
+		tm.mu.Unlock()
+	}
+	return nil
+}
+
+func (tm *TaskManager) taskFromStudioRecord(job store.StudioJobRecord) (*Task, error) {
+	var parameters map[string]any
+	var logs []string
+	if err := json.Unmarshal([]byte(job.ParametersJSON), &parameters); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(job.LogsJSON), &logs); err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	task := &Task{
+		ID: job.ID, Type: "studio", State: TaskState(job.State), Message: job.Message,
+		Pct: job.Pct, CreatedAt: job.CreatedAt, UpdatedAt: job.UpdatedAt,
+		Operation: job.Operation, Input: job.Input, Output: job.Output,
+		Parameters: parameters, Logs: logs, ExitCode: job.ExitCode,
+		JobClass: job.JobClass, QueuedAt: job.QueuedAt, StartedAt: job.StartedAt, FinishedAt: job.FinishedAt,
+		ctx: ctx, cancel: cancel, cancelCh: make(chan struct{}), persist: tm.persistStudioTask,
+	}
+	for _, artifact := range job.Artifacts {
+		task.Artifacts = append(task.Artifacts, Artifact{
+			Name: artifact.Name, Path: artifact.Path, Size: artifact.Size, Kind: artifact.Kind,
+		})
+	}
+	return task, nil
+}
+
+func (tm *TaskManager) persistStudioTask(task *Task) {
+	tm.mu.Lock()
+	st := tm.studioStore
+	tm.mu.Unlock()
+	if st == nil {
+		return
+	}
+	task.mu.Lock()
+	parameters, err1 := json.Marshal(task.Parameters)
+	logs, err2 := json.Marshal(task.Logs)
+	record := store.StudioJobRecord{
+		ID: task.ID, Operation: task.Operation, State: string(task.State), Message: task.Message,
+		Pct: task.Pct, Input: task.Input, Output: task.Output,
+		ParametersJSON: string(parameters), LogsJSON: string(logs), ExitCode: task.ExitCode,
+		CreatedAt: task.CreatedAt, UpdatedAt: task.UpdatedAt,
+		JobClass: task.JobClass, QueuedAt: task.QueuedAt, StartedAt: task.StartedAt, FinishedAt: task.FinishedAt,
+	}
+	for _, artifact := range task.Artifacts {
+		record.Artifacts = append(record.Artifacts, store.StudioArtifactRecord{
+			Name: artifact.Name, Path: artifact.Path, Size: artifact.Size, Kind: artifact.Kind,
+			MetadataJSON: "{}",
+		})
+	}
+	task.mu.Unlock()
+	if err1 != nil || err2 != nil {
+		return
+	}
+	if err := st.SaveStudioJob(context.Background(), record); err != nil && tm.log != nil {
+		tm.log.Errorf("[studio %s] persist task: %v", task.ID, err)
+	}
+}
+
+// PersistStudioTask stores metadata assigned immediately after task creation.
+func (tm *TaskManager) PersistStudioTask(task *Task) {
+	tm.persistStudioTask(task)
 }
 
 // GetTask returns a task by ID.
@@ -162,7 +389,7 @@ func (tm *TaskManager) ListTasks() []*Task {
 	defer tm.mu.Unlock()
 	result := make([]*Task, 0, len(tm.tasks))
 	for _, t := range tm.tasks {
-		result = append(result, t)
+		result = append(result, t.Snapshot())
 	}
 	return result
 }
@@ -172,6 +399,9 @@ func (tm *TaskManager) CancelTask(id string) bool {
 	t := tm.GetTask(id)
 	if t == nil {
 		return false
+	}
+	if t.Type == "studio" && tm.cancelQueuedStudioTask(t) {
+		return true
 	}
 	t.Cancel()
 	return true

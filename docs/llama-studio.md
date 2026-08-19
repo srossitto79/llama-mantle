@@ -1,0 +1,149 @@
+# Llama Studio
+
+Llama Studio extends llama-swap from model serving into a GGUF lifecycle
+workspace. It treats command-line tools as typed operations rather than exposing
+arbitrary process execution.
+
+## Product areas
+
+- **Models**: local model inventory, GGUF metadata, variants, hashes, and lineage.
+- **Studio**: guided model transformations and training workflows.
+- **Jobs**: queued, running, completed, failed, and cancelled operations.
+- **Artifacts**: generated models, adapters, profiles, caches, reports, and datasets.
+- **Playground**: validate generated models using the existing inference interfaces.
+- **Serving**: register and launch generated model variants with existing backends.
+
+## Operation contract
+
+Every Studio operation has:
+
+1. A stable operation identifier and versioned typed request.
+2. An approved executable and argument builder; requests never contain commands.
+3. Model-root-relative input and output paths with symlink-aware containment checks.
+4. Preflight validation, disk estimates, resource requirements, and collision checks.
+5. A cancellable job with bounded logs, progress, timestamps, and an exit code.
+6. Declared output artifacts and provenance linking them to their input artifacts.
+7. An operation-specific success policy because llama.cpp tools do not share exit conventions.
+
+## Delivery phases
+
+### 1. Foundation and quantization
+
+- GGUF inspection and local model selection.
+- Quantization and requantization planning and execution.
+- Importance matrix input, dry-run estimates, progress, logs, and cancellation.
+- Persistent jobs, artifacts, lineage, and restart recovery.
+
+### 2. Packaging and verification
+
+- GGUF hashing and verification.
+- Split and merge-shards workflows.
+- Artifact registration and optional serving configuration generation.
+
+### 3. Model merging
+
+- TIES merges with density and bounded worker memory.
+- Evo merges with calibration datasets, population controls, and GPU selection.
+- Compatibility preflight and post-merge validation.
+
+### 4. Pruning
+
+- Analyze a model and dataset into an importance cache.
+- Generate and inspect ratio profiles.
+- Hard-prune to a new artifact.
+- Validate perplexity change against an explicit threshold.
+
+### 5. Training and adapters
+
+- Dataset inventory, validation, and JSONL preview.
+- QLoRA/SFT training with checkpoints and resume.
+- Critical-token SFT as an advanced mode.
+- GRPO as a separate IPC-backed advanced workflow.
+- LoRA export/merge and resulting-model validation.
+
+### 6. Evaluation and advanced tools
+
+- Benchmarks, perplexity, fit parameters, embeddings, retrieval, and lookup caches.
+- Comparable evaluation reports attached to model variants.
+- Advanced diagnostics kept separate from normal workflows.
+
+### 7. Pipelines and hardening
+
+- Composable train, merge, prune, quantize, verify, register, and test pipelines.
+- CPU, RAM, GPU, VRAM, and disk admission controls.
+- Job concurrency and scheduling policies.
+- Audit history, retention, cleanup, and orphan recovery.
+- Rootless operation and adversarial path/process tests.
+
+Pipeline requests contain only typed Studio operation requests. A step may set
+`usePrevious` to inject the preceding generated model into its operation-specific
+input field. Pipeline parents retain child job IDs, aggregate artifacts, stop on
+the first failed step, and propagate cancellation to the active child.
+
+Pipeline templates are stored in SQLite and managed from the Pipeline Builder.
+Templates can also be imported and exported as versioned JSON documents. The
+builder presents operation-specific fields and retains an advanced typed-request
+JSON editor for less common fork options.
+The `register` terminal operation adds a generated GGUF to the existing `models`
+configuration with a validated `llama-server` command, preserves YAML comments,
+rejects accidental model-ID replacement, and triggers the normal hot reload path.
+
+The artifact catalog deduplicates pipeline roll-ups in favor of the operation that
+actually produced each path, reports missing files without discarding history, and
+shows the connected upstream and downstream lineage for an artifact. Serving
+registration is tracked independently, so it protects a model without replacing its
+producing operation in the catalog.
+
+Artifact annotations retain tags and notes independently from job snapshots.
+Verification streams SHA-256 calculation with cancellation, validates GGUF structure,
+and stores both successful and failed results. Verification can run over the current
+catalog selection as a parent job with individually visible child jobs. Explicit cleanup
+removes cataloged regular files only and intentionally retains provenance records.
+Retention policies filter by artifact age and type, exclude tagged artifacts by default,
+and always exclude models registered for serving. Applying a policy requires the token
+from an exact preview; changes to the candidate files invalidate that token.
+
+Completed benchmarks and perplexity runs are stored as comparable evaluation records.
+Benchmark records normalize prompt and generation throughput while retaining the raw
+llama-bench result rows and exact operation parameters. An evaluation may select a prior
+job as its baseline and set a maximum regression percentage. Throughput regressions use
+generation speed (falling back to prompt speed), while perplexity regressions account for
+lower values being better; exceeding the threshold fails the evaluation job.
+
+## Persistence model
+
+Studio persistence uses three related records:
+
+- `studio_jobs`: operation, state, parameters, progress, exit status, and timestamps.
+- `studio_artifacts`: root-relative path, type, size, hash, metadata, and creation time.
+- `studio_lineage`: input/output artifact relationships and the producing job.
+
+Jobs found in a running state after process restart are marked interrupted. Operations
+that support checkpoints can offer resume; transformations with partial outputs must
+clean or quarantine those outputs before retrying.
+
+## Job scheduler configuration
+
+- `LLAMA_STUDIO_MAX_JOBS` controls total concurrent Studio jobs (default `2`).
+- `LLAMA_STUDIO_MAX_HEAVY_JOBS` limits concurrent training, merge, prune,
+  quantization, export, and evaluation jobs (default `1`).
+- `LLAMA_STUDIO_DISK_RESERVE_GB` keeps free space outside an operation's estimated
+  output requirement (default `1`).
+- `LLAMA_STUDIO_MIN_FREE_RAM_GB` delays heavy jobs until the host has the configured
+  free RAM reserve (default `2`).
+- `LLAMA_STUDIO_MIN_FREE_VRAM_GB` optionally delays heavy jobs until GPUs have the
+  configured aggregate free VRAM (default `0`, disabled).
+- `LLAMA_STUDIO_STAGING_MAX_AGE_HOURS` controls cleanup of abandoned hidden staging
+  outputs on startup (default `24`; live task IDs are always excluded).
+
+Invalid or non-positive concurrency values use their defaults. A disk reserve of
+`0` is allowed. Light and I/O jobs may pass a heavy job that is waiting for the
+heavy-job slot, so available global capacity is not left idle.
+
+## Safety rules
+
+- Never accept executable names, shell fragments, or unrestricted arguments from clients.
+- Never overwrite an existing model or follow an output path outside configured roots.
+- Write transformations to temporary outputs and publish them atomically after validation.
+- Require explicit confirmation for requantization, hard pruning, split deletion, and cleanup.
+- Treat datasets and calibration files as untrusted input and bound all parsers and logs.

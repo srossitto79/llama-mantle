@@ -1,10 +1,17 @@
 #!/bin/bash
 # Install llama.cpp - clone, build, and install binaries
-# Usage: BACKEND=cuda|vulkan ./install-llama.sh <commit_hash>
-set -e
+# Usage: BACKEND=cuda|vulkan BUILD_PROFILE=all ./install-llama.sh <commit_hash>
+set -euo pipefail
 
 COMMIT_HASH="${1:-master}"
 BACKEND="${BACKEND:-cuda}"
+BUILD_PROFILE="${BUILD_PROFILE:-all}"
+LLAMA_REPO_URL="https://github.com/srossitto79/llama.cpp.git"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/llama-targets.sh"
+TARGET_OUTPUT="$(llama_targets_for_profile "${BUILD_PROFILE}")"
+mapfile -t TARGETS <<< "${TARGET_OUTPUT}"
 
 mkdir -p /install/bin
 
@@ -14,7 +21,7 @@ mkdir -p /src/llama.cpp
 cd /src/llama.cpp
 if [ ! -d .git ]; then
     git init
-    git remote add origin https://github.com/ggml-org/llama.cpp.git
+    git remote add origin "${LLAMA_REPO_URL}"
 fi
 git fetch --depth=1 origin "${COMMIT_HASH}"
 git checkout FETCH_HEAD
@@ -44,11 +51,9 @@ elif [ "$BACKEND" = "vulkan" ]; then
     )
 fi
 
-TARGETS=(llama-cli llama-server llama-tts)
-
 rm -rf build/CMakeCache.txt build/CMakeFiles 2>/dev/null || true
 
-echo "=== Building llama.cpp for ${BACKEND} ==="
+echo "=== Building llama.cpp for ${BACKEND} (${BUILD_PROFILE} profile) ==="
 cmake -B build "${CMAKE_FLAGS[@]}"
 cmake --build build --config Release -j"${MAX_BUILD_JOBS:-4}" --target "${TARGETS[@]}"
 

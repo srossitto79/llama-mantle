@@ -116,6 +116,7 @@ func readSysStats() (SysStat, error) {
 		MemTotalMB:     int(vmStat.Total / toMB),
 		MemUsedMB:      int(vmStat.Used / toMB),
 		MemFreeMB:      int(vmStat.Free / toMB),
+		MemAvailableMB: int(vmStat.Available / toMB),
 		NetIO:          netIO,
 	}, nil
 }

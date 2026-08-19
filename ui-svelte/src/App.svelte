@@ -41,6 +41,10 @@
     "/settings": wrap({ asyncComponent: () => import("./routes/Settings.svelte"), loadingComponent: RouteLoading }),
     "/config": wrap({ asyncComponent: () => import("./routes/ConfigEditor.svelte"), loadingComponent: RouteLoading }),
     "/backends": wrap({ asyncComponent: () => import("./routes/BackendManager.svelte"), loadingComponent: RouteLoading }),
+    "/studio": wrap({ asyncComponent: () => import("./routes/Studio.svelte"), loadingComponent: RouteLoading }),
+    "/studio/jobs": wrap({ asyncComponent: () => import("./routes/StudioJobs.svelte"), loadingComponent: RouteLoading }),
+    "/studio/pipelines": wrap({ asyncComponent: () => import("./routes/StudioPipelines.svelte"), loadingComponent: RouteLoading }),
+    "/studio/artifacts": wrap({ asyncComponent: () => import("./routes/StudioArtifacts.svelte"), loadingComponent: RouteLoading }),
     "/performance": wrap({ asyncComponent: () => import("./routes/Performance.svelte"), loadingComponent: RouteLoading }),
     "*": wrap({ asyncComponent: () => import("./routes/Activity.svelte"), loadingComponent: RouteLoading }),
   };
@@ -55,6 +59,10 @@
     "/settings": "Settings",
     "/config": "Configuration",
     "/backends": "Backends",
+    "/studio": "Llama Studio",
+    "/studio/jobs": "Studio Jobs",
+    "/studio/pipelines": "Studio Pipelines",
+    "/studio/artifacts": "Studio Artifacts",
     "/performance": "Performance",
   };
 

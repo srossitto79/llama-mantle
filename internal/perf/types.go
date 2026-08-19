@@ -31,6 +31,7 @@ type SysStat struct {
 	MemTotalMB     int         `json:"mem_total_mb"`
 	MemUsedMB      int         `json:"mem_used_mb"`
 	MemFreeMB      int         `json:"mem_free_mb"`
+	MemAvailableMB int         `json:"mem_available_mb"`
 	SwapTotalMB    int         `json:"swap_total_mb"`
 	SwapUsedMB     int         `json:"swap_used_mb"`
 	LoadAvg1       float64     `json:"load_avg_1"`

@@ -181,6 +181,38 @@ func New(cfg config.Config, muxlog *logmon.Monitor, proxylog *logmon.Monitor, up
 	if st == nil {
 		return nil, fmt.Errorf("store is required")
 	}
+	if err := tm.SetStudioStore(st); err != nil {
+		return nil, fmt.Errorf("configure studio store: %w", err)
+	}
+	if perfMon != nil {
+		tm.SetStudioResourceProvider(func() mantle.StudioResourceSnapshot {
+			sysStats, gpuStats := perfMon.Current()
+			snapshot := mantle.StudioResourceSnapshot{}
+			if len(sysStats) > 0 {
+				latest := sysStats[len(sysStats)-1]
+				availableMB := latest.MemAvailableMB
+				if availableMB == 0 {
+					availableMB = latest.MemFreeMB
+				}
+				snapshot.FreeRAMBytes = int64(availableMB) * 1024 * 1024
+				snapshot.RAMKnown = latest.MemTotalMB > 0
+			}
+			latestGPU := make(map[int]perf.GpuStat)
+			for _, stat := range gpuStats {
+				current, exists := latestGPU[stat.ID]
+				if !exists || stat.Timestamp.After(current.Timestamp) {
+					latestGPU[stat.ID] = stat
+				}
+			}
+			for _, stat := range latestGPU {
+				if stat.MemTotalMB > 0 {
+					snapshot.VRAMKnown = true
+					snapshot.FreeVRAMBytes += int64(stat.MemTotalMB-stat.MemUsedMB) * 1024 * 1024
+				}
+			}
+			return snapshot
+		})
+	}
 
 	shutdownCtx, shutdownFn := context.WithCancel(context.Background())
 	s := &Server{

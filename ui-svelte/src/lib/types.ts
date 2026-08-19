@@ -306,19 +306,261 @@ export interface SpeechGenerationRequest {
 
 // --- Mantle management types ---
 
-export type TaskState = "running" | "completed" | "failed" | "cancelled";
+export type TaskState = "queued" | "running" | "completed" | "failed" | "cancelled";
 
 export interface MantleTask {
 	id: string;
-	type: "download" | "build";
+	type: "download" | "build" | "studio";
 	state: TaskState;
 	message: string;
 	pct: number;
 	createdAt: string;
 	updatedAt: string;
+	queuedAt?: string;
+	startedAt?: string;
+	finishedAt?: string;
 	repo?: string;
 	branch?: string;
 	modelID?: string;
+	operation?: string;
+	input?: string;
+	output?: string;
+	parameters?: Record<string, unknown>;
+	logs?: string[];
+	exitCode?: number;
+	artifacts?: StudioArtifact[];
+	jobClass?: "light" | "io" | "heavy";
+}
+
+export interface StudioArtifact {
+	name: string;
+	path: string;
+	size: number;
+	kind: string;
+}
+
+export interface StudioSchedulerStatus {
+	maxRunning: number;
+	maxHeavy: number;
+	running: number;
+	heavyRunning: number;
+	queued: number;
+	blocked: number;
+	blockedReason?: string;
+}
+
+export interface StudioPipelineStep {
+	operation: "quantize" | "hash" | "split" | "merge" | "prune" | "train-qlora" | "export-lora" | "evaluate" | "register";
+	usePrevious?: boolean;
+	request: Record<string, unknown>;
+}
+
+export interface StudioPipelineRequest {
+	name?: string;
+	input?: string;
+	steps: StudioPipelineStep[];
+}
+
+export interface StudioPipelineTemplate {
+	id: string;
+	name: string;
+	pipeline: StudioPipelineRequest;
+	createdAt?: string;
+	updatedAt?: string;
+}
+
+export interface RegisterStudioModelRequest {
+	model: string;
+	modelID: string;
+	name?: string;
+	description?: string;
+	contextSize?: number;
+	gpuLayers?: number;
+	ttl?: number;
+	overwrite?: boolean;
+}
+
+export interface StudioCatalogArtifact {
+	name: string;
+	path: string;
+	size: number;
+	kind: string;
+	metadata?: Record<string, unknown>;
+	jobID: string;
+	operation: string;
+	input?: string;
+	createdAt: string;
+	exists: boolean;
+	sha256?: string;
+	ggufValid?: boolean;
+	verificationError?: string;
+	tags?: string[];
+	notes?: string;
+	verifiedAt?: string;
+	registered?: boolean;
+}
+
+export interface StudioLineageEdge {
+	jobID: string;
+	input: string;
+	output: string;
+	relation: string;
+	createdAt: string;
+}
+
+export interface StudioEvaluation {
+	jobID: string;
+	model: string;
+	mode: "benchmark" | "perplexity";
+	metrics: Record<string, unknown>;
+	parameters: Record<string, unknown>;
+	createdAt: string;
+}
+
+export interface StudioRetentionPolicy {
+	maxAgeDays: number;
+	kinds?: string[];
+	includeTagged?: boolean;
+}
+
+export interface StudioRetentionPreview {
+	token: string;
+	candidates: StudioCatalogArtifact[];
+	totalBytes: number;
+}
+
+export interface StudioModelInspection {
+	name: string;
+	size: number;
+	modifiedAt: string;
+	version: number;
+	metadata: Record<string, unknown>;
+}
+
+export interface QuantizeRequest {
+	input: string;
+	output: string;
+	type: string;
+	importanceMatrix?: string;
+	allowRequantize?: boolean;
+	leaveOutputTensor?: boolean;
+	pure?: boolean;
+	dryRun?: boolean;
+	threads?: number;
+}
+
+export interface HashRequest {
+	input: string;
+	algorithm: "xxh64" | "sha1" | "sha256" | "all";
+	noLayer?: boolean;
+	uuid?: boolean;
+}
+
+export interface SplitRequest {
+	input: string;
+	output: string;
+	maxTensors?: number;
+	maxSize?: string;
+	noTensorFirstSplit?: boolean;
+	dryRun?: boolean;
+}
+
+export interface MergeRequest {
+	base: string;
+	models: string[];
+	output: string;
+	method: "ties" | "evo";
+	density?: number;
+	threads?: number;
+	memoryBudget?: string;
+	calibration?: string;
+	targetType?: "q4_0" | "q3_k" | "q4_k" | "mxfp4";
+	population?: number;
+	generations?: number;
+	gpuLayers?: number;
+	device?: string;
+	mergeGpu?: boolean;
+}
+
+export interface PruneRequest {
+	phase: "analyze" | "profiles" | "inspect" | "hard";
+	model?: string;
+	dataset?: string;
+	ratios?: number[];
+	outputDir?: string;
+	importanceCache?: string;
+	profile?: string;
+	output?: string;
+	validate?: boolean;
+	maxPplDeltaPercent?: number;
+	maxLayerRatio?: number;
+	evaluate?: boolean;
+	contextSize?: number;
+	batchSize?: number;
+	threads?: number;
+	datasetThreads?: number;
+	gpuLayers?: number;
+}
+
+export interface TrainQLoRARequest {
+	model: string;
+	dataset: string;
+	output: string;
+	resume?: string;
+	epochs?: number;
+	learningRate?: number;
+	validationSplit?: number;
+	rank?: number;
+	alpha?: number;
+	targets?: string;
+	optimizer?: string;
+	saveEvery?: number;
+	freezeLayers?: number;
+	gradCheckpoint?: number;
+	loraQat?: string;
+	scheduler?: string;
+	warmupSteps?: number;
+	verboseLoss?: boolean;
+	trainOnPrompt?: boolean;
+	shuffleDataset?: boolean;
+	criticalTokenMode?: string;
+	contextSize?: number;
+	batchSize?: number;
+	threads?: number;
+	datasetThreads?: number;
+	gpuLayers?: number;
+}
+
+export interface DatasetInspection {
+	name: string;
+	size: number;
+	recordsScanned: number;
+	formats: Record<string, number>;
+	truncated: boolean;
+}
+
+export interface ExportLoRARequest {
+	base: string;
+	adapters: string[];
+	output: string;
+	tensorType?: string;
+}
+
+export interface EvaluateRequest {
+	mode: "benchmark" | "perplexity";
+	model: string;
+	dataset?: string;
+	promptTokens?: number;
+	genTokens?: number;
+	repetitions?: number;
+	chunks?: number;
+	contextSize?: number;
+	batchSize?: number;
+	ubatchSize?: number;
+	threads?: number;
+	gpuLayers?: number;
+	baselineJobID?: string;
+	maxRegressionPercent?: number;
 }
 
 export interface HFModel {

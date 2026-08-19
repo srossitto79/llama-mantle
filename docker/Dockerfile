@@ -12,6 +12,7 @@
 ARG BACKEND=cuda
 ARG BUILD_WHISPER=false
 ARG BUILD_IK_LLAMA=true
+ARG BUILD_PROFILE=all
 
 # ── Builder bases ──────────────────────────────────────────────────────
 
@@ -92,10 +93,13 @@ RUN --mount=type=cache,id=ccache-${BACKEND},target=/ccache \
 FROM builder-base AS llama-build
 ARG BACKEND=cuda
 ARG LLAMA_COMMIT_HASH=master
+ARG BUILD_PROFILE=all
 COPY docker/install-llama.sh /build/
+COPY docker/llama-targets.sh /build/
 RUN --mount=type=cache,id=ccache-${BACKEND},target=/ccache \
     --mount=type=cache,id=llama-${BACKEND},target=/src/llama.cpp/build \
-    BACKEND=${BACKEND} bash /build/install-llama.sh "${LLAMA_COMMIT_HASH}"
+    BACKEND=${BACKEND} BUILD_PROFILE=${BUILD_PROFILE} \
+    bash /build/install-llama.sh "${LLAMA_COMMIT_HASH}"
 
 # ── Build ik_llama.cpp (optional, BUILD_IK_LLAMA=true to enable) ──────
 #
@@ -188,6 +192,7 @@ ARG LLAMA_COMMIT_HASH=unknown
 ARG WHISPER_COMMIT_HASH=unknown
 ARG SD_COMMIT_HASH=unknown
 ARG IK_LLAMA_COMMIT_HASH=unknown
+ARG BUILD_PROFILE=all
 ARG RUN_UID=0
 ENV BACKEND=${BACKEND}
 ENV CMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES}
@@ -220,10 +225,8 @@ COPY --from=sd-build /install/bin/sd-server /usr/local/bin/
 COPY --from=sd-build /install/bin/sd-cli /usr/local/bin/
 COPY --from=sd-build /install/lib/ /usr/local/lib/
 
-# Copy llama.cpp binaries (statically linked)
-COPY --from=llama-build /install/bin/llama-server /usr/local/bin/
-COPY --from=llama-build /install/bin/llama-cli /usr/local/bin/
-COPY --from=llama-build /install/bin/llama-tts /usr/local/bin/
+# Copy all executables selected by the llama.cpp build profile.
+COPY --from=llama-build /install/bin/ /usr/local/bin/
 
 # Copy ik-llama-server (CUDA only; empty copy for vulkan)
 COPY --from=ik-llama-build /install/bin/ /usr/local/bin/
@@ -247,6 +250,7 @@ RUN echo "llama.cpp: ${LLAMA_COMMIT_HASH}" > /versions.txt && \
     echo "stable-diffusion.cpp: ${SD_COMMIT_HASH}" >> /versions.txt && \
     echo "ik_llama.cpp: ${IK_LLAMA_COMMIT_HASH}" >> /versions.txt && \
     echo "llama-swap: $(cat /tmp/llama-swap-version)" >> /versions.txt && \
+    echo "llama.cpp profile: ${BUILD_PROFILE}" >> /versions.txt && \
     echo "backend: ${BACKEND}" >> /versions.txt && \
     echo "build_timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> /versions.txt
 

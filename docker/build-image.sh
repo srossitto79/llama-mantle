@@ -13,6 +13,7 @@
 #   LS_VERSION=170 ./build-image.sh --cuda               # Override llama-swap version
 #   IK_LLAMA_REF=main ./build-image.sh --cuda            # Pin ik_llama.cpp to main branch (CUDA only)
 #   MAX_BUILD_JOBS=8 ./build-image.sh --cuda             # Parallel compile jobs (default: 4; raise on high-RAM hosts)
+#   BUILD_PROFILE=all ./build-image.sh --cuda             # Llama Studio profile (default: all)
 #
 
 set -euo pipefail
@@ -48,6 +49,7 @@ for arg in "$@"; do
             echo "  IK_LLAMA_REF         Pin ik_llama.cpp to a commit, tag, or branch (CUDA only)"
             echo "  LS_VERSION           Override llama-swap version (e.g., '170' or 'latest')"
             echo "  MAX_BUILD_JOBS       Parallel compile jobs per build stage (default: 4; raise on high-RAM hosts)"
+            echo "  BUILD_PROFILE        llama.cpp executable profile (default: all)"
             echo "  BUILD_WHISPER        Build whisper.cpp (default: false; set to true to enable)
   BUILD_IK_LLAMA       Build ik_llama.cpp (default: true for cuda, always false for vulkan)"
             exit 0
@@ -65,7 +67,7 @@ fi
 DOCKER_IMAGE_TAG="${DOCKER_IMAGE_TAG:-llama-swap:unified-${BACKEND}}"
 
 # Git repository URLs
-LLAMA_REPO="https://github.com/ggml-org/llama.cpp.git"
+LLAMA_REPO="https://github.com/srossitto79/llama.cpp.git"
 WHISPER_REPO="https://github.com/ggml-org/whisper.cpp.git"
 SD_REPO="https://github.com/leejet/stable-diffusion.cpp.git"
 LLAMA_SWAP_REPO="https://github.com/mostlygeek/llama-swap.git"
@@ -202,6 +204,11 @@ echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+source "${SCRIPT_DIR}/llama-targets.sh"
+BUILD_PROFILE="${BUILD_PROFILE:-all}"
+# Validate the profile before spending time in Docker.
+LLAMA_TARGET_OUTPUT="$(llama_targets_for_profile "${BUILD_PROFILE}")"
+mapfile -t LLAMA_BINARIES <<< "${LLAMA_TARGET_OUTPUT}"
 
 BUILD_ARGS=(
     --build-arg "BACKEND=${BACKEND}"
@@ -213,6 +220,7 @@ BUILD_ARGS=(
     --build-arg "MAX_BUILD_JOBS=${MAX_BUILD_JOBS:-4}"
     --build-arg "BUILD_WHISPER=${BUILD_WHISPER:-false}"
     --build-arg "BUILD_IK_LLAMA=${_BUILD_IK_LLAMA}"
+    --build-arg "BUILD_PROFILE=${BUILD_PROFILE}"
     -t "${DOCKER_IMAGE_TAG}"
     -f "${SCRIPT_DIR}/Dockerfile"
 )
@@ -237,7 +245,10 @@ echo "Verifying build artifacts..."
 echo "=========================================="
 echo ""
 
-EXPECTED_BINARIES=(llama-server llama-cli whisper-server whisper-cli sd-server sd-cli llama-swap)
+EXPECTED_BINARIES=("${LLAMA_BINARIES[@]}" sd-server sd-cli llama-swap)
+if [[ "${BUILD_WHISPER:-false}" == "true" ]]; then
+    EXPECTED_BINARIES+=(whisper-server whisper-cli)
+fi
 if [[ "$BACKEND" == "cuda" ]]; then
     EXPECTED_BINARIES+=(ik-llama-server)
 fi
@@ -260,10 +271,7 @@ if [[ ${#MISSING_BINARIES[@]} -gt 0 ]]; then
     exit 1
 fi
 
-VERIFIED_LIST="llama-server, llama-cli, whisper-server, whisper-cli, sd-server, sd-cli, llama-swap"
-if [[ "$BACKEND" == "cuda" ]]; then
-    VERIFIED_LIST="${VERIFIED_LIST}, ik-llama-server"
-fi
+VERIFIED_LIST="${EXPECTED_BINARIES[*]}"
 echo "All expected binaries verified: ${VERIFIED_LIST}"
 
 echo ""
@@ -296,6 +304,7 @@ echo "  ${ROOTLESS_TAG}"
 echo ""
 echo "Built with:"
 echo "  llama.cpp:            ${LLAMA_HASH}"
+echo "  llama.cpp profile:    ${BUILD_PROFILE}"
 echo "  whisper.cpp:          ${WHISPER_HASH}"
 echo "  stable-diffusion.cpp: ${SD_HASH}"
 if [[ "$BACKEND" == "cuda" ]]; then

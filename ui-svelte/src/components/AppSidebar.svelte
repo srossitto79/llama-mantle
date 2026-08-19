@@ -1,6 +1,6 @@
 <script lang="ts">
   import { link } from "svelte-spa-router";
-  import { FerrisWheel, Boxes, Activity, ScrollText, Gauge, Sun, Moon, Monitor, ChevronRight, Settings, PackageSearch, Cog, Server } from "@lucide/svelte";
+  import { FerrisWheel, Boxes, Activity, ScrollText, Gauge, Sun, Moon, Monitor, ChevronRight, Settings, PackageSearch, Cog, Server, Wrench, Workflow } from "@lucide/svelte";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -161,6 +161,50 @@
                 <a href="/models/hub" use:link {...props}>
                   <PackageSearch />
                   <span>Model Hub</span>
+                </a>
+              {/snippet}
+            </Sidebar.MenuButton>
+          </Sidebar.MenuItem>
+
+          <Sidebar.MenuItem>
+            <Sidebar.MenuButton isActive={$currentRoute === "/studio"} tooltipContent="Llama Studio">
+              {#snippet child({ props })}
+                <a href="/studio" use:link {...props}>
+                  <Wrench />
+                  <span>Llama Studio</span>
+                </a>
+              {/snippet}
+            </Sidebar.MenuButton>
+          </Sidebar.MenuItem>
+
+          <Sidebar.MenuItem>
+            <Sidebar.MenuButton isActive={isActive("/studio/artifacts", $currentRoute)} tooltipContent="Studio Artifacts">
+              {#snippet child({ props })}
+                <a href="/studio/artifacts" use:link {...props}>
+                  <Boxes />
+                  <span>Artifacts</span>
+                </a>
+              {/snippet}
+            </Sidebar.MenuButton>
+          </Sidebar.MenuItem>
+
+          <Sidebar.MenuItem>
+            <Sidebar.MenuButton isActive={isActive("/studio/pipelines", $currentRoute)} tooltipContent="Studio Pipelines">
+              {#snippet child({ props })}
+                <a href="/studio/pipelines" use:link {...props}>
+                  <Workflow />
+                  <span>Pipelines</span>
+                </a>
+              {/snippet}
+            </Sidebar.MenuButton>
+          </Sidebar.MenuItem>
+
+          <Sidebar.MenuItem>
+            <Sidebar.MenuButton isActive={isActive("/studio/jobs", $currentRoute)} tooltipContent="Studio Jobs">
+              {#snippet child({ props })}
+                <a href="/studio/jobs" use:link {...props}>
+                  <Workflow />
+                  <span>Studio Jobs</span>
                 </a>
               {/snippet}
             </Sidebar.MenuButton>

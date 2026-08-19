@@ -10,6 +10,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"sync"
+	"time"
 
 	"github.com/billziss-gh/golib/shlex"
 	"github.com/mostlygeek/llama-swap/internal/config"
@@ -25,13 +28,15 @@ type Handler struct {
 	modelsDir   string
 	backendsDir string
 	buildScript string
+	configMu    sync.Mutex
 }
 
 // NewHandler creates a new mantle API handler. tm is constructed once by the
 // caller and outlives config reloads, so long-running tasks (builds,
 // downloads) stay visible across a reload instead of being silently orphaned.
 func NewHandler(tm *TaskManager, cfg *config.Config, configPath, modelsDir, backendsDir, buildScript string) *Handler {
-	return &Handler{
+	tm.StartStudioStagingCleanup(modelsDir)
+	h := &Handler{
 		tm:          tm,
 		cfg:         cfg,
 		configPath:  configPath,
@@ -39,6 +44,8 @@ func NewHandler(tm *TaskManager, cfg *config.Config, configPath, modelsDir, back
 		backendsDir: backendsDir,
 		buildScript: buildScript,
 	}
+	tm.SetStudioRegister(h.registerStudioModel)
+	return h
 }
 
 // RegisterRoutes adds all mantle API endpoints to the given mux.
@@ -60,6 +67,34 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Size estimates (weights + KV cache) for configured models
 	mux.HandleFunc("GET /api/mantle/models/estimates", h.handleModelEstimates)
 
+	// Llama Studio
+	mux.HandleFunc("GET /api/mantle/studio/models/inspect", h.handleInspectStudioModel)
+	mux.HandleFunc("GET /api/mantle/studio/datasets/inspect", h.handleInspectStudioDataset)
+	mux.HandleFunc("POST /api/mantle/studio/quantize", h.handleStartQuantize)
+	mux.HandleFunc("POST /api/mantle/studio/hash", h.handleStartHash)
+	mux.HandleFunc("POST /api/mantle/studio/split", h.handleStartSplit)
+	mux.HandleFunc("POST /api/mantle/studio/merge", h.handleStartMerge)
+	mux.HandleFunc("POST /api/mantle/studio/prune", h.handleStartPrune)
+	mux.HandleFunc("POST /api/mantle/studio/train/qlora", h.handleStartTrainQLoRA)
+	mux.HandleFunc("POST /api/mantle/studio/export/lora", h.handleStartExportLoRA)
+	mux.HandleFunc("POST /api/mantle/studio/evaluate", h.handleStartEvaluate)
+	mux.HandleFunc("POST /api/mantle/studio/pipelines", h.handleStartStudioPipeline)
+	mux.HandleFunc("GET /api/mantle/studio/pipeline-templates", h.handleListStudioPipelineTemplates)
+	mux.HandleFunc("POST /api/mantle/studio/pipeline-templates", h.handleSaveStudioPipelineTemplate)
+	mux.HandleFunc("DELETE /api/mantle/studio/pipeline-templates/{id}", h.handleDeleteStudioPipelineTemplate)
+	mux.HandleFunc("POST /api/mantle/studio/register", h.handleRegisterStudioModel)
+	mux.HandleFunc("GET /api/mantle/studio/artifacts", h.handleListStudioArtifacts)
+	mux.HandleFunc("GET /api/mantle/studio/lineage", h.handleStudioLineage)
+	mux.HandleFunc("PATCH /api/mantle/studio/artifacts/annotation", h.handleSaveStudioArtifactAnnotation)
+	mux.HandleFunc("POST /api/mantle/studio/artifacts/verify", h.handleVerifyStudioArtifact)
+	mux.HandleFunc("POST /api/mantle/studio/artifacts/verify-bulk", h.handleVerifyStudioArtifacts)
+	mux.HandleFunc("POST /api/mantle/studio/artifacts/cleanup", h.handleCleanupStudioArtifact)
+	mux.HandleFunc("POST /api/mantle/studio/artifacts/retention/preview", h.handlePreviewStudioRetention)
+	mux.HandleFunc("POST /api/mantle/studio/artifacts/retention/apply", h.handleApplyStudioRetention)
+	mux.HandleFunc("GET /api/mantle/studio/evaluations", h.handleListStudioEvaluations)
+	mux.HandleFunc("DELETE /api/mantle/studio/jobs/{id}", h.handleCancelStudioJob)
+	mux.HandleFunc("GET /api/mantle/studio/scheduler", h.handleStudioScheduler)
+
 	// Config management
 	mux.HandleFunc("GET /api/mantle/config", h.handleGetConfig)
 	mux.HandleFunc("PUT /api/mantle/config", h.handlePutConfig)
@@ -75,6 +110,214 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Task status
 	mux.HandleFunc("GET /api/mantle/tasks", h.handleListTasks)
 	mux.HandleFunc("GET /api/mantle/tasks/{id}", h.handleGetTask)
+	mux.HandleFunc("GET /api/mantle/tasks/{id}/stream", h.handleTaskProgress)
+}
+
+func (h *Handler) handleInspectStudioModel(w http.ResponseWriter, r *http.Request) {
+	inspection, err := InspectStudioModel(h.modelsDir, r.URL.Query().Get("name"))
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, inspection)
+}
+
+func (h *Handler) handleInspectStudioDataset(w http.ResponseWriter, r *http.Request) {
+	inspection, err := InspectStudioDataset(h.modelsDir, r.URL.Query().Get("name"))
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, inspection)
+}
+
+func (h *Handler) handleStartQuantize(w http.ResponseWriter, r *http.Request) {
+	var req QuantizeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	task, err := h.tm.StartQuantize(req, h.modelsDir)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusAccepted, task)
+}
+
+func (h *Handler) handleStartHash(w http.ResponseWriter, r *http.Request) {
+	var req HashRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	task, err := h.tm.StartHash(req, h.modelsDir)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusAccepted, task)
+}
+
+func (h *Handler) handleStartSplit(w http.ResponseWriter, r *http.Request) {
+	var req SplitRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	task, err := h.tm.StartSplit(req, h.modelsDir)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusAccepted, task)
+}
+
+func (h *Handler) handleStartMerge(w http.ResponseWriter, r *http.Request) {
+	var req MergeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	task, err := h.tm.StartMerge(req, h.modelsDir)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusAccepted, task)
+}
+
+func (h *Handler) handleStartPrune(w http.ResponseWriter, r *http.Request) {
+	var req PruneRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	task, err := h.tm.StartPrune(req, h.modelsDir)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusAccepted, task)
+}
+
+func (h *Handler) handleStartTrainQLoRA(w http.ResponseWriter, r *http.Request) {
+	var req TrainQLoRARequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	task, err := h.tm.StartTrainQLoRA(req, h.modelsDir)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusAccepted, task)
+}
+
+func (h *Handler) handleStartExportLoRA(w http.ResponseWriter, r *http.Request) {
+	var req ExportLoRARequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	task, err := h.tm.StartExportLoRA(req, h.modelsDir)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusAccepted, task)
+}
+
+func (h *Handler) handleStartEvaluate(w http.ResponseWriter, r *http.Request) {
+	var req EvaluateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	task, err := h.tm.StartEvaluate(req, h.modelsDir)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusAccepted, task)
+}
+
+func (h *Handler) handleStartStudioPipeline(w http.ResponseWriter, r *http.Request) {
+	var req StudioPipelineRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid pipeline request: "+err.Error())
+		return
+	}
+	task, err := h.tm.StartStudioPipeline(req, h.modelsDir)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusAccepted, task.Snapshot())
+}
+
+func (h *Handler) handleListStudioPipelineTemplates(w http.ResponseWriter, _ *http.Request) {
+	templates, err := h.tm.ListStudioPipelineTemplates()
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, templates)
+}
+
+func (h *Handler) handleSaveStudioPipelineTemplate(w http.ResponseWriter, r *http.Request) {
+	var template StudioPipelineTemplate
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&template); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid pipeline template: "+err.Error())
+		return
+	}
+	saved, err := h.tm.SaveStudioPipelineTemplate(template)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, saved)
+}
+
+func (h *Handler) handleDeleteStudioPipelineTemplate(w http.ResponseWriter, r *http.Request) {
+	deleted, err := h.tm.DeleteStudioPipelineTemplate(r.PathValue("id"))
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !deleted {
+		jsonError(w, http.StatusNotFound, "pipeline template not found")
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]string{"msg": "deleted"})
+}
+
+func (h *Handler) handleCancelStudioJob(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	task := h.tm.GetTask(id)
+	if task == nil || task.Type != "studio" || !h.tm.CancelTask(id) {
+		jsonError(w, http.StatusNotFound, "running Studio job not found")
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]string{"msg": "cancelled"})
+}
+
+func (h *Handler) handleStudioScheduler(w http.ResponseWriter, _ *http.Request) {
+	jsonResponse(w, http.StatusOK, h.tm.StudioSchedulerStatus())
+}
+
+func (h *Handler) handleTaskProgress(w http.ResponseWriter, r *http.Request) {
+	task := h.tm.GetTask(r.PathValue("id"))
+	if task == nil {
+		jsonError(w, http.StatusNotFound, "task not found")
+		return
+	}
+	h.streamProgress(w, r, task)
 }
 
 func jsonResponse(w http.ResponseWriter, status int, data any) {
@@ -233,6 +476,8 @@ func (h *Handler) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handlePutConfig(w http.ResponseWriter, r *http.Request) {
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		jsonError(w, http.StatusBadRequest, "failed to read body")
@@ -264,6 +509,173 @@ func (h *Handler) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 	event.Emit(shared.ConfigFileChangedEvent{State: shared.ReloadingStateEnd})
 
 	jsonResponse(w, http.StatusOK, map[string]string{"msg": "config updated and reloaded"})
+}
+
+func (h *Handler) handleRegisterStudioModel(w http.ResponseWriter, r *http.Request) {
+	var req RegisterStudioModelRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid registration request: "+err.Error())
+		return
+	}
+	task, err := h.tm.StartRegisterStudioModel(req, h.modelsDir, h.registerStudioModel)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusAccepted, task.Snapshot())
+}
+
+func (h *Handler) handleListStudioArtifacts(w http.ResponseWriter, r *http.Request) {
+	limit := 250
+	if value := r.URL.Query().Get("limit"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			limit = parsed
+		}
+	}
+	artifacts, err := h.tm.ListStudioCatalogArtifacts(h.modelsDir, r.URL.Query().Get("kind"), limit)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, artifacts)
+}
+
+func (h *Handler) handleStudioLineage(w http.ResponseWriter, r *http.Request) {
+	edges, err := h.tm.StudioLineage(r.URL.Query().Get("path"))
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, edges)
+}
+
+func (h *Handler) handleSaveStudioArtifactAnnotation(w http.ResponseWriter, r *http.Request) {
+	var req StudioArtifactAnnotationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid annotation request")
+		return
+	}
+	if err := h.tm.SaveStudioArtifactAnnotation(req); err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]string{"msg": "saved"})
+}
+
+func (h *Handler) handleVerifyStudioArtifact(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid verification request")
+		return
+	}
+	task, err := h.tm.StartVerifyStudioArtifact(req.Path, h.modelsDir)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusAccepted, task.Snapshot())
+}
+
+func (h *Handler) handleVerifyStudioArtifacts(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Paths []string `json:"paths"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid bulk verification request")
+		return
+	}
+	task, err := h.tm.StartVerifyStudioArtifacts(req.Paths, h.modelsDir)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusAccepted, task.Snapshot())
+}
+
+func (h *Handler) handleCleanupStudioArtifact(w http.ResponseWriter, r *http.Request) {
+	var req StudioArtifactCleanupRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid cleanup request")
+		return
+	}
+	task, err := h.tm.StartCleanupStudioArtifact(req, h.modelsDir)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusAccepted, task.Snapshot())
+}
+
+func (h *Handler) handlePreviewStudioRetention(w http.ResponseWriter, r *http.Request) {
+	var policy StudioRetentionPolicy
+	if err := json.NewDecoder(r.Body).Decode(&policy); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid retention policy")
+		return
+	}
+	preview, err := h.tm.PreviewStudioRetention(h.modelsDir, policy)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, preview)
+}
+
+func (h *Handler) handleApplyStudioRetention(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Policy StudioRetentionPolicy `json:"policy"`
+		Token  string                `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid retention apply request")
+		return
+	}
+	task, err := h.tm.StartApplyStudioRetention(req.Policy, req.Token, h.modelsDir)
+	if err != nil {
+		jsonError(w, http.StatusConflict, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusAccepted, task.Snapshot())
+}
+
+func (h *Handler) handleListStudioEvaluations(w http.ResponseWriter, r *http.Request) {
+	evaluations, err := h.tm.ListStudioEvaluations(r.URL.Query().Get("model"))
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, evaluations)
+}
+
+func (h *Handler) registerStudioModel(req RegisterStudioModelRequest, modelPath string) error {
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
+	body, err := os.ReadFile(h.configPath)
+	if err != nil {
+		return fmt.Errorf("read config: %w", err)
+	}
+	updated, err := addStudioModelToConfig(body, req, modelPath)
+	if err != nil {
+		return err
+	}
+	newCfg, err := config.LoadConfigFromReader(bytes.NewReader(updated))
+	if err != nil {
+		return fmt.Errorf("validate updated config: %w", err)
+	}
+	newCfg.ConfigPath = h.configPath
+	newCfg.ModelsDir = h.modelsDir
+	newCfg.BackendsDir = h.backendsDir
+	newCfg.BuildScript = h.buildScript
+	if err := os.WriteFile(h.configPath, updated, 0644); err != nil {
+		return fmt.Errorf("write config: %w", err)
+	}
+	event.Emit(shared.ConfigFileChangedEvent{State: shared.ReloadingStateStart})
+	*h.cfg = newCfg
+	event.Emit(shared.ConfigFileChangedEvent{State: shared.ReloadingStateEnd})
+	return nil
 }
 
 // --- Backend Builds ---
@@ -417,7 +829,7 @@ func (h *Handler) handleGetTask(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusNotFound, "task not found")
 		return
 	}
-	jsonResponse(w, http.StatusOK, task)
+	jsonResponse(w, http.StatusOK, task.Snapshot())
 }
 
 // streamProgress sends SSE events for a task's progress.
@@ -436,6 +848,8 @@ func (h *Handler) streamProgress(w http.ResponseWriter, r *http.Request, task *T
 
 	// Send initial state
 	task.mu.Lock()
+	lastUpdated := task.UpdatedAt
+	initialTerminal := isTerminalTaskState(task.State)
 	initial := map[string]any{
 		"id":      task.ID,
 		"type":    task.Type,
@@ -447,6 +861,9 @@ func (h *Handler) streamProgress(w http.ResponseWriter, r *http.Request, task *T
 	data, _ := json.Marshal(initial)
 	fmt.Fprintf(w, "data: %s\n\n", data)
 	flusher.Flush()
+	if initialTerminal {
+		return
+	}
 
 	// Subscribe to events
 	ctx := r.Context()
@@ -491,6 +908,13 @@ func (h *Handler) streamProgress(w http.ResponseWriter, r *http.Request, task *T
 
 	// Also subscribe to generic task state changes for task completion
 	taskDone := task.Done()
+	var ticker *time.Ticker
+	var tickerCh <-chan time.Time
+	if task.Type == "studio" {
+		ticker = time.NewTicker(250 * time.Millisecond)
+		tickerCh = ticker.C
+		defer ticker.Stop()
+	}
 
 	for {
 		select {
@@ -514,6 +938,30 @@ func (h *Handler) streamProgress(w http.ResponseWriter, r *http.Request, task *T
 			data, _ := json.Marshal(ev)
 			fmt.Fprintf(w, "data: %s\n\n", data)
 			flusher.Flush()
+		case <-tickerCh:
+			task.mu.Lock()
+			if !task.UpdatedAt.After(lastUpdated) {
+				task.mu.Unlock()
+				continue
+			}
+			lastUpdated = task.UpdatedAt
+			update := map[string]any{
+				"id":        task.ID,
+				"state":     task.State,
+				"message":   task.Message,
+				"pct":       task.Pct,
+				"logs":      append([]string(nil), task.Logs...),
+				"exitCode":  task.ExitCode,
+				"artifacts": append([]Artifact(nil), task.Artifacts...),
+			}
+			terminal := isTerminalTaskState(task.State)
+			task.mu.Unlock()
+			data, _ := json.Marshal(update)
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+			if terminal {
+				return
+			}
 		}
 	}
 }
