@@ -18,6 +18,13 @@ func TestParseStudioEvaluationMetrics_PerplexityUsesFinalValue(t *testing.T) {
 	}
 }
 
+func TestParseStudioEvaluationMetrics_TaskScores(t *testing.T) {
+	metrics := parseStudioEvaluationMetrics("perplexity", []string{"hellaswag score = 0.731", "accuracy: 0.69", "KL-divergence = 0.125"})
+	if metrics["score"] != 0.731 || metrics["accuracy"] != 0.69 || metrics["klDivergence"] != 0.125 {
+		t.Fatalf("unexpected task metrics: %#v", metrics)
+	}
+}
+
 func TestStudioEvaluationRegression_Directions(t *testing.T) {
 	regression, _, err := studioEvaluationRegression("perplexity", map[string]any{"perplexity": 10.0}, map[string]any{"perplexity": 11.0})
 	if err != nil || regression != 10 {

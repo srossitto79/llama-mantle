@@ -26,11 +26,11 @@ var validModalities = map[string]struct{}{
 // can be resolved before macro substitution. After ResolveMacros is called
 // the typed fields (In, Out, Tools, Reranker, Context) are populated.
 type ModelCapConfig struct {
-	In       []string `yaml:"in"`
-	Out      []string `yaml:"out"`
-	Tools    bool     `yaml:"tools"`
-	Reranker bool     `yaml:"reranker"`
-	Context  int      `yaml:"context"`
+	In       []string `yaml:"in" json:"in,omitempty"`
+	Out      []string `yaml:"out" json:"out,omitempty"`
+	Tools    bool     `yaml:"tools" json:"tools,omitempty"`
+	Reranker bool     `yaml:"reranker" json:"reranker,omitempty"`
+	Context  int      `yaml:"context" json:"context,omitempty"`
 
 	raw map[string]any
 }
@@ -103,55 +103,55 @@ func (c ModelCapConfig) Validate() error {
 // TimeoutsConfig holds timeout settings for proxy connections
 // 0 = no timeout
 type TimeoutsConfig struct {
-	Connect        int `yaml:"connect"`
-	KeepAlive      int `yaml:"keepalive"`
-	ResponseHeader int `yaml:"responseHeader"`
-	TLSHandshake   int `yaml:"tlsHandshake"`
-	ExpectContinue int `yaml:"expectContinue"`
-	IdleConn       int `yaml:"idleConn"`
+	Connect        int `yaml:"connect" json:"connect,omitempty"`
+	KeepAlive      int `yaml:"keepalive" json:"keepalive,omitempty"`
+	ResponseHeader int `yaml:"responseHeader" json:"responseHeader,omitempty"`
+	TLSHandshake   int `yaml:"tlsHandshake" json:"tlsHandshake,omitempty"`
+	ExpectContinue int `yaml:"expectContinue" json:"expectContinue,omitempty"`
+	IdleConn       int `yaml:"idleConn" json:"idleConn,omitempty"`
 }
 
 type ModelConfig struct {
-	Cmd           string   `yaml:"cmd"`
-	CmdStop       string   `yaml:"cmdStop"`
-	Proxy         string   `yaml:"proxy"`
-	Aliases       []string `yaml:"aliases"`
-	Env           []string `yaml:"env"`
-	CheckEndpoint string   `yaml:"checkEndpoint"`
-	UnloadAfter   int      `yaml:"ttl"`
-	UnloadTimeout int      `yaml:"unloadTimeout"`
-	Unlisted      bool     `yaml:"unlisted"`
-	UseModelName  string   `yaml:"useModelName"`
+	Cmd           string   `yaml:"cmd" json:"cmd"`
+	CmdStop       string   `yaml:"cmdStop" json:"cmdStop,omitempty"`
+	Proxy         string   `yaml:"proxy" json:"proxy,omitempty"`
+	Aliases       []string `yaml:"aliases" json:"aliases,omitempty"`
+	Env           []string `yaml:"env" json:"env,omitempty"`
+	CheckEndpoint string   `yaml:"checkEndpoint" json:"checkEndpoint,omitempty"`
+	UnloadAfter   int      `yaml:"ttl" json:"ttl"`
+	UnloadTimeout int      `yaml:"unloadTimeout" json:"unloadTimeout,omitempty"`
+	Unlisted      bool     `yaml:"unlisted" json:"unlisted,omitempty"`
+	UseModelName  string   `yaml:"useModelName" json:"useModelName,omitempty"`
 
 	// #179 for /v1/models
-	Name        string `yaml:"name"`
-	Description string `yaml:"description"`
+	Name        string `yaml:"name" json:"name,omitempty"`
+	Description string `yaml:"description" json:"description,omitempty"`
 
 	// Limit concurrency of HTTP requests to process
-	ConcurrencyLimit int `yaml:"concurrencyLimit"`
+	ConcurrencyLimit int `yaml:"concurrencyLimit" json:"concurrencyLimit,omitempty"`
 
 	// Model filters see issue #174
-	Filters ModelFilters `yaml:"filters"`
+	Filters ModelFilters `yaml:"filters" json:"filters,omitempty"`
 
 	// Macros: see #264
 	// Model level macros take precedence over the global macros
-	Macros MacroList `yaml:"macros"`
+	Macros MacroList `yaml:"macros" json:"macros,omitempty"`
 
 	// Metadata: see #264
 	// Arbitrary metadata that can be exposed through the API
-	Metadata map[string]any `yaml:"metadata"`
+	Metadata map[string]any `yaml:"metadata" json:"metadata,omitempty"`
 
 	// override global setting
-	SendLoadingState *bool `yaml:"sendLoadingState"`
+	SendLoadingState *bool `yaml:"sendLoadingState" json:"sendLoadingState,omitempty"`
 
 	// Timeout settings for proxy connections
-	Timeouts TimeoutsConfig `yaml:"timeouts"`
+	Timeouts TimeoutsConfig `yaml:"timeouts" json:"timeouts,omitempty"`
 
 	// Capabilities defines what modalities and features the model supports.
-	Capabilities ModelCapConfig `yaml:"capabilities"`
+	Capabilities ModelCapConfig `yaml:"capabilities" json:"capabilities,omitempty"`
 
 	// Copy of HealthCheckTimeout from global config
-	HealthCheckTimeout int `yaml:"healthCheckTimeout"`
+	HealthCheckTimeout int `yaml:"healthCheckTimeout" json:"healthCheckTimeout,omitempty"`
 }
 
 func (m *ModelConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {

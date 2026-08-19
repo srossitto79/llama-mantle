@@ -15,15 +15,24 @@ import (
 // QuantizeRequest is the typed contract for quantization and requantization.
 // Input and Output are model-root-relative paths, never host paths.
 type QuantizeRequest struct {
-	Input             string `json:"input"`
-	Output            string `json:"output"`
-	Type              string `json:"type"`
-	ImportanceMatrix  string `json:"importanceMatrix,omitempty"`
-	AllowRequantize   bool   `json:"allowRequantize,omitempty"`
-	LeaveOutputTensor bool   `json:"leaveOutputTensor,omitempty"`
-	Pure              bool   `json:"pure,omitempty"`
-	DryRun            bool   `json:"dryRun,omitempty"`
-	Threads           int    `json:"threads,omitempty"`
+	Input              string   `json:"input"`
+	Output             string   `json:"output"`
+	Type               string   `json:"type"`
+	ImportanceMatrix   string   `json:"importanceMatrix,omitempty"`
+	AllowRequantize    bool     `json:"allowRequantize,omitempty"`
+	LeaveOutputTensor  bool     `json:"leaveOutputTensor,omitempty"`
+	Pure               bool     `json:"pure,omitempty"`
+	DryRun             bool     `json:"dryRun,omitempty"`
+	Threads            int      `json:"threads,omitempty"`
+	IncludeWeights     []string `json:"includeWeights,omitempty"`
+	ExcludeWeights     []string `json:"excludeWeights,omitempty"`
+	OutputTensorType   string   `json:"outputTensorType,omitempty"`
+	TokenEmbeddingType string   `json:"tokenEmbeddingType,omitempty"`
+	TensorTypes        []string `json:"tensorTypes,omitempty"`
+	TensorTypeFile     string   `json:"tensorTypeFile,omitempty"`
+	PruneLayers        []int    `json:"pruneLayers,omitempty"`
+	KeepSplit          bool     `json:"keepSplit,omitempty"`
+	OverrideKV         []string `json:"overrideKV,omitempty"`
 }
 
 var quantizeTypes = map[string]struct{}{
@@ -35,6 +44,30 @@ var quantizeTypes = map[string]struct{}{
 	"IQ4_NL": {}, "IQ4_XS": {}, "Q4_K": {}, "Q4_K_S": {}, "Q4_K_M": {},
 	"Q5_K": {}, "Q5_K_S": {}, "Q5_K_M": {}, "Q6_K": {}, "Q8_0": {},
 	"F16": {}, "BF16": {}, "F32": {}, "COPY": {},
+}
+
+var quantizeOverridePattern = regexp.MustCompile(`^[A-Za-z0-9_.*?+^$()\[\]{}|,:=-]{1,512}$`)
+
+func validateQuantizeOverrides(req QuantizeRequest) error {
+	if len(req.IncludeWeights) > 0 && len(req.ExcludeWeights) > 0 {
+		return fmt.Errorf("include and exclude tensor patterns cannot be used together")
+	}
+	if len(req.IncludeWeights) > 128 || len(req.ExcludeWeights) > 128 || len(req.TensorTypes) > 256 || len(req.OverrideKV) > 128 || len(req.PruneLayers) > 4096 {
+		return fmt.Errorf("too many quantization overrides")
+	}
+	values := append(append(append([]string{}, req.IncludeWeights...), req.ExcludeWeights...), req.TensorTypes...)
+	values = append(values, req.OverrideKV...)
+	for _, value := range values {
+		if !quantizeOverridePattern.MatchString(value) {
+			return fmt.Errorf("invalid quantization override %q", value)
+		}
+	}
+	for _, layer := range req.PruneLayers {
+		if layer < 0 {
+			return fmt.Errorf("prune layers must be non-negative")
+		}
+	}
+	return nil
 }
 
 // StudioModelInspection is the safe model information returned to the UI.
@@ -104,12 +137,22 @@ func (tm *TaskManager) StartQuantize(req QuantizeRequest, modelsDir string) (*Ta
 			return nil, fmt.Errorf("importance matrix: %w", err)
 		}
 	}
+	tensorTypeFilePath := ""
+	if strings.TrimSpace(req.TensorTypeFile) != "" {
+		tensorTypeFilePath, _, err = resolveStudioInput(modelsDir, req.TensorTypeFile, "")
+		if err != nil {
+			return nil, fmt.Errorf("tensor type file: %w", err)
+		}
+	}
+	if err := validateQuantizeOverrides(req); err != nil {
+		return nil, err
+	}
 
 	binary, err := exec.LookPath("llama-quantize")
 	if err != nil {
 		return nil, fmt.Errorf("llama-quantize is not installed")
 	}
-	args := quantizeArgs(req, inputPath, outputPath, imatrixPath)
+	args := quantizeArgs(req, inputPath, outputPath, imatrixPath, tensorTypeFilePath)
 	task := tm.CreateTask("studio", "", "", "")
 	task.mu.Lock()
 	task.Operation = "quantize"
@@ -137,7 +180,7 @@ func (tm *TaskManager) StartQuantize(req QuantizeRequest, modelsDir string) (*Ta
 	return task, nil
 }
 
-func quantizeArgs(req QuantizeRequest, inputPath, outputPath, imatrixPath string) []string {
+func quantizeArgs(req QuantizeRequest, inputPath, outputPath, imatrixPath, tensorTypeFilePath string) []string {
 	args := make([]string, 0, 12)
 	if req.AllowRequantize {
 		args = append(args, "--allow-requantize")
@@ -153,6 +196,37 @@ func quantizeArgs(req QuantizeRequest, inputPath, outputPath, imatrixPath string
 	}
 	if imatrixPath != "" {
 		args = append(args, "--imatrix", imatrixPath)
+	}
+	for _, pattern := range req.IncludeWeights {
+		args = append(args, "--include-weights", pattern)
+	}
+	for _, pattern := range req.ExcludeWeights {
+		args = append(args, "--exclude-weights", pattern)
+	}
+	if req.OutputTensorType != "" {
+		args = append(args, "--output-tensor-type", strings.ToLower(req.OutputTensorType))
+	}
+	if req.TokenEmbeddingType != "" {
+		args = append(args, "--token-embedding-type", strings.ToLower(req.TokenEmbeddingType))
+	}
+	for _, value := range req.TensorTypes {
+		args = append(args, "--tensor-type", value)
+	}
+	if tensorTypeFilePath != "" {
+		args = append(args, "--tensor-type-file", tensorTypeFilePath)
+	}
+	if len(req.PruneLayers) > 0 {
+		values := make([]string, len(req.PruneLayers))
+		for i, layer := range req.PruneLayers {
+			values[i] = strconv.Itoa(layer)
+		}
+		args = append(args, "--prune-layers", strings.Join(values, ","))
+	}
+	if req.KeepSplit {
+		args = append(args, "--keep-split")
+	}
+	for _, value := range req.OverrideKV {
+		args = append(args, "--override-kv", value)
 	}
 	args = append(args, inputPath)
 	if !req.DryRun {

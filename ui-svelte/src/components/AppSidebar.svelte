@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { link } from "svelte-spa-router";
-  import { FerrisWheel, Boxes, Activity, ScrollText, Gauge, Sun, Moon, Monitor, ChevronRight, Settings, PackageSearch, Cog, Server, Wrench, Workflow, Database, BarChart3, FolderKanban } from "@lucide/svelte";
+  import { FerrisWheel, Boxes, Activity, ScrollText, Gauge, Sun, Moon, Monitor, ChevronRight, Settings, PackageSearch, Cog, Server, Wrench, Workflow, Database, BarChart3, FolderKanban, SlidersHorizontal } from "@lucide/svelte";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -220,11 +220,22 @@
           </Sidebar.MenuItem>
 
           <Sidebar.MenuItem>
-            <Sidebar.MenuButton isActive={isActive("/config", $currentRoute)} tooltipContent="Configuration">
+            <Sidebar.MenuButton isActive={$currentRoute === "/config"} tooltipContent="Configuration">
               {#snippet child({ props })}
                 <a href="/config" use:link {...props}>
                   <Cog />
                   <span>Configuration</span>
+                </a>
+              {/snippet}
+            </Sidebar.MenuButton>
+          </Sidebar.MenuItem>
+
+          <Sidebar.MenuItem>
+            <Sidebar.MenuButton isActive={isActive("/config/models", $currentRoute)} tooltipContent="Model Config">
+              {#snippet child({ props })}
+                <a href="/config/models" use:link {...props}>
+                  <SlidersHorizontal />
+                  <span>Model Config</span>
                 </a>
               {/snippet}
             </Sidebar.MenuButton>

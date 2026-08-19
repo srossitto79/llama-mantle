@@ -1,4 +1,5 @@
-import type { MantleTask, HFModel, HFFile, LocalModel, BackendEntry, DatasetInspection, EvaluateRequest, ExportLoRARequest, HashRequest, MergeRequest, PruneRequest, QuantizeRequest, RegisterStudioModelRequest, SplitRequest, StudioCatalogArtifact, StudioEvaluation, StudioLineageEdge, StudioModelInspection, StudioPipelineRequest, StudioPipelineTemplate, StudioRetentionPolicy, StudioRetentionPreview, StudioSchedulerStatus, TrainQLoRARequest } from "../lib/types";
+import type { MantleTask, HFModel, HFFile, LocalModel, BackendEntry, DatasetInspection, EvaluateRequest, ExportLoRARequest, HashRequest, MergeRequest, PruneRequest, QuantizeRequest, RegisterStudioModelRequest, SplitRequest, StudioCatalogArtifact, StudioEvaluation, StudioLineageEdge, StudioModelInspection, StudioPipelineRequest, StudioPipelineTemplate, StudioRetentionPolicy, StudioRetentionPreview, StudioSchedulerStatus, StudioUtilityRequest, TrainQLoRARequest } from "../lib/types";
+import type { BackendSchema, ConfigGroupConfig, ConfigModelConfig, NamedGroupConfig, NamedModelConfig } from "../lib/types";
 import type { DatasetPreview, HFDataset, StudioDataset } from "../lib/types";
 import type { StudioPreflightReport, StudioProject, StudioResource } from "../lib/types";
 import { studioProjectHeaders } from "../stores/studioProject";
@@ -117,6 +118,70 @@ export async function putConfig(yaml: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// --- Structured config editing (guided editor) ---
+
+async function jsonOrThrow<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
+  return await res.json();
+}
+
+export async function listConfigModels(): Promise<NamedModelConfig[]> {
+  return jsonOrThrow(await fetch("/api/mantle/config/models"));
+}
+
+export async function upsertConfigModel(id: string, model: ConfigModelConfig): Promise<void> {
+  await jsonOrThrow(await fetch(`/api/mantle/config/models/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(model),
+  }));
+}
+
+export async function deleteConfigModel(id: string): Promise<void> {
+  await jsonOrThrow(await fetch(`/api/mantle/config/models/${encodeURIComponent(id)}`, { method: "DELETE" }));
+}
+
+export async function listConfigGroups(): Promise<NamedGroupConfig[]> {
+  return jsonOrThrow(await fetch("/api/mantle/config/groups"));
+}
+
+export async function upsertConfigGroup(name: string, group: ConfigGroupConfig): Promise<void> {
+  await jsonOrThrow(await fetch(`/api/mantle/config/groups/${encodeURIComponent(name)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(group),
+  }));
+}
+
+export async function deleteConfigGroup(name: string): Promise<void> {
+  await jsonOrThrow(await fetch(`/api/mantle/config/groups/${encodeURIComponent(name)}`, { method: "DELETE" }));
+}
+
+export async function getBackendSchema(name: string): Promise<BackendSchema> {
+  return jsonOrThrow(await fetch(`/api/mantle/backends/${encodeURIComponent(name)}/schema`));
+}
+
+export async function tokenizeCmd(cmd: string): Promise<string[]> {
+  const { argv } = await jsonOrThrow<{ argv: string[] }>(await fetch("/api/mantle/cmd/tokenize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cmd }),
+  }));
+  return argv;
+}
+
+export async function buildCmd(argv: string[]): Promise<string> {
+  const { cmd } = await jsonOrThrow<{ cmd: string }>(await fetch("/api/mantle/cmd/build", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ argv }),
+  }));
+  return cmd;
 }
 
 // --- Backend builds ---
@@ -316,6 +381,10 @@ export async function startEvaluate(request: EvaluateRequest): Promise<MantleTas
 	return startStudioOperation("evaluate", request);
 }
 
+export async function startStudioUtility(request: StudioUtilityRequest): Promise<MantleTask> {
+	return startStudioOperation("utility", request);
+}
+
 export async function startStudioPipeline(request: StudioPipelineRequest): Promise<MantleTask> {
 	const res = await fetch("/api/mantle/studio/pipelines", {
 		method: "POST",
@@ -425,7 +494,7 @@ export async function applyStudioRetention(policy: StudioRetentionPolicy, token:
 	return await res.json();
 }
 
-async function startStudioOperation(operation: string, request: HashRequest | SplitRequest | MergeRequest | PruneRequest | TrainQLoRARequest | ExportLoRARequest | EvaluateRequest | RegisterStudioModelRequest): Promise<MantleTask> {
+async function startStudioOperation(operation: string, request: HashRequest | SplitRequest | MergeRequest | PruneRequest | TrainQLoRARequest | ExportLoRARequest | EvaluateRequest | StudioUtilityRequest | RegisterStudioModelRequest): Promise<MantleTask> {
 	const res = await fetch(`/api/mantle/studio/${operation}`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json", ...studioProjectHeaders() },

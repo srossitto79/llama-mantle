@@ -15,17 +15,17 @@ var ProtectedParams = []string{"model"}
 type Filters struct {
 	// StripParams is a comma-separated list of parameters to remove from requests
 	// The "model" parameter can never be removed
-	StripParams string `yaml:"stripParams"`
+	StripParams string `yaml:"stripParams" json:"stripParams,omitempty"`
 
 	// SetParams is a dictionary of parameters to set/override in requests
 	// Protected params (like "model") cannot be set
-	SetParams map[string]any `yaml:"setParams"`
+	SetParams map[string]any `yaml:"setParams" json:"setParams,omitempty"`
 
 	// SetParamsByID maps requested model IDs to parameters to set/override in requests.
 	// Useful with aliases: a single loaded model can behave differently depending on
 	// which alias the client used. Applied after SetParams, so it can override those values.
 	// Protected params (like "model") cannot be set.
-	SetParamsByID map[string]map[string]any `yaml:"setParamsByID"`
+	SetParamsByID map[string]map[string]any `yaml:"setParamsByID" json:"setParamsByID,omitempty"`
 }
 
 // SanitizedStripParams returns a sorted list of parameters to strip,

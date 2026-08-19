@@ -94,6 +94,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/mantle/studio/train/qlora", h.handleStartTrainQLoRA)
 	mux.HandleFunc("POST /api/mantle/studio/export/lora", h.handleStartExportLoRA)
 	mux.HandleFunc("POST /api/mantle/studio/evaluate", h.handleStartEvaluate)
+	mux.HandleFunc("POST /api/mantle/studio/utility", h.handleStartStudioUtility)
 	mux.HandleFunc("POST /api/mantle/studio/pipelines", h.handleStartStudioPipeline)
 	mux.HandleFunc("POST /api/mantle/studio/pipelines/{id}/retry", h.handleRetryStudioPipeline)
 	mux.HandleFunc("GET /api/mantle/studio/pipeline-templates", h.handleListStudioPipelineTemplates)
@@ -121,12 +122,23 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Config management
 	mux.HandleFunc("GET /api/mantle/config", h.handleGetConfig)
 	mux.HandleFunc("PUT /api/mantle/config", h.handlePutConfig)
+	mux.HandleFunc("GET /api/mantle/config/models", h.handleListConfigModels)
+	mux.HandleFunc("PUT /api/mantle/config/models/{name}", h.handlePutConfigModel)
+	mux.HandleFunc("DELETE /api/mantle/config/models/{name}", h.handleDeleteConfigModel)
+	mux.HandleFunc("GET /api/mantle/config/groups", h.handleListConfigGroups)
+	mux.HandleFunc("PUT /api/mantle/config/groups/{name}", h.handlePutConfigGroup)
+	mux.HandleFunc("DELETE /api/mantle/config/groups/{name}", h.handleDeleteConfigGroup)
+
+	// Command string <-> argv helpers, for the guided flag editor
+	mux.HandleFunc("POST /api/mantle/cmd/tokenize", h.handleTokenizeCmd)
+	mux.HandleFunc("POST /api/mantle/cmd/build", h.handleBuildCmd)
 
 	// Backend builds
 	mux.HandleFunc("POST /api/mantle/backends/build", h.handleStartBuild)
 	mux.HandleFunc("DELETE /api/mantle/backends/build/{id}", h.handleCancelBuild)
 	mux.HandleFunc("GET /api/mantle/backends/build/{id}/stream", h.handleBuildProgress)
 	mux.HandleFunc("GET /api/mantle/backends", h.handleListBackends)
+	mux.HandleFunc("GET /api/mantle/backends/{name}/schema", h.handleGetBackendSchema)
 	mux.HandleFunc("POST /api/mantle/backends/{name}/update", h.handleUpdateBackend)
 	mux.HandleFunc("DELETE /api/mantle/backends/{name...}", h.handleDeleteBackend)
 
@@ -429,6 +441,22 @@ func (h *Handler) handleStartEvaluate(w http.ResponseWriter, r *http.Request) {
 	h.jsonStudioTaskResponse(w, r, task)
 }
 
+func (h *Handler) handleStartStudioUtility(w http.ResponseWriter, r *http.Request) {
+	var req StudioUtilityRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid utility request: "+err.Error())
+		return
+	}
+	task, err := h.tm.StartStudioUtility(req, h.modelsDir)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.jsonStudioTaskResponse(w, r, task)
+}
+
 func (h *Handler) handleStartStudioPipeline(w http.ResponseWriter, r *http.Request) {
 	var req StudioPipelineRequest
 	decoder := json.NewDecoder(r.Body)
@@ -684,19 +712,31 @@ func (h *Handler) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handlePutConfig(w http.ResponseWriter, r *http.Request) {
-	h.configMu.Lock()
-	defer h.configMu.Unlock()
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		jsonError(w, http.StatusBadRequest, "failed to read body")
 		return
 	}
+	if err := h.applyConfigBytes(body); err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]string{"msg": "config updated and reloaded"})
+}
+
+// applyConfigBytes validates a full config YAML document, writes it to disk,
+// and hot-reloads the running config. Shared by the raw config PUT and the
+// structured models/groups editing routes below, which produce their new
+// full-document bytes via targeted yaml.Node surgery (see config_edit.go)
+// rather than a client-supplied full document.
+func (h *Handler) applyConfigBytes(body []byte) error {
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
 
 	// Validate by attempting to parse
 	newCfg, err := config.LoadConfigFromReader(bytes.NewReader(body))
 	if err != nil {
-		jsonError(w, http.StatusBadRequest, fmt.Sprintf("invalid config: %v", err))
-		return
+		return fmt.Errorf("invalid config: %w", err)
 	}
 
 	// Preserve runtime paths
@@ -707,16 +747,151 @@ func (h *Handler) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Write to config file
 	if err := os.WriteFile(h.configPath, body, 0644); err != nil {
-		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("failed to write config: %v", err))
-		return
+		return fmt.Errorf("failed to write config: %w", err)
 	}
 
 	// Emit config changed event so the server hot-reloads
 	event.Emit(shared.ConfigFileChangedEvent{State: shared.ReloadingStateStart})
 	*h.cfg = newCfg
 	event.Emit(shared.ConfigFileChangedEvent{State: shared.ReloadingStateEnd})
+	return nil
+}
 
-	jsonResponse(w, http.StatusOK, map[string]string{"msg": "config updated and reloaded"})
+func (h *Handler) handleListConfigModels(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, ListModels(h.cfg))
+}
+
+func (h *Handler) handlePutConfigModel(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		jsonError(w, http.StatusBadRequest, "model name is required")
+		return
+	}
+	var model config.ModelConfig
+	if err := json.NewDecoder(r.Body).Decode(&model); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	raw, err := os.ReadFile(h.configPath)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read config: %v", err))
+		return
+	}
+	newRaw, err := UpsertModelYAML(raw, name, model)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.applyConfigBytes(newRaw); err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]string{"msg": "model saved"})
+}
+
+func (h *Handler) handleDeleteConfigModel(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		jsonError(w, http.StatusBadRequest, "model name is required")
+		return
+	}
+	raw, err := os.ReadFile(h.configPath)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read config: %v", err))
+		return
+	}
+	newRaw, err := DeleteModelYAML(raw, name)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.applyConfigBytes(newRaw); err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]string{"msg": "model deleted"})
+}
+
+func (h *Handler) handleListConfigGroups(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, ListGroups(h.cfg))
+}
+
+func (h *Handler) handlePutConfigGroup(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		jsonError(w, http.StatusBadRequest, "group name is required")
+		return
+	}
+	var group config.GroupConfig
+	if err := json.NewDecoder(r.Body).Decode(&group); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	raw, err := os.ReadFile(h.configPath)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read config: %v", err))
+		return
+	}
+	newRaw, err := UpsertGroupYAML(raw, name, group)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.applyConfigBytes(newRaw); err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]string{"msg": "group saved"})
+}
+
+func (h *Handler) handleDeleteConfigGroup(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		jsonError(w, http.StatusBadRequest, "group name is required")
+		return
+	}
+	raw, err := os.ReadFile(h.configPath)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read config: %v", err))
+		return
+	}
+	newRaw, err := DeleteGroupYAML(raw, name)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.applyConfigBytes(newRaw); err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]string{"msg": "group deleted"})
+}
+
+func (h *Handler) handleTokenizeCmd(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Cmd string `json:"cmd"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	argv, err := config.SanitizeCommand(req.Cmd)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]any{"argv": argv})
+}
+
+func (h *Handler) handleBuildCmd(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Argv []string `json:"argv"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]any{"cmd": config.BuildCommandString(req.Argv)})
 }
 
 func (h *Handler) handleRegisterStudioModel(w http.ResponseWriter, r *http.Request) {
@@ -956,6 +1131,20 @@ func (h *Handler) handleListBackends(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, http.StatusOK, backends)
+}
+
+func (h *Handler) handleGetBackendSchema(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !isSafeBackendName(name) {
+		jsonError(w, http.StatusBadRequest, "invalid backend name")
+		return
+	}
+	schema, err := LoadOrBuildBackendSchema(h.backendsDir, name)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, schema)
 }
 
 func (h *Handler) handleDeleteBackend(w http.ResponseWriter, r *http.Request) {

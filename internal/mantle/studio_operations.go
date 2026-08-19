@@ -17,9 +17,11 @@ type HashRequest struct {
 	Algorithm string `json:"algorithm"`
 	NoLayer   bool   `json:"noLayer,omitempty"`
 	UUID      bool   `json:"uuid,omitempty"`
+	Manifest  string `json:"manifest,omitempty"`
 }
 
 type SplitRequest struct {
+	Mode               string `json:"mode,omitempty"`
 	Input              string `json:"input"`
 	Output             string `json:"output"`
 	MaxTensors         int    `json:"maxTensors,omitempty"`
@@ -43,9 +45,25 @@ type MergeRequest struct {
 	GPULayers    int      `json:"gpuLayers,omitempty"`
 	Device       string   `json:"device,omitempty"`
 	MergeGPU     bool     `json:"mergeGpu,omitempty"`
+	EliteCount   int      `json:"eliteCount,omitempty"`
+	Sigma0       float64  `json:"sigma0,omitempty"`
+	Seed         int      `json:"seed,omitempty"`
+	ContextSize  int      `json:"contextSize,omitempty"`
+}
+
+// StudioRuntimeOptions is the shared subset consumed consistently by training,
+// pruning, evaluation, and utility tools. Tool-specific expert controls remain on
+// their request until the underlying executable actually consumes them.
+type StudioRuntimeOptions struct {
+	ContextSize int `json:"contextSize,omitempty"`
+	BatchSize   int `json:"batchSize,omitempty"`
+	UBatchSize  int `json:"ubatchSize,omitempty"`
+	Threads     int `json:"threads,omitempty"`
+	GPULayers   int `json:"gpuLayers,omitempty"`
 }
 
 type PruneRequest struct {
+	StudioRuntimeOptions
 	Phase              string    `json:"phase"`
 	Model              string    `json:"model,omitempty"`
 	Dataset            string    `json:"dataset,omitempty"`
@@ -61,68 +79,75 @@ type PruneRequest struct {
 	MaxLayerRatio      float64   `json:"maxLayerRatio,omitempty"`
 	Evaluate           *bool     `json:"evaluate,omitempty"`
 	Seed               int       `json:"seed,omitempty"`
-	ContextSize        int       `json:"contextSize,omitempty"`
-	BatchSize          int       `json:"batchSize,omitempty"`
-	UBatchSize         int       `json:"ubatchSize,omitempty"`
-	Threads            int       `json:"threads,omitempty"`
 	DatasetThreads     int       `json:"datasetThreads,omitempty"`
-	GPULayers          int       `json:"gpuLayers,omitempty"`
 }
 
 type TrainQLoRARequest struct {
-	Model             string  `json:"model"`
-	Dataset           string  `json:"dataset"`
-	Output            string  `json:"output"`
-	Resume            string  `json:"resume,omitempty"`
-	Epochs            int     `json:"epochs,omitempty"`
-	LearningRate      float64 `json:"learningRate,omitempty"`
-	LearningRateMin   float64 `json:"learningRateMin,omitempty"`
-	DecayEpochs       float64 `json:"decayEpochs,omitempty"`
-	WeightDecay       float64 `json:"weightDecay,omitempty"`
-	ValidationSplit   float64 `json:"validationSplit,omitempty"`
-	Rank              int     `json:"rank,omitempty"`
-	Alpha             float64 `json:"alpha,omitempty"`
-	Targets           string  `json:"targets,omitempty"`
-	Optimizer         string  `json:"optimizer,omitempty"`
-	SaveEvery         int     `json:"saveEvery,omitempty"`
-	FreezeLayers      int     `json:"freezeLayers,omitempty"`
-	GradCheckpoint    int     `json:"gradCheckpoint,omitempty"`
-	LoRAQAT           string  `json:"loraQat,omitempty"`
-	Scheduler         string  `json:"scheduler,omitempty"`
-	WarmupSteps       int     `json:"warmupSteps,omitempty"`
-	WarmupInitRatio   float64 `json:"warmupInitRatio,omitempty"`
-	OptimizerRestart  int     `json:"optimizerRestartEvery,omitempty"`
-	VerboseLoss       bool    `json:"verboseLoss,omitempty"`
-	TrainOnPrompt     bool    `json:"trainOnPrompt,omitempty"`
-	ShuffleDataset    bool    `json:"shuffleDataset,omitempty"`
-	CriticalTokenMode string  `json:"criticalTokenMode,omitempty"`
-	CriticalWeight    float64 `json:"criticalTokenWeight,omitempty"`
-	CriticalThreshold float64 `json:"criticalConfidenceThreshold,omitempty"`
-	CriticalShape     string  `json:"criticalWeightShape,omitempty"`
-	CriticalWarmup    int     `json:"criticalWarmupSteps,omitempty"`
-	CriticalMaxFrac   float64 `json:"criticalMaxFraction,omitempty"`
-	CriticalStats     int     `json:"criticalStatsEvery,omitempty"`
-	GRPOMode          bool    `json:"grpoMode,omitempty"`
-	NGen              int     `json:"nGen,omitempty"`
-	NSteps            int     `json:"nSteps,omitempty"`
-	GRPOTemperature   float64 `json:"grpoTemperature,omitempty"`
-	GRPOMaxTokens     int     `json:"grpoMaxTokens,omitempty"`
-	ContextSize       int     `json:"contextSize,omitempty"`
-	BatchSize         int     `json:"batchSize,omitempty"`
-	UBatchSize        int     `json:"ubatchSize,omitempty"`
-	Threads           int     `json:"threads,omitempty"`
-	DatasetThreads    int     `json:"datasetThreads,omitempty"`
-	GPULayers         int     `json:"gpuLayers,omitempty"`
+	StudioRuntimeOptions
+	Model                string  `json:"model"`
+	Dataset              string  `json:"dataset"`
+	Output               string  `json:"output"`
+	Resume               string  `json:"resume,omitempty"`
+	Epochs               int     `json:"epochs,omitempty"`
+	LearningRate         float64 `json:"learningRate,omitempty"`
+	LearningRateMin      float64 `json:"learningRateMin,omitempty"`
+	DecayEpochs          float64 `json:"decayEpochs,omitempty"`
+	WeightDecay          float64 `json:"weightDecay,omitempty"`
+	ValidationSplit      float64 `json:"validationSplit,omitempty"`
+	Rank                 int     `json:"rank,omitempty"`
+	Alpha                float64 `json:"alpha,omitempty"`
+	Targets              string  `json:"targets,omitempty"`
+	Optimizer            string  `json:"optimizer,omitempty"`
+	SaveEvery            int     `json:"saveEvery,omitempty"`
+	FreezeLayers         int     `json:"freezeLayers,omitempty"`
+	GradCheckpoint       int     `json:"gradCheckpoint,omitempty"`
+	LoRAQAT              string  `json:"loraQat,omitempty"`
+	Scheduler            string  `json:"scheduler,omitempty"`
+	WarmupSteps          int     `json:"warmupSteps,omitempty"`
+	WarmupInitRatio      float64 `json:"warmupInitRatio,omitempty"`
+	OptimizerRestart     int     `json:"optimizerRestartEvery,omitempty"`
+	VerboseLoss          bool    `json:"verboseLoss,omitempty"`
+	TrainOnPrompt        bool    `json:"trainOnPrompt,omitempty"`
+	ShuffleDataset       bool    `json:"shuffleDataset,omitempty"`
+	CriticalTokenMode    string  `json:"criticalTokenMode,omitempty"`
+	CriticalWeight       float64 `json:"criticalTokenWeight,omitempty"`
+	CriticalThreshold    float64 `json:"criticalConfidenceThreshold,omitempty"`
+	CriticalShape        string  `json:"criticalWeightShape,omitempty"`
+	CriticalWarmup       int     `json:"criticalWarmupSteps,omitempty"`
+	CriticalMaxFrac      float64 `json:"criticalMaxFraction,omitempty"`
+	CriticalStats        int     `json:"criticalStatsEvery,omitempty"`
+	GRPOMode             bool    `json:"grpoMode,omitempty"`
+	NGen                 int     `json:"nGen,omitempty"`
+	NSteps               int     `json:"nSteps,omitempty"`
+	GRPOTemperature      float64 `json:"grpoTemperature,omitempty"`
+	GRPOMaxTokens        int     `json:"grpoMaxTokens,omitempty"`
+	GRPOPromptField      string  `json:"grpoPromptField,omitempty"`
+	GRPOReferenceField   string  `json:"grpoReferenceField,omitempty"`
+	GRPORewardProvider   string  `json:"grpoRewardProvider,omitempty"`
+	GRPOBuiltinReward    string  `json:"grpoBuiltinReward,omitempty"`
+	GRPORewardScript     string  `json:"grpoRewardScript,omitempty"`
+	GRPORewardURL        string  `json:"grpoRewardUrl,omitempty"`
+	GRPORewardTimeout    int     `json:"grpoRewardTimeout,omitempty"`
+	GRPOCaseSensitive    bool    `json:"grpoCaseSensitive,omitempty"`
+	GRPONumericTolerance float64 `json:"grpoNumericTolerance,omitempty"`
+	DatasetThreads       int     `json:"datasetThreads,omitempty"`
 }
 
 type ExportLoRARequest struct {
-	Base       string   `json:"base"`
-	Adapters   []string `json:"adapters"`
-	Output     string   `json:"output"`
-	TensorType string   `json:"tensorType,omitempty"`
+	Base           string              `json:"base"`
+	Adapters       []string            `json:"adapters"`
+	Output         string              `json:"output"`
+	TensorType     string              `json:"tensorType,omitempty"`
+	ScaledAdapters []ScaledLoRAAdapter `json:"scaledAdapters,omitempty"`
+}
+
+type ScaledLoRAAdapter struct {
+	Path  string  `json:"path"`
+	Scale float64 `json:"scale"`
 }
 
 type EvaluateRequest struct {
+	StudioRuntimeOptions
 	Mode                 string  `json:"mode"`
 	Model                string  `json:"model"`
 	Dataset              string  `json:"dataset,omitempty"`
@@ -130,13 +155,33 @@ type EvaluateRequest struct {
 	GenTokens            int     `json:"genTokens,omitempty"`
 	Repetitions          int     `json:"repetitions,omitempty"`
 	Chunks               int     `json:"chunks,omitempty"`
-	ContextSize          int     `json:"contextSize,omitempty"`
-	BatchSize            int     `json:"batchSize,omitempty"`
-	UBatchSize           int     `json:"ubatchSize,omitempty"`
-	Threads              int     `json:"threads,omitempty"`
-	GPULayers            int     `json:"gpuLayers,omitempty"`
 	BaselineJobID        string  `json:"baselineJobID,omitempty"`
 	MaxRegressionPercent float64 `json:"maxRegressionPercent,omitempty"`
+	NoWarmup             bool    `json:"noWarmup,omitempty"`
+	Priority             int     `json:"priority,omitempty"`
+	Delay                int     `json:"delay,omitempty"`
+	Depth                int     `json:"depth,omitempty"`
+	Embeddings           bool    `json:"embeddings,omitempty"`
+	CacheTypeK           string  `json:"cacheTypeK,omitempty"`
+	CacheTypeV           string  `json:"cacheTypeV,omitempty"`
+	FlashAttention       string  `json:"flashAttention,omitempty"`
+	Device               string  `json:"device,omitempty"`
+	LoadMode             string  `json:"loadMode,omitempty"`
+	SplitMode            string  `json:"splitMode,omitempty"`
+	TensorSplit          string  `json:"tensorSplit,omitempty"`
+	MainGPU              int     `json:"mainGpu,omitempty"`
+	NoKVOffload          bool    `json:"noKvOffload,omitempty"`
+	NoOpOffload          bool    `json:"noOpOffload,omitempty"`
+	NoHost               bool    `json:"noHost,omitempty"`
+	FitTarget            int     `json:"fitTarget,omitempty"`
+	FitContext           int     `json:"fitContext,omitempty"`
+	NUMA                 string  `json:"numa,omitempty"`
+	PPLTask              string  `json:"pplTask,omitempty"`
+	TaskCount            int     `json:"taskCount,omitempty"`
+	PPLStride            int     `json:"pplStride,omitempty"`
+	PPLOutputType        int     `json:"pplOutputType,omitempty"`
+	KLBase               string  `json:"klBase,omitempty"`
+	SaveAllLogits        bool    `json:"saveAllLogits,omitempty"`
 }
 
 var splitSizePattern = regexp.MustCompile(`^[1-9][0-9]*(M|G)$`)
@@ -166,6 +211,13 @@ func (tm *TaskManager) StartHash(req HashRequest, modelsDir string) (*Task, erro
 		return nil, fmt.Errorf("llama-gguf-hash is not installed")
 	}
 	args := []string{"--" + algorithm}
+	if req.Manifest != "" {
+		manifestPath, _, manifestErr := resolveStudioInput(modelsDir, req.Manifest, "")
+		if manifestErr != nil {
+			return nil, fmt.Errorf("hash manifest: %w", manifestErr)
+		}
+		args = append(args, "--check", manifestPath)
+	}
 	if req.NoLayer {
 		args = append(args, "--no-layer")
 	}
@@ -183,6 +235,13 @@ func (tm *TaskManager) StartHash(req HashRequest, modelsDir string) (*Task, erro
 }
 
 func (tm *TaskManager) StartSplit(req SplitRequest, modelsDir string) (*Task, error) {
+	req.Mode = strings.ToLower(strings.TrimSpace(req.Mode))
+	if req.Mode == "" {
+		req.Mode = "split"
+	}
+	if req.Mode != "split" && req.Mode != "merge" {
+		return nil, fmt.Errorf("GGUF shard mode must be split or merge")
+	}
 	inputPath, inputName, err := resolveStudioInput(modelsDir, req.Input, ".gguf")
 	if err != nil {
 		return nil, err
@@ -194,6 +253,9 @@ func (tm *TaskManager) StartSplit(req SplitRequest, modelsDir string) (*Task, er
 	if samePath(inputPath, outputPath) {
 		return nil, fmt.Errorf("output must differ from input")
 	}
+	if req.Mode == "merge" && req.DryRun {
+		return nil, fmt.Errorf("dry run is only supported for splitting")
+	}
 	if req.MaxTensors < 0 {
 		return nil, fmt.Errorf("max tensors must be positive")
 	}
@@ -201,8 +263,10 @@ func (tm *TaskManager) StartSplit(req SplitRequest, modelsDir string) (*Task, er
 	if req.MaxSize != "" && !splitSizePattern.MatchString(req.MaxSize) {
 		return nil, fmt.Errorf("max size must use a whole number followed by M or G")
 	}
-	if matches, _ := filepath.Glob(splitOutputGlob(outputPath)); len(matches) > 0 {
-		return nil, fmt.Errorf("one or more output shards already exist")
+	if req.Mode == "split" {
+		if matches, _ := filepath.Glob(splitOutputGlob(outputPath)); len(matches) > 0 {
+			return nil, fmt.Errorf("one or more output shards already exist")
+		}
 	}
 	if err := ensureStudioDiskSpace(outputPath, estimateStudioOutput(inputPath, 1.05, 64*1024*1024)); err != nil {
 		return nil, err
@@ -211,14 +275,14 @@ func (tm *TaskManager) StartSplit(req SplitRequest, modelsDir string) (*Task, er
 	if err != nil {
 		return nil, fmt.Errorf("llama-gguf-split is not installed")
 	}
-	args := []string{"--split"}
-	if req.MaxTensors > 0 {
+	args := []string{"--" + req.Mode}
+	if req.Mode == "split" && req.MaxTensors > 0 {
 		args = append(args, "--split-max-tensors", strconv.Itoa(req.MaxTensors))
 	}
-	if req.MaxSize != "" {
+	if req.Mode == "split" && req.MaxSize != "" {
 		args = append(args, "--split-max-size", req.MaxSize)
 	}
-	if req.NoTensorFirstSplit {
+	if req.Mode == "split" && req.NoTensorFirstSplit {
 		args = append(args, "--no-tensor-first-split")
 	}
 	if req.DryRun {
@@ -226,12 +290,19 @@ func (tm *TaskManager) StartSplit(req SplitRequest, modelsDir string) (*Task, er
 	}
 	args = append(args, inputPath, outputPath)
 	task := tm.newStudioTask("split", inputName, outputName, map[string]any{
-		"maxTensors": req.MaxTensors, "maxSize": req.MaxSize,
+		"mode": req.Mode, "maxTensors": req.MaxTensors, "maxSize": req.MaxSize,
 		"noTensorFirstSplit": req.NoTensorFirstSplit, "dryRun": req.DryRun,
 	})
 	collect := func() []Artifact {
 		if req.DryRun {
 			return nil
+		}
+		if req.Mode == "merge" {
+			info, statErr := os.Stat(outputPath)
+			if statErr != nil {
+				return nil
+			}
+			return []Artifact{{Name: outputName, Path: outputName, Size: info.Size(), Kind: "gguf"}}
 		}
 		matches, _ := filepath.Glob(splitOutputGlob(outputPath))
 		artifacts := make([]Artifact, 0, len(matches))
@@ -252,7 +323,7 @@ func (tm *TaskManager) StartSplit(req SplitRequest, modelsDir string) (*Task, er
 		}
 		staged := studioStagingPath(outputPath, task.ID)
 		defer removeStudioFileSet(staged)
-		tm.runStudioCommand(task, binary, replaceStudioArg(args, outputPath, staged), "Splitting model...", "Split complete", collect,
+		tm.runStudioCommand(task, binary, replaceStudioArg(args, outputPath, staged), map[bool]string{true: "Merging shards...", false: "Splitting model..."}[req.Mode == "merge"], map[bool]string{true: "Shard merge complete", false: "Split complete"}[req.Mode == "merge"], collect,
 			func() error { return publishStudioFileSet(staged, outputPath) })
 	}); err != nil {
 		task.UpdateProgress(TaskFailed, err.Error(), 0)
@@ -302,7 +373,7 @@ func (tm *TaskManager) StartMerge(req MergeRequest, modelsDir string) (*Task, er
 	if req.Density <= 0 || req.Density > 1 {
 		return nil, fmt.Errorf("density must be greater than 0 and at most 1")
 	}
-	if req.Threads < 0 || req.Population < 0 || req.Generations < 0 || req.GPULayers < -1 {
+	if req.Threads < 0 || req.Population < 0 || req.Generations < 0 || req.EliteCount < 0 || req.Sigma0 < 0 || req.ContextSize < 0 || req.GPULayers < -1 {
 		return nil, fmt.Errorf("numeric merge options are outside their supported range")
 	}
 	req.MemoryBudget = strings.ToUpper(strings.TrimSpace(req.MemoryBudget))
@@ -351,6 +422,18 @@ func (tm *TaskManager) StartMerge(req MergeRequest, modelsDir string) (*Task, er
 	}
 	if req.Generations > 0 {
 		args = append(args, "--generations", strconv.Itoa(req.Generations))
+	}
+	if req.EliteCount > 0 {
+		args = append(args, "--elite-count", strconv.Itoa(req.EliteCount))
+	}
+	if req.Sigma0 > 0 {
+		args = append(args, "--sigma0", strconv.FormatFloat(req.Sigma0, 'g', -1, 64))
+	}
+	if req.Seed != 0 {
+		args = append(args, "--seed", strconv.Itoa(req.Seed))
+	}
+	if req.ContextSize > 0 {
+		args = append(args, "--ctx-size", strconv.Itoa(req.ContextSize))
 	}
 	if req.GPULayers != 0 {
 		args = append(args, "--gpu-layers", strconv.Itoa(req.GPULayers))
@@ -552,6 +635,10 @@ func (tm *TaskManager) StartPrune(req PruneRequest, modelsDir string) (*Task, er
 }
 
 func (tm *TaskManager) StartTrainQLoRA(req TrainQLoRARequest, modelsDir string) (*Task, error) {
+	req.GRPORewardProvider = strings.ToLower(strings.TrimSpace(req.GRPORewardProvider))
+	req.GRPOBuiltinReward = strings.ToLower(strings.TrimSpace(req.GRPOBuiltinReward))
+	req.GRPOPromptField = strings.TrimSpace(req.GRPOPromptField)
+	req.GRPOReferenceField = strings.TrimSpace(req.GRPOReferenceField)
 	modelPath, modelName, err := resolveStudioInput(modelsDir, req.Model, ".gguf")
 	if err != nil {
 		return nil, fmt.Errorf("model: %w", err)
@@ -622,11 +709,19 @@ func (tm *TaskManager) StartTrainQLoRA(req TrainQLoRARequest, modelsDir string) 
 	if req.WarmupInitRatio < 0 || req.WarmupInitRatio > 1 || req.CriticalThreshold < 0 || req.CriticalThreshold > 1 || req.CriticalMaxFrac < 0 || req.CriticalMaxFrac > 1 {
 		return nil, fmt.Errorf("warmup and critical-token ratios must be between 0 and 1")
 	}
+	if req.GRPOMode {
+		if err := validateStudioGRPORequest(req, modelsDir); err != nil {
+			return nil, err
+		}
+	}
 	binary, err := exec.LookPath("llama-finetune-qlora")
 	if err != nil {
 		return nil, fmt.Errorf("llama-finetune-qlora is not installed")
 	}
-	args := []string{"--model", modelPath, "--train-file", datasetPath}
+	args := []string{"--model", modelPath}
+	if !req.GRPOMode {
+		args = append(args, "--train-file", datasetPath)
+	}
 	if resumePath != "" {
 		args = append(args, "--resume", resumePath)
 	}
@@ -640,12 +735,16 @@ func (tm *TaskManager) StartTrainQLoRA(req TrainQLoRARequest, modelsDir string) 
 			args = append(args, flag, strconv.FormatFloat(value, 'g', -1, 64))
 		}
 	}
-	appendIntArg("--epochs", req.Epochs)
+	if !req.GRPOMode {
+		appendIntArg("--epochs", req.Epochs)
+	}
 	appendFloatArg("--learning-rate", req.LearningRate)
 	appendFloatArg("--learning-rate-min", req.LearningRateMin)
 	appendFloatArg("--learning-rate-decay-epochs", req.DecayEpochs)
 	appendFloatArg("--weight-decay", req.WeightDecay)
-	appendFloatArg("--val-split", req.ValidationSplit)
+	if !req.GRPOMode {
+		appendFloatArg("--val-split", req.ValidationSplit)
+	}
 	appendIntArg("--lora-rank", req.Rank)
 	appendFloatArg("--lora-alpha", req.Alpha)
 	if req.Targets != "" {
@@ -669,23 +768,25 @@ func (tm *TaskManager) StartTrainQLoRA(req TrainQLoRARequest, modelsDir string) 
 	if req.VerboseLoss {
 		args = append(args, "--verbose-loss")
 	}
-	if req.TrainOnPrompt {
-		args = append(args, "--train-on-prompt")
+	if !req.GRPOMode {
+		if req.TrainOnPrompt {
+			args = append(args, "--train-on-prompt")
+		}
+		if req.ShuffleDataset {
+			args = append(args, "--shuffle-dataset")
+		}
+		if req.CriticalTokenMode != "" {
+			args = append(args, "--critical-token-mode", req.CriticalTokenMode)
+		}
+		appendFloatArg("--critical-token-weight", req.CriticalWeight)
+		appendFloatArg("--critical-confidence-threshold", req.CriticalThreshold)
+		if req.CriticalShape != "" {
+			args = append(args, "--critical-weight-shape", req.CriticalShape)
+		}
+		appendIntArg("--critical-warmup-steps", req.CriticalWarmup)
+		appendFloatArg("--critical-max-fraction", req.CriticalMaxFrac)
+		appendIntArg("--critical-stats-every", req.CriticalStats)
 	}
-	if req.ShuffleDataset {
-		args = append(args, "--shuffle-dataset")
-	}
-	if req.CriticalTokenMode != "" {
-		args = append(args, "--critical-token-mode", req.CriticalTokenMode)
-	}
-	appendFloatArg("--critical-token-weight", req.CriticalWeight)
-	appendFloatArg("--critical-confidence-threshold", req.CriticalThreshold)
-	if req.CriticalShape != "" {
-		args = append(args, "--critical-weight-shape", req.CriticalShape)
-	}
-	appendIntArg("--critical-warmup-steps", req.CriticalWarmup)
-	appendFloatArg("--critical-max-fraction", req.CriticalMaxFrac)
-	appendIntArg("--critical-stats-every", req.CriticalStats)
 	if req.GRPOMode {
 		args = append(args, "--grpo-mode")
 	}
@@ -704,7 +805,9 @@ func (tm *TaskManager) StartTrainQLoRA(req TrainQLoRARequest, modelsDir string) 
 	args = append(args, "--lora-out", outputPath)
 	task := tm.newStudioTask("train-qlora", modelName, outputName, map[string]any{
 		"dataset": datasetName, "epochs": req.Epochs, "rank": req.Rank, "optimizer": req.Optimizer,
-		"loraQat": req.LoRAQAT, "resume": req.Resume,
+		"loraQat": req.LoRAQAT, "resume": req.Resume, "grpoMode": req.GRPOMode,
+		"grpoRewardProvider": req.GRPORewardProvider, "grpoBuiltinReward": req.GRPOBuiltinReward,
+		"grpoPromptField": req.GRPOPromptField, "grpoReferenceField": req.GRPOReferenceField,
 	})
 	collect := func() []Artifact {
 		matches, _ := filepath.Glob(splitOutputGlob(outputPath))
@@ -724,9 +827,24 @@ func (tm *TaskManager) StartTrainQLoRA(req TrainQLoRARequest, modelsDir string) 
 		}
 		return artifacts
 	}
-	if err := tm.enqueueStudioTaskWithOutputs(task, StudioJobHeavy, []string{outputPath}, func() {
+	reservedOutputs := []string{outputPath}
+	rolloutPath := ""
+	if req.GRPOMode {
+		rolloutPath, _, err = resolveStudioOutput(modelsDir, req.Output+".rollouts.jsonl", "")
+		if err != nil {
+			return nil, fmt.Errorf("GRPO rollout artifact: %w", err)
+		}
+		reservedOutputs = append(reservedOutputs, rolloutPath)
+	}
+	if err := tm.enqueueStudioTaskWithOutputs(task, StudioJobHeavy, reservedOutputs, func() {
 		staged := studioStagingPath(outputPath, task.ID)
 		defer removeStudioFileSet(staged)
+		if req.GRPOMode {
+			stagedRollouts := studioStagingPath(rolloutPath, task.ID)
+			defer os.Remove(stagedRollouts)
+			tm.runStudioGRPO(task, binary, replaceStudioArg(args, outputPath, staged), req, datasetPath, modelsDir, staged, outputPath, outputName, stagedRollouts, rolloutPath)
+			return
+		}
 		tm.runStudioCommand(task, binary, replaceStudioArg(args, outputPath, staged), "Training QLoRA adapter...", "QLoRA training complete", collect,
 			func() error { return publishStudioFileSet(staged, outputPath) })
 	}); err != nil {
@@ -761,7 +879,7 @@ func (tm *TaskManager) StartExportLoRA(req ExportLoRARequest, modelsDir string) 
 	if err != nil {
 		return nil, fmt.Errorf("base model: %w", err)
 	}
-	if len(req.Adapters) == 0 {
+	if len(req.Adapters) == 0 && len(req.ScaledAdapters) == 0 {
 		return nil, fmt.Errorf("at least one LoRA adapter is required")
 	}
 	adapterPaths := make([]string, 0, len(req.Adapters))
@@ -772,6 +890,18 @@ func (tm *TaskManager) StartExportLoRA(req ExportLoRARequest, modelsDir string) 
 			return nil, fmt.Errorf("LoRA adapter: %w", inputErr)
 		}
 		adapterPaths = append(adapterPaths, path)
+		adapterNames = append(adapterNames, clean)
+	}
+	scaledArgs := make([]string, 0, len(req.ScaledAdapters))
+	for _, adapter := range req.ScaledAdapters {
+		path, clean, inputErr := resolveStudioInput(modelsDir, adapter.Path, ".gguf")
+		if inputErr != nil {
+			return nil, fmt.Errorf("scaled LoRA adapter: %w", inputErr)
+		}
+		if adapter.Scale <= 0 || adapter.Scale > 100 {
+			return nil, fmt.Errorf("scaled LoRA adapter scale must be greater than 0 and at most 100")
+		}
+		scaledArgs = append(scaledArgs, path+":"+strconv.FormatFloat(adapter.Scale, 'g', -1, 64))
 		adapterNames = append(adapterNames, clean)
 	}
 	outputPath, outputName, err := resolveStudioOutput(modelsDir, req.Output, ".gguf")
@@ -791,7 +921,13 @@ func (tm *TaskManager) StartExportLoRA(req ExportLoRARequest, modelsDir string) 
 	if err != nil {
 		return nil, fmt.Errorf("llama-export-lora is not installed")
 	}
-	args := []string{"--model", basePath, "--lora", strings.Join(adapterPaths, ",")}
+	args := []string{"--model", basePath}
+	if len(adapterPaths) > 0 {
+		args = append(args, "--lora", strings.Join(adapterPaths, ","))
+	}
+	if len(scaledArgs) > 0 {
+		args = append(args, "--lora-scaled", strings.Join(scaledArgs, ","))
+	}
 	if req.TensorType != "" {
 		args = append(args, "--type", strings.ToLower(req.TensorType))
 	}
@@ -828,61 +964,30 @@ func (tm *TaskManager) StartEvaluate(req EvaluateRequest, modelsDir string) (*Ta
 		return nil, fmt.Errorf("evaluation mode must be benchmark or perplexity")
 	}
 	if req.PromptTokens < 0 || req.GenTokens < 0 || req.Repetitions < 0 || req.Chunks < 0 || req.MaxRegressionPercent < 0 ||
-		req.ContextSize < 0 || req.BatchSize < 0 || req.UBatchSize < 0 || req.Threads < 0 || req.GPULayers < -1 {
+		req.ContextSize < 0 || req.BatchSize < 0 || req.UBatchSize < 0 || req.Threads < 0 || req.GPULayers < -1 || req.Delay < 0 || req.Depth < 0 || req.FitTarget < 0 || req.FitContext < 0 || req.TaskCount < 0 || req.PPLStride < 0 {
 		return nil, fmt.Errorf("numeric evaluation options are outside their supported range")
 	}
-	binaryName := "llama-bench"
-	args := []string{"--model", modelPath}
 	datasetName := ""
-	if req.Mode == "benchmark" {
-		if req.PromptTokens > 0 {
-			args = append(args, "--n-prompt", strconv.Itoa(req.PromptTokens))
-		}
-		if req.GenTokens > 0 {
-			args = append(args, "--n-gen", strconv.Itoa(req.GenTokens))
-		}
-		if req.Repetitions > 0 {
-			args = append(args, "--repetitions", strconv.Itoa(req.Repetitions))
-		}
-		if req.BatchSize > 0 {
-			args = append(args, "--batch-size", strconv.Itoa(req.BatchSize))
-		}
-		if req.UBatchSize > 0 {
-			args = append(args, "--ubatch-size", strconv.Itoa(req.UBatchSize))
-		}
-		if req.Threads > 0 {
-			args = append(args, "--threads", strconv.Itoa(req.Threads))
-		}
-		if req.GPULayers != 0 {
-			args = append(args, "--n-gpu-layers", strconv.Itoa(req.GPULayers))
-		}
-		args = append(args, "--output", "json", "--progress")
-	} else {
-		binaryName = "llama-perplexity"
-		datasetPath, clean, inputErr := resolveStudioInput(modelsDir, req.Dataset, "")
+	datasetPath := ""
+	klBasePath := ""
+	if req.Mode == "perplexity" {
+		var clean string
+		var inputErr error
+		datasetPath, clean, inputErr = resolveStudioInput(modelsDir, req.Dataset, "")
 		if inputErr != nil {
 			return nil, fmt.Errorf("evaluation dataset: %w", inputErr)
 		}
 		datasetName = clean
-		args = append(args, "--file", datasetPath)
-		if req.Chunks > 0 {
-			args = append(args, "--chunks", strconv.Itoa(req.Chunks))
+		if req.KLBase != "" {
+			klBasePath, _, inputErr = resolveStudioInput(modelsDir, req.KLBase, "")
+			if inputErr != nil {
+				return nil, fmt.Errorf("KL-divergence base: %w", inputErr)
+			}
 		}
-		if req.ContextSize > 0 {
-			args = append(args, "--ctx-size", strconv.Itoa(req.ContextSize))
-		}
-		if req.BatchSize > 0 {
-			args = append(args, "--batch-size", strconv.Itoa(req.BatchSize))
-		}
-		if req.UBatchSize > 0 {
-			args = append(args, "--ubatch-size", strconv.Itoa(req.UBatchSize))
-		}
-		if req.Threads > 0 {
-			args = append(args, "--threads", strconv.Itoa(req.Threads))
-		}
-		if req.GPULayers != 0 {
-			args = append(args, "--n-gpu-layers", strconv.Itoa(req.GPULayers))
-		}
+	}
+	binaryName, args, err := evaluationArgs(req, modelPath, datasetPath, klBasePath)
+	if err != nil {
+		return nil, err
 	}
 	binary, err := exec.LookPath(binaryName)
 	if err != nil {
@@ -892,12 +997,132 @@ func (tm *TaskManager) StartEvaluate(req EvaluateRequest, modelsDir string) (*Ta
 		"mode": req.Mode, "dataset": datasetName, "promptTokens": req.PromptTokens,
 		"genTokens": req.GenTokens, "repetitions": req.Repetitions, "chunks": req.Chunks,
 		"baselineJobID": req.BaselineJobID, "maxRegressionPercent": req.MaxRegressionPercent,
+		"pplTask": req.PPLTask, "taskCount": req.TaskCount,
 	})
 	tm.enqueueStudioTask(task, StudioJobHeavy, func() {
 		tm.runStudioCommand(task, binary, args, "Running "+req.Mode+" evaluation...", "Evaluation complete", nil,
 			func() error { return tm.recordAndGateStudioEvaluation(task, req) })
 	})
 	return task, nil
+}
+
+func evaluationArgs(req EvaluateRequest, modelPath, datasetPath, klBasePath string) (string, []string, error) {
+	cacheAllowed := func(value string) bool {
+		return value == "" || stringAllowed(value, "f32", "f16", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1")
+	}
+	if !cacheAllowed(req.CacheTypeK) || !cacheAllowed(req.CacheTypeV) {
+		return "", nil, fmt.Errorf("unsupported evaluation cache type")
+	}
+	if req.FlashAttention != "" && !stringAllowed(req.FlashAttention, "auto", "on", "off") {
+		return "", nil, fmt.Errorf("unsupported flash-attention mode %q", req.FlashAttention)
+	}
+	if req.LoadMode != "" && !stringAllowed(req.LoadMode, "auto", "none", "mmap", "mlock", "mmap+mlock", "dio") {
+		return "", nil, fmt.Errorf("unsupported load mode %q", req.LoadMode)
+	}
+	if req.SplitMode != "" && !stringAllowed(req.SplitMode, "none", "layer", "row", "tensor") {
+		return "", nil, fmt.Errorf("unsupported split mode %q", req.SplitMode)
+	}
+	if req.NUMA != "" && !stringAllowed(req.NUMA, "distribute", "isolate", "numactl") {
+		return "", nil, fmt.Errorf("unsupported NUMA mode %q", req.NUMA)
+	}
+	if req.Priority < -1 || req.Priority > 3 || req.PPLOutputType < 0 || req.PPLOutputType > 1 {
+		return "", nil, fmt.Errorf("evaluation enum value is outside its supported range")
+	}
+	if req.Device != "" && !regexp.MustCompile(`^[A-Za-z0-9_.,:-]+$`).MatchString(req.Device) {
+		return "", nil, fmt.Errorf("invalid evaluation device list")
+	}
+	if req.TensorSplit != "" && !regexp.MustCompile(`^[0-9.,/]+$`).MatchString(req.TensorSplit) {
+		return "", nil, fmt.Errorf("invalid tensor split")
+	}
+	args := []string{"--model", modelPath}
+	if req.Mode == "benchmark" {
+		appendPositiveInt := func(flag string, value int) {
+			if value > 0 {
+				args = append(args, flag, strconv.Itoa(value))
+			}
+		}
+		appendPositiveInt("--n-prompt", req.PromptTokens)
+		appendPositiveInt("--n-gen", req.GenTokens)
+		appendPositiveInt("--repetitions", req.Repetitions)
+		appendPositiveInt("--n-depth", req.Depth)
+		appendPositiveInt("--batch-size", req.BatchSize)
+		appendPositiveInt("--ubatch-size", req.UBatchSize)
+		appendPositiveInt("--threads", req.Threads)
+		appendPositiveInt("--delay", req.Delay)
+		appendPositiveInt("--fit-target", req.FitTarget)
+		appendPositiveInt("--fit-ctx", req.FitContext)
+		if req.Priority != 0 {
+			args = append(args, "--prio", strconv.Itoa(req.Priority))
+		}
+		if req.GPULayers != 0 {
+			args = append(args, "--n-gpu-layers", strconv.Itoa(req.GPULayers))
+		}
+		if req.MainGPU != 0 {
+			args = append(args, "--main-gpu", strconv.Itoa(req.MainGPU))
+		}
+		if req.Embeddings {
+			args = append(args, "--embeddings", "1")
+		}
+		if req.NoWarmup {
+			args = append(args, "--no-warmup")
+		}
+		if req.NoKVOffload {
+			args = append(args, "--no-kv-offload", "1")
+		}
+		if req.NoOpOffload {
+			args = append(args, "--no-op-offload", "1")
+		}
+		if req.NoHost {
+			args = append(args, "--no-host", "1")
+		}
+		for _, pair := range [][2]string{{"--cache-type-k", req.CacheTypeK}, {"--cache-type-v", req.CacheTypeV}, {"--flash-attn", req.FlashAttention}, {"--device", req.Device}, {"--load-mode", req.LoadMode}, {"--split-mode", req.SplitMode}, {"--tensor-split", req.TensorSplit}, {"--numa", req.NUMA}} {
+			if pair[1] != "" {
+				args = append(args, pair[0], pair[1])
+			}
+		}
+		args = append(args, "--output", "json", "--progress")
+		return "llama-bench", args, nil
+	}
+	if req.Mode != "perplexity" {
+		return "", nil, fmt.Errorf("unsupported evaluation mode %q", req.Mode)
+	}
+	args = append(args, "--file", datasetPath)
+	for _, pair := range [][2]string{{"--chunks", strconv.Itoa(req.Chunks)}, {"--ctx-size", strconv.Itoa(req.ContextSize)}, {"--batch-size", strconv.Itoa(req.BatchSize)}, {"--ubatch-size", strconv.Itoa(req.UBatchSize)}, {"--threads", strconv.Itoa(req.Threads)}} {
+		if pair[1] != "0" {
+			args = append(args, pair[0], pair[1])
+		}
+	}
+	if req.GPULayers != 0 {
+		args = append(args, "--n-gpu-layers", strconv.Itoa(req.GPULayers))
+	}
+	if req.NoWarmup {
+		args = append(args, "--no-warmup")
+	}
+	switch req.PPLTask {
+	case "", "perplexity":
+	case "hellaswag", "winogrande", "multiple-choice":
+		args = append(args, "--"+req.PPLTask)
+		if req.TaskCount > 0 {
+			args = append(args, "--"+req.PPLTask+"-tasks", strconv.Itoa(req.TaskCount))
+		}
+	case "kl-divergence":
+		if klBasePath == "" {
+			return "", nil, fmt.Errorf("KL-divergence evaluation requires a base logits file")
+		}
+		args = append(args, "--kl-divergence", "--kl-divergence-base", klBasePath)
+		if req.SaveAllLogits {
+			args = append(args, "--save-all-logits")
+		}
+	default:
+		return "", nil, fmt.Errorf("unsupported perplexity task %q", req.PPLTask)
+	}
+	if req.PPLStride > 0 {
+		args = append(args, "--ppl-stride", strconv.Itoa(req.PPLStride))
+	}
+	if req.PPLOutputType != 0 {
+		args = append(args, "--ppl-output-type", strconv.Itoa(req.PPLOutputType))
+	}
+	return "llama-perplexity", args, nil
 }
 
 func stringAllowed(value string, allowed ...string) bool {

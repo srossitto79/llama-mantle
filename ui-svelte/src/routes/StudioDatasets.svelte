@@ -38,7 +38,13 @@
   }
 
   async function showPreview(path: string) {
-    selected = path; preview = null; busy = true;
+    selected = path; preview = null;
+    if (path.toLowerCase().endsWith(".py")) {
+      error = "";
+      status = "Python reward workers are executable resources and are not previewed as datasets.";
+      return;
+    }
+    busy = true;
     try { preview = await previewStudioDataset(path, 10); error = ""; }
     catch (cause) { error = cause instanceof Error ? cause.message : String(cause); }
     finally { busy = false; }
@@ -90,7 +96,7 @@
     <div class="grid gap-4 xl:grid-cols-[1fr_1.4fr]">
       <div class="min-w-0 space-y-4">
         <Card.Root><Card.Header><Card.Title>Import local file</Card.Title><Card.Description>Files are copied atomically below <code>datasets/</code>. Existing files are never overwritten.</Card.Description></Card.Header><Card.Content class="space-y-3">
-          <div class="space-y-1"><Label.Root for="dataset-file">Dataset file</Label.Root><Input id="dataset-file" type="file" accept=".jsonl,.json,.txt,.text,.csv,.parquet" bind:files={uploadFiles} /></div>
+          <div class="space-y-1"><Label.Root for="dataset-file">Dataset or reward script</Label.Root><Input id="dataset-file" type="file" accept=".jsonl,.json,.txt,.text,.csv,.parquet,.py" bind:files={uploadFiles} /></div>
           <div class="space-y-1"><Label.Root for="dataset-destination">Destination (optional)</Label.Root><Input id="dataset-destination" bind:value={destination} placeholder="datasets/my-project/train.jsonl" /></div>
           <Button onclick={upload} disabled={busy || !uploadFiles?.length}><Upload class="size-4" />Import</Button>
         </Card.Content></Card.Root>

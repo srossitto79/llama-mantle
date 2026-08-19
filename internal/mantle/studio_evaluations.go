@@ -23,6 +23,7 @@ type StudioEvaluation struct {
 }
 
 var perplexityResultPattern = regexp.MustCompile(`(?i)\bppl\s*=\s*([0-9]+(?:\.[0-9]+)?)`)
+var evaluationScorePattern = regexp.MustCompile(`(?i)\b(acc(?:uracy)?|score|kl(?:[-_ ]divergence)?)\s*[:=]\s*([0-9]+(?:\.[0-9]+)?)`)
 
 func (tm *TaskManager) recordAndGateStudioEvaluation(task *Task, req EvaluateRequest) error {
 	snapshot := task.Snapshot()
@@ -77,6 +78,14 @@ func studioEvaluationRegression(mode string, baseline, current map[string]any) (
 		if _, ok := baseline[key]; !ok {
 			key = "promptTokensPerSecond"
 		}
+	} else if _, ok := baseline[key]; !ok {
+		if _, scoreOK := baseline["accuracy"]; scoreOK {
+			key, lowerIsBetter = "accuracy", false
+		} else if _, scoreOK := baseline["score"]; scoreOK {
+			key, lowerIsBetter = "score", false
+		} else if _, klOK := baseline["klDivergence"]; klOK {
+			key = "klDivergence"
+		}
 	}
 	base, ok1 := numberValue(baseline[key])
 	value, ok2 := numberValue(current[key])
@@ -97,6 +106,18 @@ func parseStudioEvaluationMetrics(mode string, logs []string) map[string]any {
 		if len(matches) > 0 {
 			value, _ := strconv.ParseFloat(matches[len(matches)-1][1], 64)
 			metrics["perplexity"] = value
+		}
+		for _, match := range evaluationScorePattern.FindAllStringSubmatch(joined, -1) {
+			value, _ := strconv.ParseFloat(match[2], 64)
+			key := strings.ToLower(match[1])
+			switch {
+			case strings.HasPrefix(key, "acc"):
+				metrics["accuracy"] = value
+			case strings.HasPrefix(key, "kl"):
+				metrics["klDivergence"] = value
+			default:
+				metrics["score"] = value
+			}
 		}
 		return metrics
 	}

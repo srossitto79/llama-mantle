@@ -22,7 +22,7 @@ const (
 )
 
 var studioDatasetExtensions = map[string]bool{
-	".jsonl": true, ".json": true, ".txt": true, ".text": true, ".csv": true, ".parquet": true,
+	".jsonl": true, ".json": true, ".txt": true, ".text": true, ".csv": true, ".parquet": true, ".py": true,
 }
 
 type StudioDataset struct {

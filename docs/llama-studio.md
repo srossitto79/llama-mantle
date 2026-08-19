@@ -1,5 +1,8 @@
 # Llama Studio
 
+The executable-by-executable coverage audit and implementation sequence are maintained
+in [Llama Studio tool capability plan](llama-studio-tool-capability-plan.md).
+
 Llama Studio extends llama-swap from model serving into a GGUF lifecycle
 workspace. It treats command-line tools as typed operations rather than exposing
 arbitrary process execution.
@@ -132,6 +135,31 @@ editor: a one-step workflow is a custom recipe, while additional steps create a
 pipeline. Common arguments have form controls and the advanced request JSON starts
 with every argument supported by the selected Studio operation API. Recipes can be
 saved, imported, exported, fanned out into variants, and guarded by evaluation gates.
+
+The utility recipe exposes managed artifact workflows for importance matrices,
+control vectors, lookup caches, benchmark results, and full-model fine-tuning. It
+also provides report jobs for tokenization, template analysis, hardware fitting, and
+lookup statistics. Inputs use the resource catalog, outputs are staged and published
+atomically, and the UI intentionally provides typed fields instead of arbitrary argv.
+
+### GRPO reward providers
+
+GRPO training is an interactive IPC workflow rather than ordinary dataset SFT.
+Studio supplies prompts from a JSONL dataset, collects the trainer's grouped
+generations, obtains one reward per generation, normalizes the group-relative
+advantages, and returns them to `llama-finetune-qlora`. Every run publishes a
+`.rollouts.jsonl` artifact containing prompts, generations, raw rewards, normalized
+advantages, and optional provider details.
+
+The built-in provider supports exact text, numeric tolerance, regular-expression,
+and valid-JSON verification. The script provider starts a persistent Python worker
+and exchanges one JSON object per line; see
+[`docs/examples/grpo-reward-worker.py`](examples/grpo-reward-worker.py). Selecting a
+script intentionally executes trusted local code as the same user as Llama Studio.
+The HTTP provider sends the identical request object to an HTTP(S) endpoint. Reward
+providers must return `{"rewards":[...]}` with one finite number per generation and
+may include a `details` value. Provider errors and timeouts fail the job before that
+optimizer step is applied.
 
 Projects are durable named workspaces and collections of catalog resource paths. The
 active project is selected in the sidebar; new jobs, generated artifacts, evaluations,

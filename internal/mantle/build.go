@@ -165,6 +165,12 @@ func (tm *TaskManager) StartBuild(repo, branch, backendName, buildScript, backen
 			return
 		}
 
+		// Best-effort: cache the backend's flag schema for the guided config
+		// editor. Never fails the build over it.
+		if _, err := LoadOrBuildBackendSchema(backendsDir, backendName); err != nil {
+			tm.logBuildLine(task.ID, fmt.Sprintf("warning: failed to parse backend schema: %v", err))
+		}
+
 		task.UpdateProgress(TaskCompleted,
 			fmt.Sprintf("Build complete: %s", strings.Join(bins, ", ")), 100)
 	}()

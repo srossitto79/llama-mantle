@@ -18,8 +18,8 @@ const (
 )
 
 type MacroEntry struct {
-	Name  string
-	Value any
+	Name  string `json:"name"`
+	Value any    `json:"value"`
 }
 
 type MacroList []MacroEntry
@@ -53,6 +53,26 @@ func (ml *MacroList) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+// MarshalYAML implements custom YAML marshaling that mirrors UnmarshalYAML:
+// macros are always emitted as a mapping (even when empty), preserving
+// declaration order. Without this, encoding a nil/empty MacroList falls back
+// to the default slice marshaling (null or []), which UnmarshalYAML then
+// rejects on reload since it requires a mapping node.
+func (ml MacroList) MarshalYAML() (interface{}, error) {
+	node := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	for _, entry := range ml {
+		var keyNode, valNode yaml.Node
+		if err := keyNode.Encode(entry.Name); err != nil {
+			return nil, err
+		}
+		if err := valNode.Encode(entry.Value); err != nil {
+			return nil, err
+		}
+		node.Content = append(node.Content, &keyNode, &valNode)
+	}
+	return node, nil
+}
+
 // Get retrieves a macro value by name
 func (ml MacroList) Get(name string) (any, bool) {
 	for _, entry := range ml {
@@ -73,10 +93,10 @@ func (ml MacroList) ToMap() map[string]any {
 }
 
 type GroupConfig struct {
-	Swap       bool     `yaml:"swap"`
-	Exclusive  bool     `yaml:"exclusive"`
-	Persistent bool     `yaml:"persistent"`
-	Members    []string `yaml:"members"`
+	Swap       bool     `yaml:"swap" json:"swap"`
+	Exclusive  bool     `yaml:"exclusive" json:"exclusive"`
+	Persistent bool     `yaml:"persistent" json:"persistent"`
+	Members    []string `yaml:"members" json:"members,omitempty"`
 }
 
 // set default values for GroupConfig

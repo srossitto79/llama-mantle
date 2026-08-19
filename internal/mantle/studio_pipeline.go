@@ -188,7 +188,7 @@ func (tm *TaskManager) DeleteStudioPipelineTemplate(id string) (bool, error) {
 
 func studioPipelineOperationAllowed(operation string) bool {
 	switch operation {
-	case "quantize", "hash", "split", "merge", "prune", "train-qlora", "export-lora", "evaluate", "register":
+	case "quantize", "hash", "split", "merge", "prune", "train-qlora", "export-lora", "evaluate", "utility", "register":
 		return true
 	default:
 		return false
@@ -424,12 +424,25 @@ func studioPipelineApplyPrevious(step StudioPipelineStep, previous string) (Stud
 		field = "model"
 	case "train-qlora", "evaluate":
 		field = "model"
+	case "utility":
+		tool, _ := request["tool"].(string)
+		switch tool {
+		case "lookup-stats", "results":
+			field = "input"
+		case "lookup-merge":
+			values, _ := request["inputs"].([]any)
+			request["inputs"] = append([]any{previous}, values...)
+		default:
+			field = "model"
+		}
 	case "register":
 		field = "model"
 	default:
 		return step, fmt.Errorf("operation %q cannot consume a previous artifact", step.Operation)
 	}
-	request[field] = previous
+	if field != "" {
+		request[field] = previous
+	}
 	encoded, err := json.Marshal(request)
 	if err != nil {
 		return step, err
@@ -494,6 +507,12 @@ func (tm *TaskManager) dispatchStudioPipelineStep(step StudioPipelineStep, model
 			return nil, err
 		}
 		return tm.StartEvaluate(req, modelsDir)
+	case "utility":
+		var req StudioUtilityRequest
+		if err := decode(&req); err != nil {
+			return nil, err
+		}
+		return tm.StartStudioUtility(req, modelsDir)
 	case "register":
 		var req RegisterStudioModelRequest
 		if err := decode(&req); err != nil {

@@ -351,7 +351,7 @@ export interface StudioSchedulerStatus {
 }
 
 export interface StudioPipelineStep {
-	operation: "quantize" | "hash" | "split" | "merge" | "prune" | "train-qlora" | "export-lora" | "evaluate" | "register";
+	operation: "quantize" | "hash" | "split" | "merge" | "prune" | "train-qlora" | "export-lora" | "evaluate" | "utility" | "register";
 	usePrevious?: boolean;
 	request: Record<string, unknown>;
 	variants?: Record<string, unknown>[];
@@ -490,6 +490,15 @@ export interface QuantizeRequest {
 	pure?: boolean;
 	dryRun?: boolean;
 	threads?: number;
+	includeWeights?: string[];
+	excludeWeights?: string[];
+	outputTensorType?: string;
+	tokenEmbeddingType?: string;
+	tensorTypes?: string[];
+	tensorTypeFile?: string;
+	pruneLayers?: number[];
+	keepSplit?: boolean;
+	overrideKV?: string[];
 }
 
 export interface HashRequest {
@@ -497,9 +506,11 @@ export interface HashRequest {
 	algorithm: "xxh64" | "sha1" | "sha256" | "all";
 	noLayer?: boolean;
 	uuid?: boolean;
+	manifest?: string;
 }
 
 export interface SplitRequest {
+	mode?: "split" | "merge";
 	input: string;
 	output: string;
 	maxTensors?: number;
@@ -523,6 +534,10 @@ export interface MergeRequest {
 	gpuLayers?: number;
 	device?: string;
 	mergeGpu?: boolean;
+	eliteCount?: number;
+	sigma0?: number;
+	seed?: number;
+	contextSize?: number;
 }
 
 export interface PruneRequest {
@@ -587,6 +602,15 @@ export interface TrainQLoRARequest {
 	nSteps?: number;
 	grpoTemperature?: number;
 	grpoMaxTokens?: number;
+	grpoPromptField?: string;
+	grpoReferenceField?: string;
+	grpoRewardProvider?: "builtin" | "script" | "http";
+	grpoBuiltinReward?: "exact" | "numeric" | "regex" | "json-valid";
+	grpoRewardScript?: string;
+	grpoRewardUrl?: string;
+	grpoRewardTimeout?: number;
+	grpoCaseSensitive?: boolean;
+	grpoNumericTolerance?: number;
 	contextSize?: number;
 	batchSize?: number;
 	ubatchSize?: number;
@@ -628,6 +652,7 @@ export interface ExportLoRARequest {
 	adapters: string[];
 	output: string;
 	tensorType?: string;
+	scaledAdapters?: Array<{ path: string; scale: number }>;
 }
 
 export interface EvaluateRequest {
@@ -645,6 +670,44 @@ export interface EvaluateRequest {
 	gpuLayers?: number;
 	baselineJobID?: string;
 	maxRegressionPercent?: number;
+	noWarmup?: boolean;
+	priority?: number;
+	delay?: number;
+	depth?: number;
+	embeddings?: boolean;
+	cacheTypeK?: string;
+	cacheTypeV?: string;
+	flashAttention?: string;
+	device?: string;
+	loadMode?: string;
+	splitMode?: string;
+	tensorSplit?: string;
+	mainGpu?: number;
+	noKvOffload?: boolean;
+	noOpOffload?: boolean;
+	noHost?: boolean;
+	fitTarget?: number;
+	fitContext?: number;
+	numa?: string;
+	pplTask?: string;
+	taskCount?: number;
+	pplStride?: number;
+	pplOutputType?: number;
+	klBase?: string;
+	saveAllLogits?: boolean;
+}
+
+export interface StudioUtilityRequest {
+	tool: "imatrix" | "tokenize" | "template-analysis" | "control-vector" | "lookup-create" | "lookup-merge" | "lookup-stats" | "fit-params" | "results" | "finetune";
+	model?: string; input?: string; inputs?: string[]; output?: string;
+	positive?: string; negative?: string; prompt?: string; predict?: number; template?: string; templateFile?: string;
+	method?: string; outputFormat?: string; chunks?: number; fromChunk?: number;
+	outputFrequency?: number; saveFrequency?: number; pcaBatch?: number; pcaIterations?: number;
+	contextSize?: number; batchSize?: number; ubatchSize?: number; threads?: number; gpuLayers?: number;
+	epochs?: number; learningRate?: number; learningRateMin?: number; decayEpochs?: number;
+	weightDecay?: number; validationSplit?: number; optimizer?: string;
+	ids?: boolean; noBos?: boolean; noParseSpecial?: boolean; showCount?: boolean;
+	processOutput?: boolean; noPpl?: boolean; parseSpecial?: boolean; showStatistics?: boolean; check?: boolean;
 }
 
 export interface HFModel {
@@ -693,3 +756,111 @@ export interface DownloadRequest {
 	modelID: string;
 	filename: string;
 }
+
+// --- Backend flag schema (guided config editor) ---
+
+export type FlagValueType = "boolean" | "enum" | "number" | "path" | "string";
+
+export interface FlagSpec {
+	names: string[];
+	canonicalEnv?: string;
+	value?: string;
+	type: FlagValueType;
+	choices?: string[];
+	default?: string;
+	help: string;
+	section: string;
+}
+
+export interface BackendSchema {
+	backend: string;
+	parsedAt: string;
+	flags: FlagSpec[];
+}
+
+// --- Structured model/group config editing ---
+
+export interface ModelFilters {
+	stripParams?: string;
+	setParams?: Record<string, unknown>;
+	setParamsByID?: Record<string, Record<string, unknown>>;
+}
+
+export interface ModelTimeouts {
+	connect?: number;
+	keepalive?: number;
+	responseHeader?: number;
+	tlsHandshake?: number;
+	expectContinue?: number;
+	idleConn?: number;
+}
+
+export interface ModelCapabilitiesConfig {
+	in?: string[];
+	out?: string[];
+	tools?: boolean;
+	reranker?: boolean;
+	context?: number;
+}
+
+export interface ModelMacro {
+	name: string;
+	value: unknown;
+}
+
+// Mirrors internal/config.ModelConfig's JSON shape. `ttl` matches
+// llama-swap's YAML field name for UnloadAfter (-1 = use global default).
+export interface ConfigModelConfig {
+	cmd: string;
+	cmdStop?: string;
+	proxy?: string;
+	aliases?: string[];
+	env?: string[];
+	checkEndpoint?: string;
+	ttl: number;
+	unloadTimeout?: number;
+	unlisted?: boolean;
+	useModelName?: string;
+	name?: string;
+	description?: string;
+	concurrencyLimit?: number;
+	filters?: ModelFilters;
+	macros?: ModelMacro[];
+	metadata?: Record<string, unknown>;
+	sendLoadingState?: boolean;
+	timeouts?: ModelTimeouts;
+	capabilities?: ModelCapabilitiesConfig;
+	healthCheckTimeout?: number;
+}
+
+export interface NamedModelConfig extends ConfigModelConfig {
+	id: string;
+}
+
+// Defaults mirroring ModelConfig.UnmarshalYAML in internal/config/model_config.go,
+// for pre-populating a brand new model in the guided editor (a plain JSON PUT
+// bypasses that YAML-side defaulting logic, so the client fills them in).
+export const DEFAULT_MODEL_CONFIG: ConfigModelConfig = {
+	cmd: "",
+	proxy: "http://localhost:${PORT}",
+	checkEndpoint: "/health",
+	ttl: -1,
+};
+
+export interface ConfigGroupConfig {
+	swap: boolean;
+	exclusive: boolean;
+	persistent: boolean;
+	members?: string[];
+}
+
+export interface NamedGroupConfig extends ConfigGroupConfig {
+	name: string;
+}
+
+export const DEFAULT_GROUP_CONFIG: ConfigGroupConfig = {
+	swap: true,
+	exclusive: true,
+	persistent: false,
+	members: [],
+};
