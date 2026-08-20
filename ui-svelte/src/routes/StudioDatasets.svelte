@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Database, Download, Eye, RefreshCw, Search, Upload } from "@lucide/svelte";
+  import { Database, Download, Eye, RefreshCw, Search, Trash2, Upload } from "@lucide/svelte";
   import * as Card from "$lib/components/ui/card/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Label from "$lib/components/ui/label/index.js";
-  import { downloadHFDatasetFile, importStudioDataset, listHFDatasetFiles, listStudioDatasets, previewStudioDataset, searchHFDatasets, streamTaskProgress } from "../lib/mantleApi";
+  import { deleteStudioDataset, downloadHFDatasetFile, importStudioDataset, listHFDatasetFiles, listStudioDatasets, previewStudioDataset, searchHFDatasets, streamTaskProgress } from "../lib/mantleApi";
   import type { DatasetPreview, HFDataset, HFFile, StudioDataset } from "../lib/types";
 
   let datasets = $state<StudioDataset[]>([]);
@@ -47,6 +47,19 @@
     busy = true;
     try { preview = await previewStudioDataset(path, 10); error = ""; }
     catch (cause) { error = cause instanceof Error ? cause.message : String(cause); }
+    finally { busy = false; }
+  }
+
+  async function removeDataset(dataset: StudioDataset) {
+    if (!window.confirm(`Delete ${dataset.path}? The file cannot be recovered from Studio.`)) return;
+    busy = true;
+    try {
+      if (!(await deleteStudioDataset(dataset.path))) throw new Error("delete failed");
+      if (selected === dataset.path) { selected = ""; preview = null; }
+      status = `Deleted ${dataset.path}`;
+      error = "";
+      await refresh();
+    } catch (cause) { error = cause instanceof Error ? cause.message : String(cause); }
     finally { busy = false; }
   }
 
@@ -104,9 +117,12 @@
         <Card.Root><Card.Header><Card.Title>Local datasets</Card.Title><Card.Description>{datasets.length} recognized files</Card.Description></Card.Header><Card.Content class="space-y-2">
           {#if loading}<p class="text-muted-foreground text-sm">Loading…</p>{:else if datasets.length === 0}<p class="text-muted-foreground text-sm">No datasets imported yet.</p>{/if}
           {#each datasets as dataset (dataset.path)}
-            <button type="button" class="hover:bg-muted flex w-full items-center gap-3 rounded-md border p-2 text-left" class:bg-muted={selected === dataset.path} onclick={() => showPreview(dataset.path)}>
-              <span class="min-w-0 flex-1"><span class="block truncate text-sm font-medium">{dataset.path}</span><span class="text-muted-foreground text-xs">{dataset.format.toUpperCase()} · {formatSize(dataset.size)}</span></span><Eye class="size-4 shrink-0" />
-            </button>
+            <div class="hover:bg-muted flex w-full items-center gap-1 rounded-md border p-2" class:bg-muted={selected === dataset.path}>
+              <button type="button" class="flex min-w-0 flex-1 items-center gap-3 text-left" onclick={() => showPreview(dataset.path)}>
+                <span class="min-w-0 flex-1"><span class="block truncate text-sm font-medium">{dataset.path}</span><span class="text-muted-foreground text-xs">{dataset.format.toUpperCase()} · {formatSize(dataset.size)}</span></span><Eye class="size-4 shrink-0" />
+              </button>
+              <Button size="icon-sm" variant="ghost" title="Delete dataset" onclick={() => removeDataset(dataset)} disabled={busy}><Trash2 class="text-destructive size-4" /></Button>
+            </div>
           {/each}
         </Card.Content></Card.Root>
       </div>

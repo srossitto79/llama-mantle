@@ -351,7 +351,7 @@ export interface StudioSchedulerStatus {
 }
 
 export interface StudioPipelineStep {
-	operation: "quantize" | "hash" | "split" | "merge" | "prune" | "train-qlora" | "export-lora" | "evaluate" | "utility" | "register";
+	operation: "quantize" | "hash" | "split" | "merge" | "prune" | "train-qlora" | "export-lora" | "evaluate" | "utility" | "register" | "distill";
 	usePrevious?: boolean;
 	request: Record<string, unknown>;
 	variants?: Record<string, unknown>[];
@@ -617,6 +617,29 @@ export interface TrainQLoRARequest {
 	threads?: number;
 	datasetThreads?: number;
 	gpuLayers?: number;
+}
+
+export interface DistillRequest {
+	sourceDataset: string;
+	promptField?: string;
+	output: string;
+	shuffle?: boolean;
+	seed?: number;
+	maxSamples?: number;
+	serverUrl: string;
+	apiKey?: string;
+	model: string;
+	systemPrompt?: string;
+	temperature?: number;
+	topP?: number;
+	topK?: number;
+	maxTokens?: number;
+	reasoningEffort?: "" | "low" | "medium" | "high";
+	stop?: string[];
+	concurrency?: number;
+	timeoutSeconds?: number;
+	retries?: number;
+	lastTurnOnly?: boolean;
 }
 
 export interface DatasetInspection {

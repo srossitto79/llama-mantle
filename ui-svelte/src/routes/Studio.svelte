@@ -408,7 +408,7 @@
     void listStudioResources().then((items) => {
       resources = items;
       loadingModels = false;
-	  if (preselectedModel && items.some((item) => item.path === preselectedModel && item.type === "model")) void selectModel(preselectedModel);
+	  if (preselectedModel && items.some((item) => item.path === preselectedModel && ["model", "adapter", "checkpoint"].includes(item.type))) void selectModel(preselectedModel);
     });
     void listStudioPipelineTemplates().then((items) => pipelines = items);
     void listTasks().then((tasks) => {

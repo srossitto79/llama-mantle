@@ -81,6 +81,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/mantle/studio/models/inspect", h.handleInspectStudioModel)
 	mux.HandleFunc("GET /api/mantle/studio/datasets/inspect", h.handleInspectStudioDataset)
 	mux.HandleFunc("GET /api/mantle/studio/datasets", h.handleListStudioDatasets)
+	mux.HandleFunc("DELETE /api/mantle/studio/datasets/{name...}", h.handleDeleteStudioDataset)
 	mux.HandleFunc("GET /api/mantle/studio/datasets/preview", h.handlePreviewStudioDataset)
 	mux.HandleFunc("POST /api/mantle/studio/datasets/import", h.handleImportStudioDataset)
 	mux.HandleFunc("GET /api/mantle/studio/datasets/hub/search", h.handleSearchHFDatasets)
@@ -92,6 +93,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/mantle/studio/merge", h.handleStartMerge)
 	mux.HandleFunc("POST /api/mantle/studio/prune", h.handleStartPrune)
 	mux.HandleFunc("POST /api/mantle/studio/train/qlora", h.handleStartTrainQLoRA)
+	mux.HandleFunc("POST /api/mantle/studio/distill", h.handleStartDistill)
 	mux.HandleFunc("POST /api/mantle/studio/export/lora", h.handleStartExportLoRA)
 	mux.HandleFunc("POST /api/mantle/studio/evaluate", h.handleStartEvaluate)
 	mux.HandleFunc("POST /api/mantle/studio/utility", h.handleStartStudioUtility)
@@ -244,6 +246,19 @@ func (h *Handler) handleListStudioDatasets(w http.ResponseWriter, _ *http.Reques
 		return
 	}
 	jsonResponse(w, http.StatusOK, datasets)
+}
+
+func (h *Handler) handleDeleteStudioDataset(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		jsonError(w, http.StatusBadRequest, "dataset name is required")
+		return
+	}
+	if err := DeleteStudioDataset(h.modelsDir, name); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]string{"msg": "deleted"})
 }
 
 func (h *Handler) handlePreviewStudioDataset(w http.ResponseWriter, r *http.Request) {
@@ -406,6 +421,20 @@ func (h *Handler) handleStartTrainQLoRA(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	task, err := h.tm.StartTrainQLoRA(req, h.modelsDir)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.jsonStudioTaskResponse(w, r, task)
+}
+
+func (h *Handler) handleStartDistill(w http.ResponseWriter, r *http.Request) {
+	var req DistillRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	task, err := h.tm.StartDistill(req, h.modelsDir)
 	if err != nil {
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return

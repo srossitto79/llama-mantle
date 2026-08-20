@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { push } from "svelte-spa-router";
   import { BarChart3, Boxes, GitBranch, RefreshCw, Save, ShieldCheck, Trash2 } from "@lucide/svelte";
   import * as Card from "$lib/components/ui/card/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -72,9 +73,14 @@
   }
 
   async function cleanup() {
-    if (!selected || !window.confirm(`Delete ${selected}? The file cannot be recovered from Studio.`)) return;
+    if (!selected) return;
+    await removeArtifact(selected);
+  }
+
+  async function removeArtifact(path: string) {
+    if (!window.confirm(`Delete ${path}? The file cannot be recovered from Studio.`)) return;
     busy = true;
-    try { const task = await cleanupStudioArtifact(selected); refreshAfter(task.id); }
+    try { const task = await cleanupStudioArtifact(path); refreshAfter(task.id); }
     catch (cause) { busy = false; error = cause instanceof Error ? cause.message : String(cause); }
   }
 
@@ -100,8 +106,15 @@
     catch (cause) { busy = false; error = cause instanceof Error ? cause.message : String(cause); }
   }
 
-  function openStudio(path: string) { window.location.href = `/studio?model=${encodeURIComponent(path)}`; }
-  function openPipeline(path: string) { window.location.href = `/studio/pipelines?model=${encodeURIComponent(path)}`; }
+  // Studio's single-operation form always treats "input" as a GGUF file (base
+  // model, adapter, or checkpoint) to quantize/hash/train/etc. — datasets and
+  // other non-GGUF artifacts (reports, rollouts, caches) can never be used
+  // there, only in a pipeline step's own resource picker.
+  function isGGUFArtifact(path: string): boolean {
+    return path.toLowerCase().endsWith(".gguf");
+  }
+  function openStudio(path: string) { void push(`/studio?model=${encodeURIComponent(path)}`); }
+  function openPipeline(path: string) { void push(`/studio/pipelines?model=${encodeURIComponent(path)}`); }
   function evaluationSummary(evaluation: StudioEvaluation): string {
     if (evaluation.mode === "perplexity") return evaluation.metrics.perplexity === undefined ? "No parsed result" : `PPL ${Number(evaluation.metrics.perplexity).toFixed(3)}`;
     const prompt = evaluation.metrics.promptTokensPerSecond;
@@ -117,7 +130,7 @@
   <div class="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
     <Card.Root class="min-h-0 gap-0 overflow-hidden py-0">
       <div class="border-b p-3"><select class="border-input bg-background h-9 rounded-md border px-3 text-sm" bind:value={filter}><option value="">All artifact types</option>{#each kinds as kind}<option value={kind}>{kind}</option>{/each}</select></div>
-      <div class="overflow-auto">{#if loading}<div class="text-muted-foreground p-8 text-center">Loading artifacts…</div>{:else if visible.length === 0}<div class="text-muted-foreground p-8 text-center">No generated artifacts yet.</div>{:else}<table class="w-full text-left text-sm"><thead class="bg-muted/60 sticky top-0"><tr><th class="px-3 py-2">Artifact</th><th class="px-3 py-2">Type</th><th class="px-3 py-2">Producer</th><th class="px-3 py-2">Size</th><th class="px-3 py-2">Status</th><th></th></tr></thead><tbody>{#each visible as artifact (artifact.path)}<tr class:selected={selected === artifact.path} class="border-t"><td class="max-w-72 px-3 py-2"><button class="w-full truncate text-left font-medium" title={artifact.path} onclick={() => select(artifact.path)}>{artifact.path}</button></td><td class="px-3 py-2 text-xs">{artifact.kind}</td><td class="px-3 py-2 text-xs">{artifact.operation}</td><td class="px-3 py-2">{formatSize(artifact.size)}</td><td class="px-3 py-2"><span class:text-destructive={!artifact.exists}>{artifact.exists ? "Available" : "Missing"}</span></td><td class="px-3 py-2"><div class="flex gap-1"><Button size="sm" variant="outline" disabled={!artifact.exists} onclick={() => openStudio(artifact.path)}>Use</Button><Button size="sm" variant="outline" disabled={!artifact.exists} onclick={() => openPipeline(artifact.path)}>Pipeline</Button></div></td></tr>{/each}</tbody></table>{/if}</div>
+      <div class="overflow-auto">{#if loading}<div class="text-muted-foreground p-8 text-center">Loading artifacts…</div>{:else if visible.length === 0}<div class="text-muted-foreground p-8 text-center">No generated artifacts yet.</div>{:else}<table class="w-full text-left text-sm"><thead class="bg-muted/60 sticky top-0"><tr><th class="px-3 py-2">Artifact</th><th class="px-3 py-2">Type</th><th class="px-3 py-2">Producer</th><th class="px-3 py-2">Size</th><th class="px-3 py-2">Status</th><th></th></tr></thead><tbody>{#each visible as artifact (artifact.path)}<tr class:selected={selected === artifact.path} class="border-t"><td class="max-w-72 px-3 py-2"><button class="w-full truncate text-left font-medium" title={artifact.path} onclick={() => select(artifact.path)}>{artifact.path}</button></td><td class="px-3 py-2 text-xs">{artifact.kind}</td><td class="px-3 py-2 text-xs">{artifact.operation}</td><td class="px-3 py-2">{formatSize(artifact.size)}</td><td class="px-3 py-2"><span class:text-destructive={!artifact.exists}>{artifact.exists ? "Available" : "Missing"}</span></td><td class="px-3 py-2"><div class="flex gap-1"><Button size="sm" variant="outline" title={isGGUFArtifact(artifact.path) ? "" : "Only GGUF files (models, adapters, checkpoints) can be opened in Studio"} disabled={!artifact.exists || !isGGUFArtifact(artifact.path)} onclick={() => openStudio(artifact.path)}>Use</Button><Button size="sm" variant="outline" disabled={!artifact.exists} onclick={() => openPipeline(artifact.path)}>Pipeline</Button><Button size="icon-sm" variant="ghost" title="Delete artifact" disabled={busy || !artifact.exists} onclick={() => removeArtifact(artifact.path)}><Trash2 class="text-destructive size-4" /></Button></div></td></tr>{/each}</tbody></table>{/if}</div>
     </Card.Root>
     <div class="space-y-4">
       <Card.Root class="h-fit"><Card.Header><Card.Title class="flex items-center gap-2"><ShieldCheck class="size-4" />Verification</Card.Title></Card.Header><Card.Content class="space-y-3">{#if !selectedArtifact}<p class="text-muted-foreground text-sm">Select an artifact to inspect it.</p>{:else}<div class="text-xs"><div class="text-muted-foreground">SHA-256</div><div class="mt-1 break-all font-mono">{selectedArtifact.sha256 || "Not verified"}</div></div>{#if selectedArtifact.ggufValid !== undefined}<div class:text-destructive={!selectedArtifact.ggufValid} class="text-sm">GGUF: {selectedArtifact.ggufValid ? "Valid" : `Invalid — ${selectedArtifact.verificationError ?? "parse failed"}`}</div>{/if}<div class="space-y-1"><Label.Root for="artifact-tags">Tags</Label.Root><Input id="artifact-tags" bind:value={tags} placeholder="release, favorite" /></div><div class="space-y-1"><Label.Root for="artifact-notes">Notes</Label.Root><textarea id="artifact-notes" class="border-input bg-background min-h-24 w-full rounded-md border p-2 text-sm" bind:value={notes}></textarea></div><div class="flex flex-wrap gap-2"><Button size="sm" variant="outline" onclick={saveAnnotation} disabled={busy}><Save class="size-4" />Save</Button><Button size="sm" variant="outline" onclick={verify} disabled={busy || !selectedArtifact.exists}><ShieldCheck class="size-4" />Verify</Button><Button size="sm" variant="destructive" onclick={cleanup} disabled={busy || !selectedArtifact.exists}><Trash2 class="size-4" />Delete file</Button></div>{/if}</Card.Content></Card.Root>

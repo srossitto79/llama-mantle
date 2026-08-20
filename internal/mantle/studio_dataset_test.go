@@ -89,6 +89,44 @@ func TestStudioDataset_ImportRejectsOverwrite(t *testing.T) {
 	}
 }
 
+func TestStudioDataset_DeleteRemovesFile(t *testing.T) {
+	modelsDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(modelsDir, "datasets"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(modelsDir, "datasets", "train.jsonl")
+	if err := os.WriteFile(target, []byte("{\"text\":\"hello\"}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := DeleteStudioDataset(modelsDir, "datasets/train.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("expected dataset to be removed, stat err = %v", err)
+	}
+}
+
+func TestStudioDataset_DeleteRejectsPathOutsideDatasetsDirectory(t *testing.T) {
+	modelsDir := t.TempDir()
+	target := filepath.Join(modelsDir, "model.gguf")
+	if err := os.WriteFile(target, []byte("gguf"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := DeleteStudioDataset(modelsDir, "model.gguf"); err == nil {
+		t.Fatal("expected deletion outside datasets/ to be rejected")
+	}
+	if _, err := os.Stat(target); err != nil {
+		t.Fatal("file outside datasets/ should not have been removed")
+	}
+}
+
+func TestStudioDataset_DeleteRejectsMissingFile(t *testing.T) {
+	modelsDir := t.TempDir()
+	if err := DeleteStudioDataset(modelsDir, "datasets/missing.jsonl"); err == nil {
+		t.Fatal("expected deletion of a missing dataset to fail")
+	}
+}
+
 func TestStudioDataset_ImportRejectsDatasetDirectoryEscape(t *testing.T) {
 	modelsDir := t.TempDir()
 	sourcePath := filepath.Join(t.TempDir(), "source.jsonl")

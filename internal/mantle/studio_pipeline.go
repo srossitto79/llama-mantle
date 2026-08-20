@@ -226,7 +226,7 @@ func (tm *TaskManager) DeleteStudioPipelineTemplate(id string) (bool, error) {
 
 func studioPipelineOperationAllowed(operation string) bool {
 	switch operation {
-	case "quantize", "hash", "split", "merge", "prune", "train-qlora", "export-lora", "evaluate", "utility", "register":
+	case "quantize", "hash", "split", "merge", "prune", "train-qlora", "export-lora", "evaluate", "utility", "register", "distill":
 		return true
 	default:
 		return false
@@ -462,6 +462,8 @@ func studioPipelineApplyPrevious(step StudioPipelineStep, previous string) (Stud
 		field = "model"
 	case "train-qlora", "evaluate":
 		field = "model"
+	case "distill":
+		field = "sourceDataset"
 	case "utility":
 		tool, _ := request["tool"].(string)
 		switch tool {
@@ -533,6 +535,12 @@ func (tm *TaskManager) dispatchStudioPipelineStep(step StudioPipelineStep, model
 			return nil, err
 		}
 		return tm.StartTrainQLoRA(req, modelsDir)
+	case "distill":
+		var req DistillRequest
+		if err := decode(&req); err != nil {
+			return nil, err
+		}
+		return tm.StartDistill(req, modelsDir)
 	case "export-lora":
 		var req ExportLoRARequest
 		if err := decode(&req); err != nil {

@@ -82,7 +82,7 @@ func SendResponse(w http.ResponseWriter, r *http.Request, status int, message st
 	if strings.Contains(acceptHeader, "text/html") {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(status)
-		w.Write([]byte(fmt.Sprintf(`<html><body><h1>llama-swap</h1><p>%s</p></body></html>`, html.EscapeString(message))))
+		w.Write([]byte(fmt.Sprintf(`<html><body><h1>llama-mantle-studio</h1><p>%s</p></body></html>`, html.EscapeString(message))))
 		return
 	}
 

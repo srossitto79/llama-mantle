@@ -179,6 +179,26 @@ func ImportStudioDataset(modelsDir, destination string, source multipart.File) (
 	return &StudioDataset{Name: filepath.Base(clean), Path: filepath.ToSlash(clean), Size: written, Format: strings.TrimPrefix(strings.ToLower(filepath.Ext(clean)), "."), ModifiedAt: info.ModTime()}, nil
 }
 
+// DeleteStudioDataset removes a single file below datasets/. It refuses paths
+// outside that directory and anything that isn't a regular file.
+func DeleteStudioDataset(modelsDir, name string) error {
+	path, clean, err := resolveStudioInput(modelsDir, name, "")
+	if err != nil {
+		return err
+	}
+	if clean != "datasets" && !strings.HasPrefix(clean, "datasets/") {
+		return fmt.Errorf("dataset path must remain inside datasets/")
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("dataset must be a regular file")
+	}
+	return os.Remove(path)
+}
+
 func SearchHFDatasets(query string, limit int, sortBy string) ([]HFDataset, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 20

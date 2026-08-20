@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { push } from "svelte-spa-router";
   import { Loader2, RefreshCw, Square, Timer, Workflow } from "@lucide/svelte";
   import * as Card from "$lib/components/ui/card/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -51,8 +52,19 @@
     return job.state === "queued" || job.state === "running";
   }
 
+  // Studio's single-operation form always treats "input" as a GGUF file, so a
+  // job whose output is a dataset (e.g. distill, download-dataset) has
+  // nowhere useful to go there.
+  function isGGUFOutput(job: MantleTask): boolean {
+    return !!job.output && job.output.toLowerCase().endsWith(".gguf");
+  }
+
   function useOutput(job: MantleTask) {
-	if (job.output) window.location.href = `/studio?model=${encodeURIComponent(job.output)}`;
+	if (job.output) void push(`/studio?model=${encodeURIComponent(job.output)}`);
+  }
+
+  function useOutputInPipeline(job: MantleTask) {
+	if (job.output) void push(`/studio/pipelines?model=${encodeURIComponent(job.output)}`);
   }
 
   onMount(() => {
@@ -101,7 +113,7 @@
                 <td class="min-w-28 px-3 py-2"><div class="bg-muted h-1.5 overflow-hidden rounded-full"><div class="bg-primary h-full" style:width={Math.max(0, job.pct) + "%"}></div></div><div class="text-muted-foreground mt-1 truncate text-xs">{job.message}</div></td>
                 <td class="px-3 py-2"><span class="inline-flex items-center gap-1"><Timer class="size-3" />{duration(job)}</span></td>
                 <td class="px-3 py-2 text-xs">{new Date(job.createdAt).toLocaleString()}</td>
-                <td class="px-3 py-2"><div class="flex gap-1">{#if isActive(job)}<Button variant="destructive" size="sm" onclick={() => cancel(job)}><Square class="size-3" />Cancel</Button>{:else if job.state === "failed" && job.operation === "pipeline"}<Button variant="outline" size="sm" onclick={() => retryPipeline(job)}>Retry failed step</Button>{:else if job.state === "completed" && job.output}<Button variant="outline" size="sm" onclick={() => useOutput(job)}>Use output</Button>{/if}</div></td>
+                <td class="px-3 py-2"><div class="flex gap-1">{#if isActive(job)}<Button variant="destructive" size="sm" onclick={() => cancel(job)}><Square class="size-3" />Cancel</Button>{:else if job.state === "failed" && job.operation === "pipeline"}<Button variant="outline" size="sm" onclick={() => retryPipeline(job)}>Retry failed step</Button>{:else if job.state === "completed" && job.output}{#if isGGUFOutput(job)}<Button variant="outline" size="sm" onclick={() => useOutput(job)}>Use output</Button>{/if}<Button variant="outline" size="sm" onclick={() => useOutputInPipeline(job)}>Use in pipeline</Button>{/if}</div></td>
               </tr>
             {/each}
           </tbody>

@@ -1,4 +1,4 @@
-import type { MantleTask, HFModel, HFFile, LocalModel, BackendEntry, DatasetInspection, EvaluateRequest, ExportLoRARequest, HashRequest, MergeRequest, PruneRequest, QuantizeRequest, RegisterStudioModelRequest, SplitRequest, StudioCatalogArtifact, StudioEvaluation, StudioLineageEdge, StudioModelInspection, StudioPipelineRequest, StudioPipelineTemplate, StudioRetentionPolicy, StudioRetentionPreview, StudioSchedulerStatus, StudioUtilityRequest, TrainQLoRARequest } from "../lib/types";
+import type { MantleTask, HFModel, HFFile, LocalModel, BackendEntry, DatasetInspection, DistillRequest, EvaluateRequest, ExportLoRARequest, HashRequest, MergeRequest, PruneRequest, QuantizeRequest, RegisterStudioModelRequest, SplitRequest, StudioCatalogArtifact, StudioEvaluation, StudioLineageEdge, StudioModelInspection, StudioPipelineRequest, StudioPipelineTemplate, StudioRetentionPolicy, StudioRetentionPreview, StudioSchedulerStatus, StudioUtilityRequest, TrainQLoRARequest } from "../lib/types";
 import type { BackendSchema, ConfigGroupConfig, ConfigModelConfig, NamedGroupConfig, NamedModelConfig } from "../lib/types";
 import type { DatasetPreview, HFDataset, StudioDataset } from "../lib/types";
 import type { StudioPreflightReport, StudioProject, StudioResource } from "../lib/types";
@@ -323,6 +323,15 @@ export async function previewStudioDataset(name: string, limit = 10): Promise<Da
 	return studioDatasetResponse(await fetch(`/api/mantle/studio/datasets/preview?name=${encodeURIComponent(name)}&limit=${limit}`));
 }
 
+export async function deleteStudioDataset(path: string): Promise<boolean> {
+	try {
+		const res = await fetch(`/api/mantle/studio/datasets/${encodeURIComponent(path)}`, { method: "DELETE" });
+		return res.ok;
+	} catch {
+		return false;
+	}
+}
+
 export async function importStudioDataset(file: File, destination = ""): Promise<StudioDataset> {
 	const form = new FormData(); form.append("file", file); if (destination.trim()) form.append("destination", destination.trim());
 	return studioDatasetResponse(await fetch("/api/mantle/studio/datasets/import", { method: "POST", body: form }));
@@ -383,6 +392,10 @@ export async function startEvaluate(request: EvaluateRequest): Promise<MantleTas
 
 export async function startStudioUtility(request: StudioUtilityRequest): Promise<MantleTask> {
 	return startStudioOperation("utility", request);
+}
+
+export async function startDistill(request: DistillRequest): Promise<MantleTask> {
+	return startStudioOperation("distill", request);
 }
 
 export async function startStudioPipeline(request: StudioPipelineRequest): Promise<MantleTask> {
@@ -494,7 +507,7 @@ export async function applyStudioRetention(policy: StudioRetentionPolicy, token:
 	return await res.json();
 }
 
-async function startStudioOperation(operation: string, request: HashRequest | SplitRequest | MergeRequest | PruneRequest | TrainQLoRARequest | ExportLoRARequest | EvaluateRequest | StudioUtilityRequest | RegisterStudioModelRequest): Promise<MantleTask> {
+async function startStudioOperation(operation: string, request: HashRequest | SplitRequest | MergeRequest | PruneRequest | TrainQLoRARequest | ExportLoRARequest | EvaluateRequest | StudioUtilityRequest | RegisterStudioModelRequest | DistillRequest): Promise<MantleTask> {
 	const res = await fetch(`/api/mantle/studio/${operation}`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json", ...studioProjectHeaders() },
