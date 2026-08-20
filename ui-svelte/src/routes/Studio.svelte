@@ -8,7 +8,9 @@
   import * as Switch from "$lib/components/ui/switch/index.js";
   import LogPanel from "../components/LogPanel.svelte";
   import StudioResourcePicker from "../components/StudioResourcePicker.svelte";
+  import PipelineStepEditor from "../components/PipelineStepEditor.svelte";
   import { cancelStudioJob, getStudioPreflight, inspectStudioDataset, inspectStudioModel, listStudioPipelineTemplates, listStudioResources, listTasks, startEvaluate, startExportLoRA, startHash, startMerge, startPrune, startQuantize, startSplit, startStudioPipeline, startTrainQLoRA, streamTaskProgress } from "../lib/mantleApi";
+  import { buildPipelineSteps, stepsFromTemplate, type DraftStep } from "../lib/pipelineSteps";
   import type { DatasetInspection, MantleTask, StudioModelInspection, StudioPipelineTemplate, StudioPreflightReport, StudioResource } from "../lib/types";
 
   const quantTypes = [
@@ -16,7 +18,7 @@
     "IQ4_XS", "IQ4_NL", "IQ3_M", "IQ2_M", "TQ1_0", "TQ2_0", "F16", "BF16",
   ];
   const recipes = [
-    { id: "quantize", title: "Execute Pipeline", description: "Inspect, recommend a quantization, then benchmark the result.", operation: "pipeline" as const },
+    { id: "quantize", title: "Fit a model to my hardware", description: "Inspect, recommend a quantization, then benchmark the result.", operation: "pipeline" as const },
     { id: "train", title: "Fine-tune with QLoRA", description: "Validate a dataset, train an adapter, and retain checkpoints.", operation: "train" as const },
     { id: "merge", title: "Merge model variants", description: "Combine compatible variants with TIES or evolutionary merging.", operation: "merge" as const },
     { id: "prune", title: "Prune with a quality gate", description: "Analyze importance, create profiles, and bound perplexity loss.", operation: "prune" as const },
@@ -25,7 +27,10 @@
 
   let resources = $state<StudioResource[]>([]);
   let pipelines = $state<StudioPipelineTemplate[]>([]);
-  let operation = $state<"pipeline" | "quantize" | "hash" | "split" | "merge" | "prune" | "train" | "export-lora" | "evaluate">("quantize");
+  let operation = $state<"pipeline" | "quantize" | "hash" | "split" | "merge" | "prune" | "train" | "export-lora" | "evaluate" | `template:${string}`>("quantize");
+  let templateSteps = $state<DraftStep[]>([]);
+  let templateName = $state("");
+  let isTemplateOperation = $derived(operation.startsWith("template:"));
   let loadingModels = $state(true);
   let input = $state("");
   let output = $state("");
@@ -119,6 +124,7 @@
   let jobActive = $derived(job?.state === "queued" || job?.state === "running");
   let canStart = $derived.by(() => {
     if (jobActive) return false;
+    if (isTemplateOperation) return Boolean(input) && templateSteps.length > 0;
     if (operation === "prune") {
       if (prunePhase === "profiles") return Boolean(pruneCache.trim() && pruneRatios.trim() && pruneOutputDir.trim());
       if (prunePhase === "inspect") return Boolean(input && pruneProfile.trim());
@@ -179,6 +185,14 @@
   function selectOperation(value: typeof operation) {
     operation = value;
     preflight = null;
+    if (value.startsWith("template:")) {
+      const id = value.slice("template:".length);
+      const template = pipelines.find((candidate) => candidate.id === id);
+      templateName = template?.name ?? "";
+      templateSteps = template ? stepsFromTemplate(template.pipeline.steps) : [];
+      return;
+    }
+    templateSteps = [];
     if (value === "quantize") output = defaultOutput(input, quantType);
     if (value === "split" && input) output = defaultOutput(input, "split");
     if (value === "merge" && input) output = defaultOutput(input, "merged");
@@ -238,6 +252,20 @@
     });
   }
 
+  async function runTemplatePipeline() {
+    if (!canStart) return;
+    starting = true;
+    error = "";
+    try {
+      const task = await startStudioPipeline({ name: templateName || "Pipeline", input, steps: buildPipelineSteps(templateSteps) });
+      trackJob(task);
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      starting = false;
+    }
+  }
+
   async function runQuantize() {
     if (!canStart) return;
     starting = true;
@@ -265,6 +293,7 @@
   async function runOperation() {
     if (!canStart) return;
     if (operation === "quantize") return runQuantize();
+    if (isTemplateOperation) return runTemplatePipeline();
     starting = true;
     error = "";
     try {
@@ -399,10 +428,6 @@
   <Card.Root class="shrink-0"><Card.Header><Card.Title>Start with an outcome</Card.Title><Card.Description>Recipes fill in safe defaults; every setting remains editable.</Card.Description></Card.Header><Card.Content class="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
     {#each recipes as recipe (recipe.id)}<button type="button" class="hover:bg-muted rounded-md border p-3 text-left" class:border-primary={activeRecipe === recipe.id} onclick={() => applyRecipe(recipe)}><span class="block text-sm font-medium">{recipe.title}</span><span class="text-muted-foreground mt-1 block text-xs">{recipe.description}</span></button>{/each}
   </Card.Content></Card.Root>
-  <Card.Root class="shrink-0"><Card.Header><Card.Title>Available pipelines</Card.Title><Card.Description>Select a pipeline to review its steps and execute it.</Card.Description></Card.Header><Card.Content class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-    {#each pipelines as pipeline (pipeline.id)}<a class="hover:bg-muted rounded-md border p-3 text-left" href={`/studio/pipelines?template=${encodeURIComponent(pipeline.id)}`}><span class="block text-sm font-medium">{pipeline.name}</span><span class="text-muted-foreground mt-1 block text-xs">{pipeline.pipeline.steps.length === 1 ? "1 step" : `${pipeline.pipeline.steps.length} steps`} · {pipeline.pipeline.steps.map((step) => step.operation).join(" → ")}</span></a>{/each}
-    {#if pipelines.length === 0}<span class="text-muted-foreground text-sm">No pipelines are available.</span>{/if}
-  </Card.Content></Card.Root>
   <Card.Root class="shrink-0 gap-0 py-0">
     <Card.Header class="border-b px-4 py-3">
       <div class="flex items-center gap-2">
@@ -414,7 +439,7 @@
     <Card.Content class="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.7fr)]">
       <div class="space-y-4">
         <div class="space-y-2">
-          <Label.Root for="studio-operation">Pipeline</Label.Root>
+          <Label.Root for="studio-operation">Tool/Recipe</Label.Root>
           <select id="studio-operation" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
             value={operation} onchange={(event) => selectOperation(event.currentTarget.value as typeof operation)} disabled={jobActive}>
             <option value="quantize">Quantize / requantize</option>
@@ -426,6 +451,11 @@
             <option value="train">QLoRA / SFT training</option>
             <option value="export-lora">Export / merge LoRA</option>
             <option value="evaluate">Benchmark / perplexity</option>
+            {#if pipelines.length}
+              <optgroup label="Custom pipelines">
+                {#each pipelines as pipeline (pipeline.id)}<option value={`template:${pipeline.id}`}>{pipeline.name}</option>{/each}
+              </optgroup>
+            {/if}
           </select>
         </div>
         <StudioResourcePicker id="studio-model" label="Input model" bind:value={input} {resources} types={["model"]} placeholder={loadingModels ? "Loading models…" : "Search models and generated artifacts"} disabled={loadingModels || jobActive} onValueChange={(value) => void selectModel(value)} />
@@ -449,7 +479,13 @@
           </div>
         {/if}
 
-        {#if operation === "quantize" || operation === "pipeline"}
+        {#if isTemplateOperation}
+          <div class="space-y-2">
+            <Label.Root for="template-name">Pipeline name</Label.Root>
+            <Input id="template-name" bind:value={templateName} disabled={jobActive} />
+          </div>
+          <PipelineStepEditor bind:steps={templateSteps} {resources} idPrefix="studio-template" />
+        {:else if operation === "quantize" || operation === "pipeline"}
         <div class="grid gap-3 sm:grid-cols-2">
           <div class="space-y-2">
             <Label.Root for="quant-type">Output type</Label.Root>
@@ -673,7 +709,7 @@
           {/if}
           <Button onclick={runOperation} disabled={!canStart || starting}>
             {#if starting}<Loader2 class="size-4 animate-spin" />{:else}<Play class="size-4" />{/if}
-            {operation === "pipeline" ? "Run pipeline" : operation === "hash" ? "Calculate hash" : operation === "merge" ? "Merge models" : operation === "prune" ? `Run ${prunePhase}` : operation === "train" ? "Start training" : operation === "export-lora" ? "Export model" : operation === "evaluate" ? "Run evaluation" : dryRun ? "Build plan" : operation === "split" ? "Split model" : "Quantize"}
+            {isTemplateOperation ? "Run pipeline" : operation === "pipeline" ? "Run pipeline" : operation === "hash" ? "Calculate hash" : operation === "merge" ? "Merge models" : operation === "prune" ? `Run ${prunePhase}` : operation === "train" ? "Start training" : operation === "export-lora" ? "Export model" : operation === "evaluate" ? "Run evaluation" : dryRun ? "Build plan" : operation === "split" ? "Split model" : "Quantize"}
           </Button>
         </div>
       </div>
