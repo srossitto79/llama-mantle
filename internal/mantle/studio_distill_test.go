@@ -53,6 +53,110 @@ func TestDistill_RejectsUnsupportedReasoningEffort(t *testing.T) {
 	}
 }
 
+func TestDistill_AllowsNoneReasoningEffort(t *testing.T) {
+	req := DistillRequest{Model: "big", ServerURL: "http://127.0.0.1:8080/v1/chat/completions", ReasoningEffort: "none"}
+	if err := validateStudioDistillRequest(req); err != nil {
+		t.Fatalf("expected \"none\" reasoning effort to be accepted, got %v", err)
+	}
+}
+
+func TestDistill_RejectsInvalidReasoningBudget(t *testing.T) {
+	budget := -2
+	req := DistillRequest{Model: "big", ServerURL: "http://127.0.0.1:8080/v1/chat/completions", ReasoningBudgetTokens: &budget}
+	if err := validateStudioDistillRequest(req); err == nil {
+		t.Fatal("expected error for reasoning budget below -1")
+	}
+}
+
+func TestDistill_SendsReasoningEffortNoneAndZeroBudget(t *testing.T) {
+	var raw map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatal(err)
+		}
+		_ = json.NewEncoder(w).Encode(studioDistillChatResponse{
+			Choices: []struct {
+				Message struct {
+					Content string `json:"content"`
+				} `json:"message"`
+			}{{Message: struct {
+				Content string `json:"content"`
+			}{Content: "ok"}}},
+		})
+	}))
+	defer server.Close()
+
+	modelsDir := t.TempDir()
+	writeDistillSourceDataset(t, modelsDir, []string{"only prompt"})
+
+	budget := 0
+	tm := NewTaskManager(nil)
+	task, err := tm.StartDistill(DistillRequest{
+		SourceDataset:         "datasets/prompts.jsonl",
+		Output:                "datasets/distilled.jsonl",
+		ServerURL:             server.URL,
+		Model:                 "big-model",
+		ReasoningEffort:       "none",
+		ReasoningBudgetTokens: &budget,
+	}, modelsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForTaskState(t, task, TaskCompleted)
+
+	if raw["reasoning_effort"] != "none" {
+		t.Fatalf("reasoning_effort = %v, want \"none\"", raw["reasoning_effort"])
+	}
+	budgetValue, present := raw["reasoning_budget_tokens"]
+	if !present {
+		t.Fatal("expected reasoning_budget_tokens to be present in the wire request")
+	}
+	if budgetValue != float64(0) {
+		t.Fatalf("reasoning_budget_tokens = %v, want 0", budgetValue)
+	}
+}
+
+func TestDistill_OmitsReasoningFieldsWhenUnset(t *testing.T) {
+	var raw map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatal(err)
+		}
+		_ = json.NewEncoder(w).Encode(studioDistillChatResponse{
+			Choices: []struct {
+				Message struct {
+					Content string `json:"content"`
+				} `json:"message"`
+			}{{Message: struct {
+				Content string `json:"content"`
+			}{Content: "ok"}}},
+		})
+	}))
+	defer server.Close()
+
+	modelsDir := t.TempDir()
+	writeDistillSourceDataset(t, modelsDir, []string{"only prompt"})
+
+	tm := NewTaskManager(nil)
+	task, err := tm.StartDistill(DistillRequest{
+		SourceDataset: "datasets/prompts.jsonl",
+		Output:        "datasets/distilled.jsonl",
+		ServerURL:     server.URL,
+		Model:         "big-model",
+	}, modelsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForTaskState(t, task, TaskCompleted)
+
+	if _, present := raw["reasoning_budget_tokens"]; present {
+		t.Fatalf("expected reasoning_budget_tokens to be omitted when unset, got %v", raw["reasoning_budget_tokens"])
+	}
+	if _, present := raw["reasoning_effort"]; present {
+		t.Fatalf("expected reasoning_effort to be omitted when blank, got %v", raw["reasoning_effort"])
+	}
+}
+
 func TestDistill_GeneratesDatasetFromTeacherModel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Authorization"); got != "Bearer secret-key" {

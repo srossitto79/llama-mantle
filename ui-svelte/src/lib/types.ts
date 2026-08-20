@@ -634,7 +634,8 @@ export interface DistillRequest {
 	topP?: number;
 	topK?: number;
 	maxTokens?: number;
-	reasoningEffort?: "" | "low" | "medium" | "high";
+	reasoningEffort?: "" | "none" | "low" | "medium" | "high";
+	reasoningBudgetTokens?: number;
 	stop?: string[];
 	concurrency?: number;
 	timeoutSeconds?: number;

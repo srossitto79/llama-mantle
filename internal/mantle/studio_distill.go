@@ -28,25 +28,31 @@ import (
 // underlying trainer only supervises the final assistant turn of each JSONL
 // line (see finetune_qlora.cpp's last_assistant_index handling).
 type DistillRequest struct {
-	SourceDataset   string   `json:"sourceDataset"`
-	PromptField     string   `json:"promptField,omitempty"`
-	Output          string   `json:"output"`
-	Shuffle         bool     `json:"shuffle,omitempty"`
-	Seed            int      `json:"seed,omitempty"`
-	MaxSamples      int      `json:"maxSamples,omitempty"`
-	ServerURL       string   `json:"serverUrl"`
-	APIKey          string   `json:"apiKey,omitempty"`
-	Model           string   `json:"model"`
-	SystemPrompt    string   `json:"systemPrompt,omitempty"`
-	Temperature     float64  `json:"temperature,omitempty"`
-	TopP            float64  `json:"topP,omitempty"`
-	TopK            int      `json:"topK,omitempty"`
-	MaxTokens       int      `json:"maxTokens,omitempty"`
-	ReasoningEffort string   `json:"reasoningEffort,omitempty"`
-	Stop            []string `json:"stop,omitempty"`
-	Concurrency     int      `json:"concurrency,omitempty"`
-	TimeoutSeconds  int      `json:"timeoutSeconds,omitempty"`
-	Retries         int      `json:"retries,omitempty"`
+	SourceDataset   string  `json:"sourceDataset"`
+	PromptField     string  `json:"promptField,omitempty"`
+	Output          string  `json:"output"`
+	Shuffle         bool    `json:"shuffle,omitempty"`
+	Seed            int     `json:"seed,omitempty"`
+	MaxSamples      int     `json:"maxSamples,omitempty"`
+	ServerURL       string  `json:"serverUrl"`
+	APIKey          string  `json:"apiKey,omitempty"`
+	Model           string  `json:"model"`
+	SystemPrompt    string  `json:"systemPrompt,omitempty"`
+	Temperature     float64 `json:"temperature,omitempty"`
+	TopP            float64 `json:"topP,omitempty"`
+	TopK            int     `json:"topK,omitempty"`
+	MaxTokens       int     `json:"maxTokens,omitempty"`
+	ReasoningEffort string  `json:"reasoningEffort,omitempty"`
+	// ReasoningBudgetTokens caps how many tokens a reasoning model may spend
+	// thinking before its answer, per llama-server's "reasoning_budget_tokens"
+	// request field: -1 unrestricted, 0 forces an immediate end (no thinking),
+	// N>0 caps it. A pointer so 0 (a real, meaningful value) is distinguishable
+	// from "not set" (omit the field and let the server/template decide).
+	ReasoningBudgetTokens *int     `json:"reasoningBudgetTokens,omitempty"`
+	Stop                  []string `json:"stop,omitempty"`
+	Concurrency           int      `json:"concurrency,omitempty"`
+	TimeoutSeconds        int      `json:"timeoutSeconds,omitempty"`
+	Retries               int      `json:"retries,omitempty"`
 	// LastTurnOnly regenerates only the final assistant turn of a chat source
 	// record, copying every earlier turn through verbatim. The default (false)
 	// regenerates every assistant turn in sequence, so the whole retrace comes
@@ -73,8 +79,11 @@ func validateStudioDistillRequest(req DistillRequest) error {
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
 		return fmt.Errorf("distillation server URL must be an HTTP(S) URL without embedded credentials")
 	}
-	if !stringAllowed(req.ReasoningEffort, "", "low", "medium", "high") {
+	if !stringAllowed(req.ReasoningEffort, "", "none", "low", "medium", "high") {
 		return fmt.Errorf("unsupported reasoning effort %q", req.ReasoningEffort)
+	}
+	if req.ReasoningBudgetTokens != nil && *req.ReasoningBudgetTokens < -1 {
+		return fmt.Errorf("reasoning budget tokens must be -1 (unrestricted), 0 (no thinking), or positive")
 	}
 	if req.MaxSamples < 0 || req.Seed < 0 {
 		return fmt.Errorf("maximum samples and seed must not be negative")
@@ -125,7 +134,8 @@ func (tm *TaskManager) StartDistill(req DistillRequest, modelsDir string) (*Task
 		"sourceDataset": sourceName, "promptField": req.PromptField, "shuffle": req.Shuffle,
 		"maxSamples": req.MaxSamples, "serverUrl": req.ServerURL, "model": req.Model,
 		"temperature": req.Temperature, "topP": req.TopP, "topK": req.TopK, "maxTokens": req.MaxTokens,
-		"reasoningEffort": req.ReasoningEffort, "concurrency": req.Concurrency, "retries": req.Retries,
+		"reasoningEffort": req.ReasoningEffort, "reasoningBudgetTokens": req.ReasoningBudgetTokens,
+		"concurrency": req.Concurrency, "retries": req.Retries,
 		"lastTurnOnly": req.LastTurnOnly,
 	})
 	if err := tm.enqueueStudioTaskWithOutputs(task, StudioJobIO, []string{outputPath}, func() {
@@ -454,14 +464,15 @@ func (tm *TaskManager) runStudioDistill(task *Task, req DistillRequest, sourcePa
 }
 
 type studioDistillChatRequest struct {
-	Model           string                 `json:"model"`
-	Messages        []studioDistillMessage `json:"messages"`
-	Temperature     float64                `json:"temperature,omitempty"`
-	TopP            float64                `json:"top_p,omitempty"`
-	TopK            int                    `json:"top_k,omitempty"`
-	MaxTokens       int                    `json:"max_tokens,omitempty"`
-	Stop            []string               `json:"stop,omitempty"`
-	ReasoningEffort string                 `json:"reasoning_effort,omitempty"`
+	Model                 string                 `json:"model"`
+	Messages              []studioDistillMessage `json:"messages"`
+	Temperature           float64                `json:"temperature,omitempty"`
+	TopP                  float64                `json:"top_p,omitempty"`
+	TopK                  int                    `json:"top_k,omitempty"`
+	MaxTokens             int                    `json:"max_tokens,omitempty"`
+	Stop                  []string               `json:"stop,omitempty"`
+	ReasoningEffort       string                 `json:"reasoning_effort,omitempty"`
+	ReasoningBudgetTokens *int                   `json:"reasoning_budget_tokens,omitempty"`
 }
 
 type studioDistillChatResponse struct {
@@ -479,6 +490,7 @@ func studioDistillComplete(ctx context.Context, client *http.Client, req Distill
 	body := studioDistillChatRequest{
 		Model: req.Model, Messages: messages, Temperature: req.Temperature, TopP: req.TopP,
 		TopK: req.TopK, MaxTokens: req.MaxTokens, Stop: req.Stop, ReasoningEffort: req.ReasoningEffort,
+		ReasoningBudgetTokens: req.ReasoningBudgetTokens,
 	}
 	encoded, err := json.Marshal(body)
 	if err != nil {
