@@ -21,11 +21,14 @@ services:
       - /backends
       - -watch-config
     volumes:
-      # - /mnt/storage/lm_storage/models/gguf:/models
-      # - /mnt/storage/lm_storage/backends:/backends
-      # - /mnt/storage/lm_storage/configs/config.yaml:/etc/llama-swap/config/config.yaml
-      # - /mnt/storage/ComfyUI/models:/ComfyUI-Models
-      - /mnt/c/Users/sross/.lmstudio/models:/models
+      # - /mnt/f/lm_storage/models/gguf:/models
+      # - /mnt/f/lm_storage/backends:/backends
+      # - /mnt/f/lm_storage/configs/config.yaml:/etc/llama-swap/config/config.yaml
+      # - /mnt/f/ComfyUI/models:/ComfyUI-Models
+      # - /mnt/c/Users/sross/.lmstudio/models:/models
+      - /home/sross/gguf_models:/models
+      - /mnt/f/huggingface:/root/.cache/huggingface
+      - /mnt/f/llm-arena-storage/models:/models2
       - /mnt/c/Users/sross/.ollama/models/blobs:/mnt/c/Users/sross/.ollama/models/blobs
       - ./backends/:/backends/
       - ./config.yaml:/etc/llama-swap/config/config.yaml
@@ -42,9 +45,9 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - /mnt/storage/open-webui-data:/app/backend/data
+      - /mnt/f/open-webui-data:/app/backend/data
     environment:
-      OLLAMA_BASE_URL: http://llama-swap:8080
+      OPENAI_BASE_URL: http://llama-swap:8080/v1
       WEBUI_SECRET_KEY: ""
     restart: unless-stopped
     depends_on:
