@@ -39,7 +39,7 @@ func (h *Handler) registerIntelligenceRoutes(mux *http.ServeMux) {
 	}
 	for _, route := range []string{
 		"GET config", "GET results", "GET run/status", "GET run/stream",
-		"POST run", "POST run/stop", "GET runs", "GET runs/{id}",
+		"POST run", "POST run/stop", "GET runs", "GET runs/{id}", "DELETE runs/{id}",
 		"GET download/status", "POST download/polyglot", "POST download/swebench",
 	} {
 		method, path, _ := strings.Cut(route, " ")

@@ -38,6 +38,26 @@ func TestIntelligence_Proxy(t *testing.T) {
 	}
 }
 
+func TestIntelligence_ProxyDelete(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/runs/abc123" || r.Method != http.MethodDelete {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer upstream.Close()
+	t.Setenv("LLAMA_INTELLIGENCE_URL", upstream.URL)
+	mux := http.NewServeMux()
+	(&Handler{}).registerIntelligenceRoutes(mux)
+	r := httptest.NewRequest(http.MethodDelete, "/api/mantle/studio/intelligence/runs/abc123", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusOK || w.Body.String() != `{"ok":true}` {
+		t.Fatalf("unexpected response: %d %s", w.Code, w.Body)
+	}
+}
+
 func TestIntelligence_Unconfigured(t *testing.T) {
 	t.Setenv("LLAMA_INTELLIGENCE_URL", "")
 	mux := http.NewServeMux()

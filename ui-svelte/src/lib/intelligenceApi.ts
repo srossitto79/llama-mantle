@@ -1,5 +1,8 @@
 export const intelligenceURL = "/api/mantle/studio/intelligence";
 
+export const REASONING_EFFORTS = ["off", "low", "medium", "high", "xhigh", "thinking"] as const;
+export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
+
 export interface IntelligenceConfig {
   models: { id: string; name: string }[];
   profiles: { id: string; description: string }[];
@@ -11,6 +14,7 @@ export interface IntelligenceRun {
   started_at: number;
   suite_sha256?: string;
   params: { profile: string; models: string[] };
+  settings?: { temperature: number; max_tokens: number; timeout: number; reasoning_effort?: string };
   totals?: { items_done: number; items_total: number; score: number; max_score: number };
   current?: { title: string; model_id: string; item_id: string; content: string; reasoning: string; content_chars: number; reasoning_chars: number };
   error?: string;
@@ -47,6 +51,12 @@ export async function intelligenceRequest<T>(path: string, body?: unknown): Prom
   const value = await response.json();
   if (!response.ok) throw new Error(value.error || `HTTP ${response.status}`);
   return value as T;
+}
+
+export async function deleteIntelligenceRun(runID: string): Promise<void> {
+  const response = await fetch(`${intelligenceURL}/runs/${runID}`, { method: "DELETE" });
+  const value = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(value.error || `HTTP ${response.status}`);
 }
 
 // Unsupported and diagnostic items must not inflate attempted coverage.

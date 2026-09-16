@@ -2,14 +2,16 @@
   import { onMount } from "svelte";
   import { link } from "svelte-spa-router";
   import { Button } from "$lib/components/ui/button/index.js";
-  import { intelligenceRequest, intelligenceURL, type IntelligenceConfig, type IntelligenceRun, type IntelligenceDownload } from "$lib/intelligenceApi";
+  import { intelligenceRequest, intelligenceURL, REASONING_EFFORTS, type IntelligenceConfig, type IntelligenceRun, type IntelligenceDownload } from "$lib/intelligenceApi";
 
   let config = $state<IntelligenceConfig | null>(null);
   let selected = $state<string[]>([]);
   let profile = $state("quick");
+  let useCustomTemperature = $state(true);
   let temperature = $state(0);
-  let timeout = $state(300);
-  let maxTokens = $state(8192);
+  let timeout = $state(5400);
+  let maxTokens = $state(65536);
+  let reasoningEffort = $state("");
   let resume = $state(false);
   let run = $state<IntelligenceRun | null>(null);
   let download = $state<IntelligenceDownload>({ state: "idle", logs: [] });
@@ -113,16 +115,29 @@
           </div>
           <label for="intelligence-profile" class="block text-sm">Profile</label><select id="intelligence-profile" class="bg-background block w-full rounded-md border p-2" bind:value={profile}>{#each config.profiles as p}<option value={p.id}>{p.id}</option>{/each}</select>
           <p class="text-muted-foreground text-sm">{config.profiles.find(p => p.id === profile)?.description}</p>
-          <details><summary class="cursor-pointer text-sm">Advanced settings</summary>
+          <details open><summary class="cursor-pointer text-sm">Advanced settings</summary>
             <div class="mt-3 grid grid-cols-2 gap-3">
-              <label class="text-sm">Temperature<input type="number" min="0" max="2" step="0.1" class="mt-1 w-full rounded border p-2" bind:value={temperature} /></label>
+              <label class="text-sm">
+                <span class="flex items-center gap-2"><input type="checkbox" bind:checked={useCustomTemperature} />Temperature</span>
+                {#if useCustomTemperature}
+                  <input type="number" min="0" max="2" step="0.1" class="mt-1 w-full rounded border p-2" bind:value={temperature} />
+                {:else}
+                  <input type="text" value="Default" disabled class="text-muted-foreground mt-1 w-full rounded border p-2" />
+                {/if}
+              </label>
+              <label class="text-sm">Thinking effort
+                <select class="bg-background mt-1 block w-full rounded-md border p-2" bind:value={reasoningEffort}>
+                  <option value="">Model default</option>
+                  {#each REASONING_EFFORTS as effort}<option value={effort}>{effort}</option>{/each}
+                </select>
+              </label>
               <label class="text-sm">Timeout (seconds)<input type="number" min="1" class="mt-1 w-full rounded border p-2" bind:value={timeout} /></label>
               <label class="text-sm">Maximum tokens<input type="number" min="1" class="mt-1 w-full rounded border p-2" bind:value={maxTokens} /></label>
             </div>
             <label class="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={resume} />Reuse matching answers from the latest results</label>
           </details>
         </fieldset>
-        <Button disabled={blocked || !selected.length || !(timeout > 0) || !(maxTokens > 0)} onclick={() => action("run", { models: selected, profile, temperature, timeout, max_tokens: maxTokens, only_missing: resume, stream: true })}>Start run</Button>
+        <Button disabled={blocked || !selected.length || !(timeout > 0) || !(maxTokens > 0)} onclick={() => action("run", { models: selected, profile, temperature: useCustomTemperature ? temperature : false, reasoning_effort: reasoningEffort, timeout, max_tokens: maxTokens, only_missing: resume, stream: true })}>Start run</Button>
       {/if}
     </section>
     <section class="space-y-4 rounded-xl border p-5">
