@@ -7,9 +7,9 @@
   import IntelligenceScoreBar from "../components/IntelligenceScoreBar.svelte";
   import IntelligenceCategoryRadar from "../components/IntelligenceCategoryRadar.svelte";
   import IntelligenceMeter from "../components/IntelligenceMeter.svelte";
-  import { CategoricalAssignment } from "$lib/intelligenceColors";
+  import { CategoricalAssignment, OUTCOME } from "$lib/intelligenceColors";
   import { isDarkMode } from "../stores/theme";
-  import { attemptedScore, deleteIntelligenceRun, intelligenceRequest, intelligenceURL, type IntelligenceRun, type IntelligenceResult } from "$lib/intelligenceApi";
+  import { attemptedScore, deleteIntelligenceRun, intelligenceRequest, intelligenceURL, loadHumanScores, needsHumanScore, saveHumanScore, type HumanScores, type IntelligenceItem, type IntelligenceRun, type IntelligenceResult } from "$lib/intelligenceApi";
 
   let runs = $state<IntelligenceRun[]>([]);
   let selected = $state<string[]>([]);
@@ -18,6 +18,8 @@
   let error = $state("");
   let busy = $state(false);
   let deletingID = $state("");
+  let humanScores = $state<HumanScores>({});
+  let savingScore = $state("");
   let generation = 0;
   let visible = $derived(runs.filter(r => `${r.params.profile} ${r.state} ${new Date(r.started_at * 1000).toLocaleString()}`.toLowerCase().includes(filter.toLowerCase())));
   let differentSuites = $derived(new Set(results.map(r => r.run.suite_sha256)).size > 1);
@@ -40,7 +42,7 @@
 
   let leaderboard = $derived.by(() =>
     results.flatMap(result => result.models.map(model => {
-      const attempted = attemptedScore(model.items);
+      const attempted = attemptedScore(model.items, { humanScores, modelID: model.model_id });
       return {
         label: multiRun ? `${model.model_name} · ${new Date(result.run.started_at * 1000).toLocaleDateString()}` : model.model_name,
         value: attempted.score, max: attempted.max,
@@ -51,13 +53,46 @@
   let kpis = $derived.by(() => {
     const allModels = results.flatMap(r => r.models);
     const uniqueModels = new Set(allModels.map(m => m.model_id));
-    const totalItems = allModels.reduce((n, m) => n + m.items.length, 0);
+    // Distinct items, not rows: comparing three runs of one model must not treble it.
+    const uniqueItems = new Set(allModels.flatMap(m => m.items.map(i => i.item_id)));
+    const awaiting = allModels.reduce(
+      (n, m) => n + attemptedScore(m.items, { humanScores, modelID: m.model_id }).awaitingHuman, 0);
     const best = leaderboard[0];
     return {
-      runs: results.length, models: uniqueModels.size, items: totalItems,
+      runs: results.length, models: uniqueModels.size, items: uniqueItems.size, awaiting,
       best: best ? { label: best.label, pct: best.max ? Math.round((best.value / best.max) * 100) : 0 } : null,
     };
   });
+
+  function outcomeColor(modelID: string, item: IntelligenceItem): string {
+    if (item.unsupported || item.grade?.unsupported) return OUTCOME.unsupported.color;
+    if (needsHumanScore(item)) {
+      const human = humanScores[item.item_id]?.[modelID];
+      if (typeof human !== "number") return OUTCOME.human.color;
+      return human >= item.max_score ? OUTCOME.pass.color : human > 0 ? OUTCOME.part.color : OUTCOME.fail.color;
+    }
+    if (item.raw?.error || item.error || item.truncated) return OUTCOME.none.color;
+    if (item.score >= item.max_score) return OUTCOME.pass.color;
+    return item.score > 0 ? OUTCOME.part.color : OUTCOME.fail.color;
+  }
+
+  function scoreFor(modelID: string, item: IntelligenceItem): number | undefined {
+    return humanScores[item.item_id]?.[modelID];
+  }
+  // The endpoint replaces every score for an item, so the other models' scores
+  // have to go back with it.
+  async function setHumanScore(modelID: string, item: IntelligenceItem, value: string) {
+    const key = `${item.item_id}:${modelID}`;
+    const merged = { ...humanScores[item.item_id] };
+    if (value === "") delete merged[modelID];
+    else merged[modelID] = Math.max(0, Math.min(item.max_score, Number(value)));
+    savingScore = key; error = "";
+    try {
+      await saveHumanScore(item.item_id, merged);
+      humanScores = { ...humanScores, [item.item_id]: merged };
+    } catch (e) { error = String(e); }
+    finally { savingScore = ""; }
+  }
 
   async function compare() {
     const request = ++generation;
@@ -72,6 +107,9 @@
     busy = true;
     try {
       runs = await intelligenceRequest<IntelligenceRun[]>("runs");
+      // Rubric scores are optional: an older companion has no such endpoint, and
+      // the page is still correct without them.
+      humanScores = await loadHumanScores().catch(() => humanScores);
       if (!selected.length && runs.length) selected = [runs[0].run_id];
       await compare();
     } catch (e) { error = String(e); busy = false; }
@@ -102,7 +140,8 @@
         <p class="text-muted-foreground text-xs">Models compared</p><p class="text-2xl font-semibold">{kpis.models}</p>
       </Card.Content></Card.Root>
       <Card.Root class="py-0"><Card.Content class="space-y-1 p-4">
-        <p class="text-muted-foreground text-xs">Items graded</p><p class="text-2xl font-semibold">{kpis.items}</p>
+        <p class="text-muted-foreground text-xs">Items covered</p><p class="text-2xl font-semibold">{kpis.items}</p>
+        {#if kpis.awaiting}<p class="text-muted-foreground text-xs">{kpis.awaiting} awaiting a score</p>{/if}
       </Card.Content></Card.Root>
       <Card.Root class="py-0"><Card.Content class="space-y-1 p-4">
         <p class="text-muted-foreground text-xs">Best attempted score</p>
@@ -134,9 +173,9 @@
   {#if leaderboard.length}
     <IntelligenceScoreBar title="Attempted score, best to worst" data={leaderboard} />
     <div class="overflow-x-auto rounded-xl border"><table class="w-full text-left text-sm"><thead class="bg-muted"><tr><th class="p-3">Model</th><th class="p-3">Run / profile</th><th class="p-3">Score / suite maximum</th><th class="p-3">Score / attempted maximum</th></tr></thead><tbody>
-      {#each results as result}{#each result.models as model}{@const attempted = attemptedScore(model.items)}<tr class="border-t"><td class="p-3 font-medium">{model.model_name}</td><td class="p-3">{new Date(result.run.started_at * 1000).toLocaleString()} · {result.run.params.profile}</td><td class="p-3">{model.totals.score} / {model.totals.max_total}</td><td class="p-3">{attempted.score} / {attempted.max}</td></tr>{/each}{/each}
+      {#each results as result}{#each result.models as model}{@const attempted = attemptedScore(model.items, { humanScores, modelID: model.model_id })}<tr class="border-t"><td class="p-3 font-medium">{model.model_name}</td><td class="p-3">{new Date(result.run.started_at * 1000).toLocaleString()} · {result.run.params.profile}</td><td class="p-3">{model.totals.score} / {model.totals.max_total}</td><td class="p-3">{attempted.score} / {attempted.max}</td></tr>{/each}{/each}
     </tbody></table></div>
-    <p class="text-muted-foreground text-sm">Attempted totals exclude unsupported and diagnostic items. Different profiles or coverage are not directly comparable.</p>
+    <p class="text-muted-foreground text-sm">Attempted totals exclude unsupported, diagnostic and unscored rubric items. Different profiles or coverage are not directly comparable.</p>
   {/if}
 
   {#each results as result (result.run.run_id)}
@@ -159,7 +198,16 @@
         <details class="rounded-lg border p-4"><summary class="cursor-pointer font-medium">{model.model_name} · {model.totals.score} points</summary>
           <div class="my-3"><IntelligenceMeter value={model.totals.score} max={model.totals.max_total} color={modelColors.get(model.model_id) ?? "#898781"} /></div>
           <div class="my-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{#each Object.entries(model.totals.by_category) as [category, score]}<div class="bg-muted rounded p-3 text-sm"><IntelligenceMeter label={result.suite.categories.find(c => c.id === category)?.name ?? category} value={score} max={model.totals.by_category_max[category] ?? 0} color={modelColors.get(model.model_id) ?? "#898781"} /></div>{/each}</div>
-          <div class="space-y-2">{#each model.items as item (item.item_id)}<details class="rounded border p-3"><summary class="cursor-pointer text-sm">{item.title ?? item.item_id} · {item.score ?? 0} / {item.max_score}{item.role === "diagnostic" ? " · diagnostic" : ""}{item.unsupported || item.grade?.unsupported ? " · unsupported" : ""}</summary><div class="mt-3 space-y-3">
+          <div class="space-y-2">{#each model.items as item (item.item_id)}<details class="rounded border p-3"><summary class="flex cursor-pointer items-center gap-2 text-sm"><span class="size-2.5 shrink-0 rounded-[3px]" style="background:{outcomeColor(model.model_id, item)}"></span><span class="truncate">{item.title ?? item.item_id}</span><span class="text-muted-foreground shrink-0 tabular-nums">{needsHumanScore(item) ? scoreFor(model.model_id, item) ?? "—" : item.score ?? 0} / {item.max_score}</span>{#if item.role === "diagnostic"}<span class="text-muted-foreground shrink-0 text-xs">diagnostic</span>{/if}{#if item.unsupported || item.grade?.unsupported}<span class="text-muted-foreground shrink-0 text-xs">unsupported</span>{/if}</summary><div class="mt-3 space-y-3">
+            {#if needsHumanScore(item)}
+              <label class="flex flex-wrap items-center gap-2 text-sm">Rubric score
+                <input type="number" min="0" max={item.max_score} step="1" class="bg-background w-24 rounded-md border p-2"
+                  disabled={savingScore === `${item.item_id}:${model.model_id}`}
+                  value={scoreFor(model.model_id, item) ?? ""}
+                  onchange={(e) => void setHumanScore(model.model_id, item, e.currentTarget.value)} />
+                <span class="text-muted-foreground">of {item.max_score}</span>
+              </label>
+            {/if}
             {#if item.raw?.error || item.error}<p class="text-destructive text-sm">{item.raw?.error || item.error}</p>{/if}
             {#if item.grade?.note}<p class="text-muted-foreground text-sm">{item.grade.note}</p>{/if}
             <h3 class="text-sm font-medium">Model answer</h3><pre class="bg-muted max-h-72 overflow-auto rounded p-3 text-xs whitespace-pre-wrap">{item.answer || "No answer returned."}</pre>

@@ -40,6 +40,11 @@ if [ "$BACKEND" = "cuda" ]; then
     CMAKE_FLAGS+=(
         -DGGML_CUDA=ON
         -DGGML_VULKAN=OFF
+        # Only /src/llama.cpp/build is cache-mounted, so a re-run re-clones the
+        # sources with fresh mtimes and make rebuilds every object. ccache keys on
+        # content, so the rebuild costs nothing -- but only if nvcc goes through it
+        # too, which the C/CXX launchers above do not cover.
+        -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache
         "-DCMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES:?CMAKE_CUDA_ARCHITECTURES must be set}"
         "-DCMAKE_CUDA_FLAGS=-allow-unsupported-compiler"
         "-DCMAKE_EXE_LINKER_FLAGS=-Wl,-rpath-link,/usr/local/cuda/lib64/stubs -lcuda"

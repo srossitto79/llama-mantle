@@ -9,7 +9,25 @@ describe("intelligence scoring", () => {
       { ...item, score: 0 },
       { ...item, score: 10, role: "diagnostic" },
       { ...item, score: 0, unsupported: true },
-    ])).toEqual({ score: 7, max: 20 });
+    ])).toEqual({ score: 7, max: 20, awaitingHuman: 0 });
+  });
+
+  it("keeps unscored rubric items out of both sides of the ratio", () => {
+    const item = { item_id: "item", category: "coding", max_score: 10 };
+    expect(attemptedScore([
+      { ...item, score: 7 },
+      { ...item, item_id: "rubric", score: 0, needs_human: true },
+      { ...item, item_id: "rubric-nested", score: 0, grade: { needs_human: true } },
+    ])).toEqual({ score: 7, max: 10, awaitingHuman: 2 });
+  });
+
+  it("credits a rubric item once the operator has scored it for that model", () => {
+    const item = { item_id: "rubric", category: "coding", max_score: 10, score: 0, needs_human: true };
+    const humanScores = { rubric: { "model-a": 8 } };
+    expect(attemptedScore([item], { humanScores, modelID: "model-a" }))
+      .toEqual({ score: 8, max: 10, awaitingHuman: 0 });
+    expect(attemptedScore([item], { humanScores, modelID: "model-b" }))
+      .toEqual({ score: 0, max: 0, awaitingHuman: 1 });
   });
 });
 

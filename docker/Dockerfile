@@ -18,14 +18,7 @@ ARG BUILD_PROFILE=all
 
 FROM nvidia/cuda:12.9.1-devel-ubuntu24.04 AS builder-base-cuda
 
-ARG CMAKE_CUDA_ARCHITECTURES="75;86;89"
-ARG MAX_BUILD_JOBS=4
 ENV DEBIAN_FRONTEND=noninteractive
-ENV CMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES}
-ENV MAX_BUILD_JOBS=${MAX_BUILD_JOBS}
-ENV CCACHE_DIR=/ccache
-ENV CCACHE_MAXSIZE=2G
-ENV PATH="/usr/lib/ccache:${PATH}"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake git python3 python3-pip libssl-dev \
@@ -33,18 +26,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Below the package layer on purpose: retuning the job count or the
+# architecture list must not cost a full apt-get run as well.
+ARG CMAKE_CUDA_ARCHITECTURES="75;86;89"
+ARG MAX_BUILD_JOBS=4
+ENV CMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES}
+ENV MAX_BUILD_JOBS=${MAX_BUILD_JOBS}
+ENV CCACHE_DIR=/ccache
+ENV CCACHE_MAXSIZE=20G
+ENV PATH="/usr/lib/ccache:${PATH}"
+
 WORKDIR /build
 
 # ──
 
 FROM ubuntu:24.04 AS builder-base-vulkan
 
-ARG MAX_BUILD_JOBS=4
 ENV DEBIAN_FRONTEND=noninteractive
-ENV MAX_BUILD_JOBS=${MAX_BUILD_JOBS}
-ENV CCACHE_DIR=/ccache
-ENV CCACHE_MAXSIZE=2G
-ENV PATH="/usr/lib/ccache:${PATH}"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake git python3 python3-pip libssl-dev \
@@ -53,6 +51,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
     spirv-headers \
     && rm -rf /var/lib/apt/lists/*
+
+# Below the package layer on purpose: retuning the job count or the
+# architecture list must not cost a full apt-get run as well.
+ARG MAX_BUILD_JOBS=4
+ENV MAX_BUILD_JOBS=${MAX_BUILD_JOBS}
+ENV CCACHE_DIR=/ccache
+ENV CCACHE_MAXSIZE=20G
+ENV PATH="/usr/lib/ccache:${PATH}"
 
 WORKDIR /build
 

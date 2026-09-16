@@ -95,3 +95,26 @@ func TestIntelligence_Stream(t *testing.T) {
 		t.Fatalf("unexpected event: %s", buf)
 	}
 }
+
+func TestIntelligence_ProxySuiteAndHumanScores(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(r.Method + " " + r.URL.Path))
+	}))
+	defer upstream.Close()
+	t.Setenv("LLAMA_INTELLIGENCE_URL", upstream.URL)
+	mux := http.NewServeMux()
+	(&Handler{}).registerIntelligenceRoutes(mux)
+	for _, tc := range []struct{ method, path, want string }{
+		{"GET", "suite", "GET /api/suite"},
+		{"GET", "human-scores", "GET /api/human-scores"},
+		{"POST", "human-scores", "POST /api/human-scores"},
+		{"GET", "results", "GET /api/results"},
+	} {
+		r := httptest.NewRequest(tc.method, "/api/mantle/studio/intelligence/"+tc.path, strings.NewReader("{}"))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		if w.Code != http.StatusOK || w.Body.String() != tc.want {
+			t.Errorf("%s %s: got %d %q, want %q", tc.method, tc.path, w.Code, w.Body, tc.want)
+		}
+	}
+}

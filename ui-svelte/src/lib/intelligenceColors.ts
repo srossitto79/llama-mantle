@@ -33,6 +33,18 @@ export const STATUS = {
   critical: "#d03b3b",
 };
 
+/** One outcome, one colour and one wording, on every page that shows per-item state. */
+export const OUTCOME = {
+  pass: { color: STATUS.good, label: "Full marks" },
+  part: { color: STATUS.warning, label: "Partial" },
+  fail: { color: STATUS.critical, label: "No marks" },
+  none: { color: STATUS.serious, label: "No answer" },
+  human: { color: "#2a78d6", label: "Awaiting score" },
+  unsupported: { color: "#898781", label: "Unsupported" },
+} as const;
+
+export type Outcome = keyof typeof OUTCOME;
+
 /** Assigns a stable slot to each key in first-seen order, capped at 8; folds the rest to gray. */
 export class CategoricalAssignment {
   private order: string[] = [];

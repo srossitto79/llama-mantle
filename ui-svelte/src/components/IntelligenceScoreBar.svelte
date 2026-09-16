@@ -38,7 +38,7 @@
           borderColor: c.grid, borderWidth: 1,
           callbacks: {
             label: (ctx: { raw: unknown; dataIndex: number }) =>
-              ` ${ctx.raw} / ${data[ctx.dataIndex].max} attempted points`,
+              ` ${data[ctx.dataIndex].value} / ${data[ctx.dataIndex].max} attempted points (${ctx.raw}%)`,
           },
         },
       },

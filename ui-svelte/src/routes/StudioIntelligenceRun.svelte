@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { link } from "svelte-spa-router";
   import { Button } from "$lib/components/ui/button/index.js";
+  import IntelligenceRunHeatmap from "../components/IntelligenceRunHeatmap.svelte";
   import { intelligenceRequest, intelligenceURL, REASONING_EFFORTS, type IntelligenceConfig, type IntelligenceRun, type IntelligenceDownload } from "$lib/intelligenceApi";
 
   let config = $state<IntelligenceConfig | null>(null);
@@ -152,6 +153,7 @@
   <section class="space-y-3 rounded-xl border p-5">
     <div class="flex items-center justify-between"><h2 class="font-semibold">Live progress · {run?.state ?? "idle"}</h2>{#if active}<Button variant="outline" disabled={busy || stopping} onclick={() => action("run/stop")}>{stopping ? "Stopping…" : "Stop run"}</Button>{/if}</div>
     {#if run?.totals}<progress class="w-full" max={run.totals.items_total || 1} value={run.totals.items_done}></progress><p class="text-sm">{run.totals.items_done} / {run.totals.items_total} items</p>{/if}
+    {#if run?.models?.length}<IntelligenceRunHeatmap {run} />{/if}
     {#if stopping}<p class="text-muted-foreground text-sm">Stopping at the next runner checkpoint. An active request or code test may finish first.</p>{/if}
     {#if run?.error}<p class="text-destructive">{run.error}</p>{/if}
     {#if run?.current}<p class="text-sm font-medium">{run.current.title}</p><pre class="bg-muted max-h-72 overflow-auto rounded p-3 text-xs whitespace-pre-wrap">{run.current.content || run.current.reasoning || "Waiting for model response…"}</pre>{/if}
