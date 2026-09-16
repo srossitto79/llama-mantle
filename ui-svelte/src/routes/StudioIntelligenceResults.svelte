@@ -45,7 +45,7 @@
       const attempted = attemptedScore(model.items, { humanScores, modelID: model.model_id });
       return {
         label: multiRun ? `${model.model_name} · ${new Date(result.run.started_at * 1000).toLocaleDateString()}` : model.model_name,
-        value: attempted.score, max: attempted.max,
+        value: round1(attempted.score), max: round1(attempted.max),
         color: modelColors.get(model.model_id) ?? "#898781",
       };
     })).sort((a, b) => (b.max ? b.value / b.max : 0) - (a.max ? a.value / a.max : 0)));
@@ -78,6 +78,12 @@
 
   function scoreFor(modelID: string, item: IntelligenceItem): number | undefined {
     return humanScores[item.item_id]?.[modelID];
+  }
+  function round1(n: number): number {
+    return Math.round(n * 10) / 10;
+  }
+  function pct(value: number, max: number): number {
+    return max > 0 ? round1((value / max) * 100) : 0;
   }
   // The endpoint replaces every score for an item, so the other models' scores
   // have to go back with it.
@@ -173,7 +179,7 @@
   {#if leaderboard.length}
     <IntelligenceScoreBar title="Attempted score, best to worst" data={leaderboard} />
     <div class="overflow-x-auto rounded-xl border"><table class="w-full text-left text-sm"><thead class="bg-muted"><tr><th class="p-3">Model</th><th class="p-3">Run / profile</th><th class="p-3">Score / suite maximum</th><th class="p-3">Score / attempted maximum</th></tr></thead><tbody>
-      {#each results as result}{#each result.models as model}{@const attempted = attemptedScore(model.items, { humanScores, modelID: model.model_id })}<tr class="border-t"><td class="p-3 font-medium">{model.model_name}</td><td class="p-3">{new Date(result.run.started_at * 1000).toLocaleString()} · {result.run.params.profile}</td><td class="p-3">{model.totals.score} / {model.totals.max_total}</td><td class="p-3">{attempted.score} / {attempted.max}</td></tr>{/each}{/each}
+      {#each results as result}{#each result.models as model}{@const attempted = attemptedScore(model.items, { humanScores, modelID: model.model_id })}<tr class="border-t"><td class="p-3 font-medium">{model.model_name}</td><td class="p-3">{new Date(result.run.started_at * 1000).toLocaleString()} · {result.run.params.profile}</td><td class="p-3">{round1(model.totals.score)} / {round1(model.totals.max_total)}</td><td class="p-3">{round1(attempted.score)} / {round1(attempted.max)}</td></tr>{/each}{/each}
     </tbody></table></div>
     <p class="text-muted-foreground text-sm">Attempted totals exclude unsupported, diagnostic and unscored rubric items. Different profiles or coverage are not directly comparable.</p>
   {/if}
@@ -195,10 +201,11 @@
       {/if}
 
       {#each result.models as model (model.model_id)}
-        <details class="rounded-lg border p-4"><summary class="cursor-pointer font-medium">{model.model_name} · {model.totals.score} points</summary>
+        {@const attempted = attemptedScore(model.items, { humanScores, modelID: model.model_id })}
+        <details class="rounded-lg border p-4"><summary class="cursor-pointer font-medium">{model.model_name} · {round1(model.totals.score)} points ({pct(model.totals.score, model.totals.max_total)}%) - ({pct(attempted.score, attempted.max)}% on attempted)</summary>
           <div class="my-3"><IntelligenceMeter value={model.totals.score} max={model.totals.max_total} color={modelColors.get(model.model_id) ?? "#898781"} /></div>
           <div class="my-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{#each Object.entries(model.totals.by_category) as [category, score]}<div class="bg-muted rounded p-3 text-sm"><IntelligenceMeter label={result.suite.categories.find(c => c.id === category)?.name ?? category} value={score} max={model.totals.by_category_max[category] ?? 0} color={modelColors.get(model.model_id) ?? "#898781"} /></div>{/each}</div>
-          <div class="space-y-2">{#each model.items as item (item.item_id)}<details class="rounded border p-3"><summary class="flex cursor-pointer items-center gap-2 text-sm"><span class="size-2.5 shrink-0 rounded-[3px]" style="background:{outcomeColor(model.model_id, item)}"></span><span class="truncate">{item.title ?? item.item_id}</span><span class="text-muted-foreground shrink-0 tabular-nums">{needsHumanScore(item) ? scoreFor(model.model_id, item) ?? "—" : item.score ?? 0} / {item.max_score}</span>{#if item.role === "diagnostic"}<span class="text-muted-foreground shrink-0 text-xs">diagnostic</span>{/if}{#if item.unsupported || item.grade?.unsupported}<span class="text-muted-foreground shrink-0 text-xs">unsupported</span>{/if}</summary><div class="mt-3 space-y-3">
+          <div class="space-y-2">{#each model.items as item (item.item_id)}<details class="rounded border p-3"><summary class="flex cursor-pointer items-center gap-2 text-sm"><span class="size-2.5 shrink-0 rounded-[3px]" style="background:{outcomeColor(model.model_id, item)}"></span><span class="truncate">{item.title ?? item.item_id}</span><span class="text-muted-foreground shrink-0 tabular-nums">{needsHumanScore(item) ? scoreFor(model.model_id, item) ?? "—" : round1(item.score ?? 0)} / {item.max_score}</span>{#if item.role === "diagnostic"}<span class="text-muted-foreground shrink-0 text-xs">diagnostic</span>{/if}{#if item.unsupported || item.grade?.unsupported}<span class="text-muted-foreground shrink-0 text-xs">unsupported</span>{/if}</summary><div class="mt-3 space-y-3">
             {#if needsHumanScore(item)}
               <label class="flex flex-wrap items-center gap-2 text-sm">Rubric score
                 <input type="number" min="0" max={item.max_score} step="1" class="bg-background w-24 rounded-md border p-2"

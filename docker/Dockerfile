@@ -94,19 +94,6 @@ RUN --mount=type=cache,id=ccache-${BACKEND},target=/ccache \
     --mount=type=cache,id=sd-${BACKEND},target=/src/stable-diffusion.cpp/build \
     BACKEND=${BACKEND} bash /build/install-sd.sh "${SD_COMMIT_HASH}"
 
-# ── Build llama.cpp (slowest build, run last) ─────────────────────────
-
-FROM builder-base AS llama-build
-ARG BACKEND=cuda
-ARG LLAMA_COMMIT_HASH=master
-ARG BUILD_PROFILE=all
-COPY docker/install-llama.sh /build/
-COPY docker/llama-targets.sh /build/
-RUN --mount=type=cache,id=ccache-${BACKEND},target=/ccache \
-    --mount=type=cache,id=llama-${BACKEND},target=/src/llama.cpp/build \
-    BACKEND=${BACKEND} BUILD_PROFILE=${BUILD_PROFILE} \
-    bash /build/install-llama.sh "${LLAMA_COMMIT_HASH}"
-
 # ── Build ik_llama.cpp (optional, BUILD_IK_LLAMA=true to enable) ──────
 #
 # BuildKit only evaluates the selected branch, so when BUILD_IK_LLAMA=false
@@ -119,12 +106,38 @@ RUN mkdir -p /install/bin
 FROM builder-base-cuda AS ik-llama-true
 ARG IK_LLAMA_COMMIT_HASH=main
 COPY docker/install-ik-llama.sh /build/
+# Ordering barrier: waits for sd-build so the two CUDA compiles do not run
+# concurrently. See the comment above -- both vendor their own ggml-cuda, and
+# running them side by side has exhausted host memory and crashed the
+# compiler mid-file (heap corruption / SIGSEGV in cc1plus, not a source bug).
+COPY --from=sd-build /install/bin/sd-cli /tmp/.build-order-sd
 RUN --mount=type=cache,id=ccache-cuda,target=/ccache \
     --mount=type=cache,id=ik-llama-cuda,target=/src/ik_llama.cpp/build \
     bash /build/install-ik-llama.sh "${IK_LLAMA_COMMIT_HASH}"
 
 ARG BUILD_IK_LLAMA=true
 FROM ik-llama-${BUILD_IK_LLAMA} AS ik-llama-build
+
+# ── Build llama.cpp (slowest build, run last) ─────────────────────────
+
+FROM builder-base AS llama-build
+ARG BACKEND=cuda
+ARG LLAMA_COMMIT_HASH=master
+ARG BUILD_PROFILE=all
+COPY docker/install-llama.sh /build/
+COPY docker/llama-targets.sh /build/
+# Ordering barrier: waits for sd-build and ik-llama-build so llama.cpp -- named
+# "run last" below for a reason -- does not compile CUDA at the same time as
+# them. See the comment above ik-llama-true. The sd-build barrier is needed
+# directly, not just via ik-llama-true: when BUILD_IK_LLAMA=false (this
+# project's default), ik-llama-build resolves to the no-op ik-llama-false,
+# which has no dependency on sd-build and would let the two race again.
+COPY --from=sd-build /install/bin/sd-cli /tmp/.build-order-sd
+COPY --from=ik-llama-build /install/bin /tmp/.build-order-ik/
+RUN --mount=type=cache,id=ccache-${BACKEND},target=/ccache \
+    --mount=type=cache,id=llama-${BACKEND},target=/src/llama.cpp/build \
+    BACKEND=${BACKEND} BUILD_PROFILE=${BUILD_PROFILE} \
+    bash /build/install-llama.sh "${LLAMA_COMMIT_HASH}"
 
 # ── UI ────────────────────────────────────────────────────────────────
 

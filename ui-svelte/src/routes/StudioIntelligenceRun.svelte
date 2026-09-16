@@ -5,16 +5,41 @@
   import IntelligenceRunHeatmap from "../components/IntelligenceRunHeatmap.svelte";
   import { intelligenceRequest, intelligenceURL, REASONING_EFFORTS, type IntelligenceConfig, type IntelligenceRun, type IntelligenceDownload } from "$lib/intelligenceApi";
 
+  // Per-viewer convenience only: this component is fully remounted on every
+  // navigation (svelte-spa-router) and on reload, which would otherwise wipe
+  // the form and blank the live-progress section for one round trip. Reads
+  // and writes are wrapped because storage can throw (private browsing,
+  // disabled site data) and the page must still work without it.
+  const FORM_KEY = "intelligence-run-form";
+  const RUN_CACHE_KEY = "intelligence-run-snapshot";
+  interface FormCache {
+    selected: string[]; profile: string; useCustomTemperature: boolean;
+    temperature: number; timeout: number; maxTokens: number;
+    reasoningEffort: string; resume: boolean;
+  }
+  function loadCache<T>(key: string): T | null {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? (JSON.parse(raw) as T) : null;
+    } catch { return null; }
+  }
+  function saveCache(key: string, value: unknown) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* ignore */ }
+  }
+  const cachedForm = loadCache<FormCache>(FORM_KEY);
+
   let config = $state<IntelligenceConfig | null>(null);
-  let selected = $state<string[]>([]);
-  let profile = $state("quick");
-  let useCustomTemperature = $state(true);
-  let temperature = $state(0);
-  let timeout = $state(5400);
-  let maxTokens = $state(65536);
-  let reasoningEffort = $state("");
-  let resume = $state(false);
-  let run = $state<IntelligenceRun | null>(null);
+  let selected = $state<string[]>(cachedForm?.selected ?? []);
+  let profile = $state(cachedForm?.profile ?? "quick");
+  let useCustomTemperature = $state(cachedForm?.useCustomTemperature ?? true);
+  let temperature = $state(cachedForm?.temperature ?? 0);
+  let timeout = $state(cachedForm?.timeout ?? 5400);
+  let maxTokens = $state(cachedForm?.maxTokens ?? 65536);
+  let reasoningEffort = $state(cachedForm?.reasoningEffort ?? "");
+  let resume = $state(cachedForm?.resume ?? false);
+  // Seeded from cache so the heatmap and progress bar render immediately on
+  // mount instead of going blank until the first /run/status resolves.
+  let run = $state<IntelligenceRun | null>(loadCache<IntelligenceRun>(RUN_CACHE_KEY));
   let download = $state<IntelligenceDownload>({ state: "idle", logs: [] });
   let error = $state("");
   let configError = $state("");
@@ -29,7 +54,9 @@
 
   async function loadConfig() {
     const loaded = await intelligenceRequest<IntelligenceConfig>("config");
-    if (!config) {
+    // Server defaults apply only when nothing was restored from the cache —
+    // an explicit prior choice must not be overwritten on remount.
+    if (!config && !cachedForm) {
       temperature = loaded.defaults.temperature;
       timeout = loaded.defaults.timeout;
       maxTokens = loaded.defaults.max_tokens;
@@ -50,6 +77,11 @@
       if (disposed) return;
       const finishedDownload = download.state === "running" && prep.state !== "running";
       run = status;
+      // Tied to the full-snapshot refresh, not to per-token streaming updates
+      // below (those mutate run.current in place many times a second — caching
+      // on every one of them would hammer localStorage for no benefit, since
+      // it's the models/totals a remount needs, not in-flight streamed text).
+      saveCache(RUN_CACHE_KEY, status);
       download = prep;
       if (finishedDownload) await loadConfig();
       if (status.state === "running" || status.state === "starting") {
@@ -90,6 +122,9 @@
     } catch (e) { error = String(e); }
     finally { busy = false; }
   }
+  $effect(() => {
+    saveCache(FORM_KEY, { selected, profile, useCustomTemperature, temperature, timeout, maxTokens, reasoningEffort, resume } satisfies FormCache);
+  });
   onMount(() => {
     void loadConfig().catch(e => configError = String(e));
     void refresh();

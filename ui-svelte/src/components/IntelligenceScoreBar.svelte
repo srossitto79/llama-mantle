@@ -37,8 +37,10 @@
           backgroundColor: c.surface, titleColor: c.primary, bodyColor: c.secondary,
           borderColor: c.grid, borderWidth: 1,
           callbacks: {
-            label: (ctx: { raw: unknown; dataIndex: number }) =>
-              ` ${data[ctx.dataIndex].value} / ${data[ctx.dataIndex].max} attempted points (${ctx.raw}%)`,
+            label: (ctx: { dataIndex: number }) => {
+              const d = data[ctx.dataIndex];
+              return ` ${d.value} / ${d.max} - ${pct(d)}% success`;
+            },
           },
         },
       },
