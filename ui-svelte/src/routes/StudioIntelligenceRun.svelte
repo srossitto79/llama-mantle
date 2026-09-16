@@ -15,7 +15,7 @@
   interface FormCache {
     selected: string[]; profile: string; useCustomTemperature: boolean;
     temperature: number; timeout: number; maxTokens: number;
-    reasoningEffort: string; resume: boolean;
+    reasoningEffort: string; resume: boolean; retryFailed: boolean; retryUnsupported: boolean;
   }
   function loadCache<T>(key: string): T | null {
     try {
@@ -29,6 +29,7 @@
   const cachedForm = loadCache<FormCache>(FORM_KEY);
 
   let config = $state<IntelligenceConfig | null>(null);
+  let modelFilter = $state("");
   let selected = $state<string[]>(cachedForm?.selected ?? []);
   let profile = $state(cachedForm?.profile ?? "quick");
   let useCustomTemperature = $state(cachedForm?.useCustomTemperature ?? true);
@@ -37,6 +38,8 @@
   let maxTokens = $state(cachedForm?.maxTokens ?? 65536);
   let reasoningEffort = $state(cachedForm?.reasoningEffort ?? "");
   let resume = $state(cachedForm?.resume ?? false);
+  let retryFailed = $state(cachedForm?.retryFailed ?? false);
+  let retryUnsupported = $state(cachedForm?.retryUnsupported ?? false);
   // Seeded from cache so the heatmap and progress bar render immediately on
   // mount instead of going blank until the first /run/status resolves.
   let run = $state<IntelligenceRun | null>(loadCache<IntelligenceRun>(RUN_CACHE_KEY));
@@ -51,6 +54,9 @@
   let disposed = false;
   let active = $derived(run?.state === "starting" || run?.state === "running");
   let blocked = $derived(busy || active || download.state === "running");
+  let filteredModels = $derived(
+    config?.models.filter(m => m.name.toLowerCase().includes(modelFilter.trim().toLowerCase())) ?? [],
+  );
 
   async function loadConfig() {
     const loaded = await intelligenceRequest<IntelligenceConfig>("config");
@@ -123,7 +129,7 @@
     finally { busy = false; }
   }
   $effect(() => {
-    saveCache(FORM_KEY, { selected, profile, useCustomTemperature, temperature, timeout, maxTokens, reasoningEffort, resume } satisfies FormCache);
+    saveCache(FORM_KEY, { selected, profile, useCustomTemperature, temperature, timeout, maxTokens, reasoningEffort, resume, retryFailed, retryUnsupported } satisfies FormCache);
   });
   onMount(() => {
     void loadConfig().catch(e => configError = String(e));
@@ -144,10 +150,13 @@
       {:else}
         <fieldset disabled={blocked} class="space-y-3">
           <legend class="mb-2 text-sm">Models</legend>
+          {#if config.models.length}
+            <input type="text" placeholder="Filter models…" class="bg-background block w-full rounded-md border p-2 text-sm" bind:value={modelFilter} />
+          {/if}
           <div class="max-h-64 space-y-2 overflow-auto">
-            {#each config.models as model (model.id)}
+            {#each filteredModels as model (model.id)}
               <label class="flex items-center gap-2 text-sm"><input type="checkbox" bind:group={selected} value={model.id} />{model.name}</label>
-            {:else}<p class="text-muted-foreground text-sm">No models available. Configure models in Mantle, then refresh this page.</p>{/each}
+            {:else}<p class="text-muted-foreground text-sm">{config.models.length ? "No models match the filter." : "No models available. Configure models in Mantle, then refresh this page."}</p>{/each}
           </div>
           <label for="intelligence-profile" class="block text-sm">Profile</label><select id="intelligence-profile" class="bg-background block w-full rounded-md border p-2" bind:value={profile}>{#each config.profiles as p}<option value={p.id}>{p.id}</option>{/each}</select>
           <p class="text-muted-foreground text-sm">{config.profiles.find(p => p.id === profile)?.description}</p>
@@ -171,19 +180,25 @@
               <label class="text-sm">Maximum tokens<input type="number" min="1" class="mt-1 w-full rounded border p-2" bind:value={maxTokens} /></label>
             </div>
             <label class="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={resume} />Reuse matching answers from the latest results</label>
+            <label class="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={retryFailed} />Retry failed items</label>
+            {#if retryFailed}
+              <label class="mt-2 ml-6 flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={retryUnsupported} />Also retry unsupported items</label>
+            {/if}
           </details>
         </fieldset>
-        <Button disabled={blocked || !selected.length || !(timeout > 0) || !(maxTokens > 0)} onclick={() => action("run", { models: selected, profile, temperature: useCustomTemperature ? temperature : false, reasoning_effort: reasoningEffort, timeout, max_tokens: maxTokens, only_missing: resume, stream: true })}>Start run</Button>
+        <Button disabled={blocked || !selected.length || !(timeout > 0) || !(maxTokens > 0)} onclick={() => action("run", { models: selected, profile, temperature: useCustomTemperature ? temperature : false, reasoning_effort: reasoningEffort, timeout, max_tokens: maxTokens, only_missing: resume, retry_failed: retryFailed, retry_unsupported: retryFailed && retryUnsupported, stream: true })}>Start run</Button>
       {/if}
     </section>
-    <section class="space-y-4 rounded-xl border p-5">
-      <h2 class="font-semibold">External datasets</h2>
-      <p class="text-muted-foreground text-sm">Prepare polyglot exercises and SWE-bench tasks before using external profiles. Preparation and benchmark runs execute one at a time.</p>
-      <div class="flex flex-wrap gap-2"><Button variant="outline" disabled={blocked || !config} onclick={() => action("download/polyglot")}>Download Polyglot</Button><Button variant="outline" disabled={blocked || !config} onclick={() => action("download/swebench")}>Download SWE-bench</Button></div>
-      <p class="text-sm">{download.kind ?? "Preparation"}: {download.state}{download.finished_at ? ` · ${new Date(download.finished_at * 1000).toLocaleString()}` : ""}</p>
-      {#if download.error}<p class="text-destructive text-sm">{download.error}</p>{/if}
-      {#if download.logs.length}<pre class="bg-muted max-h-56 overflow-auto rounded p-3 text-xs whitespace-pre-wrap">{download.logs.join("\n")}</pre>{/if}
-    </section>
+    <details class="space-y-4 rounded-xl border p-5">
+      <summary class="cursor-pointer font-semibold">External datasets</summary>
+      <div class="mt-4 space-y-4">
+        <p class="text-muted-foreground text-sm">Prepare polyglot exercises and SWE-bench tasks before using external profiles. Preparation and benchmark runs execute one at a time.</p>
+        <div class="flex flex-wrap gap-2"><Button variant="outline" disabled={blocked || !config} onclick={() => action("download/polyglot")}>Download Polyglot</Button><Button variant="outline" disabled={blocked || !config} onclick={() => action("download/swebench")}>Download SWE-bench</Button></div>
+        <p class="text-sm">{download.kind ?? "Preparation"}: {download.state}{download.finished_at ? ` · ${new Date(download.finished_at * 1000).toLocaleString()}` : ""}</p>
+        {#if download.error}<p class="text-destructive text-sm">{download.error}</p>{/if}
+        {#if download.logs.length}<pre class="bg-muted max-h-56 overflow-auto rounded p-3 text-xs whitespace-pre-wrap">{download.logs.join("\n")}</pre>{/if}
+      </div>
+    </details>
   </div>
   <section class="space-y-3 rounded-xl border p-5">
     <div class="flex items-center justify-between"><h2 class="font-semibold">Live progress · {run?.state ?? "idle"}</h2>{#if active}<Button variant="outline" disabled={busy || stopping} onclick={() => action("run/stop")}>{stopping ? "Stopping…" : "Stop run"}</Button>{/if}</div>

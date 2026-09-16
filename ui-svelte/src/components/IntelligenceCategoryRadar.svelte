@@ -15,6 +15,20 @@
 
   let canvas: HTMLCanvasElement;
   let chart: Chart;
+  // Series a viewer has unchecked out of the legend — kept by label so a
+  // selection survives the series list changing shape (e.g. a new run loads).
+  let hidden = $state<Set<string>>(new Set());
+  function toggle(label: string) {
+    const next = new Set(hidden);
+    if (next.has(label)) next.delete(label); else next.add(label);
+    hidden = next;
+  }
+  function datasets() {
+    return series.map(s => ({
+      label: s.label, data: s.values, borderColor: s.color, backgroundColor: s.color + "1a",
+      borderWidth: 2, pointRadius: 3, pointBackgroundColor: s.color, hidden: hidden.has(s.label),
+    }));
+  }
 
   function buildOptions(dark: boolean) {
     const c = chartChrome(dark);
@@ -23,10 +37,9 @@
       maintainAspectRatio: false,
       animation: false as const,
       plugins: {
-        legend: {
-          display: series.length > 1, position: "bottom" as const,
-          labels: { color: c.secondary, usePointStyle: true, pointStyle: "circle" as const, font: { size: 11 } },
-        },
+        // Chart.js's plugin registry is shared across every chart on the page —
+        // this chart uses its own HTML legend (with selection checkboxes) instead.
+        legend: { display: false },
         tooltip: {
           backgroundColor: c.surface, titleColor: c.primary, bodyColor: c.secondary,
           borderColor: c.grid, borderWidth: 1,
@@ -47,13 +60,7 @@
   onMount(() => {
     chart = new Chart(canvas, {
       type: "radar",
-      data: {
-        labels: categories,
-        datasets: series.map(s => ({
-          label: s.label, data: s.values, borderColor: s.color, backgroundColor: s.color + "1a",
-          borderWidth: 2, pointRadius: 3, pointBackgroundColor: s.color,
-        })),
-      },
+      data: { labels: categories, datasets: datasets() },
       options: buildOptions($isDarkMode),
     });
     return () => chart.destroy();
@@ -64,10 +71,7 @@
     const dark = $isDarkMode;
     chart.options = buildOptions(dark) as never;
     chart.data.labels = categories;
-    chart.data.datasets = series.map(s => ({
-      label: s.label, data: s.values, borderColor: s.color, backgroundColor: s.color + "1a",
-      borderWidth: 2, pointRadius: 3, pointBackgroundColor: s.color,
-    }));
+    chart.data.datasets = datasets();
     chart.update("none");
   });
 </script>
@@ -75,6 +79,19 @@
 <Card.Root class="py-0">
   <Card.Content class="p-4">
     <h3 class="mb-2 text-sm font-medium">{title}</h3>
-    <div class="h-[280px]"><canvas bind:this={canvas}></canvas></div>
+    <div class="flex gap-4">
+      {#if series.length > 1}
+        <div class="flex max-h-[280px] flex-col flex-wrap gap-x-4 gap-y-1.5 text-xs">
+          {#each series as s (s.label)}
+            <label class="flex items-center gap-1.5" class:opacity-50={hidden.has(s.label)}>
+              <input type="checkbox" checked={!hidden.has(s.label)} onchange={() => toggle(s.label)} />
+              <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style="background:{s.color}"></span>
+              <span class="truncate">{s.label}</span>
+            </label>
+          {/each}
+        </div>
+      {/if}
+      <div class="h-[280px] min-w-0 flex-1"><canvas bind:this={canvas}></canvas></div>
+    </div>
   </Card.Content>
 </Card.Root>

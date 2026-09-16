@@ -3,7 +3,7 @@ services:
     image: llama-swap:unified-cuda
     build:
       context: .
-      dockerfile: docker/Dockerfile.simplified
+      dockerfile: docker/Dockerfile
       args:
         BACKEND: cuda
         MAX_BUILD_JOBS: 1
@@ -39,16 +39,3 @@ services:
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
       LD_LIBRARY_PATH: /usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu
     restart: unless-stopped
-
-  open-webui:
-    image: ghcr.io/open-webui/open-webui:main
-    ports:
-      - "8080:8080"
-    volumes:
-      - /mnt/f/open-webui-data:/app/backend/data
-    environment:
-      OPENAI_BASE_URL: http://llama-swap:8080/v1
-      WEBUI_SECRET_KEY: ""
-    restart: unless-stopped
-    depends_on:
-      - llama-swap

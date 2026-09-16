@@ -50,6 +50,47 @@
       };
     })).sort((a, b) => (b.max ? b.value / b.max : 0) - (a.max ? a.value / a.max : 0)));
 
+  interface TableRow {
+    modelID: string; modelName: string; startedAt: number; profile: string;
+    score: number; maxTotal: number; suitePct: number;
+    attemptedScoreValue: number; attemptedMax: number; attemptedPct: number;
+  }
+  let tableRows = $derived.by((): TableRow[] =>
+    results.flatMap(result => result.models.map(model => {
+      const attempted = attemptedScore(model.items, { humanScores, modelID: model.model_id });
+      return {
+        modelID: model.model_id, modelName: model.model_name,
+        startedAt: result.run.started_at, profile: result.run.params.profile,
+        score: round1(model.totals.score), maxTotal: round1(model.totals.max_total),
+        suitePct: pct(model.totals.score, model.totals.max_total),
+        attemptedScoreValue: round1(attempted.score), attemptedMax: round1(attempted.max),
+        attemptedPct: pct(attempted.score, attempted.max),
+      };
+    })));
+  type SortKey = "model" | "run" | "score" | "attempted" | "suitePct" | "attemptedPct";
+  let sortKey = $state<SortKey>("suitePct");
+  let sortDir = $state<"asc" | "desc">("desc");
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) sortDir = sortDir === "asc" ? "desc" : "asc";
+    else { sortKey = key; sortDir = key === "model" || key === "run" ? "asc" : "desc"; }
+  }
+  const SORT_VALUE: Record<SortKey, (r: TableRow) => number | string> = {
+    model: r => r.modelName.toLowerCase(),
+    run: r => r.startedAt,
+    score: r => r.score,
+    attempted: r => r.attemptedScoreValue,
+    suitePct: r => r.suitePct,
+    attemptedPct: r => r.attemptedPct,
+  };
+  let sortedRows = $derived.by(() => {
+    const get = SORT_VALUE[sortKey];
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...tableRows].sort((a, b) => {
+      const av = get(a), bv = get(b);
+      return av < bv ? -dir : av > bv ? dir : 0;
+    });
+  });
+
   let kpis = $derived.by(() => {
     const allModels = results.flatMap(r => r.models);
     const uniqueModels = new Set(allModels.map(m => m.model_id));
@@ -76,6 +117,14 @@
     return item.score > 0 ? OUTCOME.part.color : OUTCOME.fail.color;
   }
 
+  function sortedModels(result: IntelligenceResult) {
+    return [...result.models].sort((a, b) => {
+      const attemptedA = attemptedScore(a.items, { humanScores, modelID: a.model_id });
+      const attemptedB = attemptedScore(b.items, { humanScores, modelID: b.model_id });
+      return pct(attemptedB.score, attemptedB.max) - pct(attemptedA.score, attemptedA.max)
+        || pct(b.totals.score, b.totals.max_total) - pct(a.totals.score, a.totals.max_total);
+    });
+  }
   function scoreFor(modelID: string, item: IntelligenceItem): number | undefined {
     return humanScores[item.item_id]?.[modelID];
   }
@@ -178,8 +227,21 @@
 
   {#if leaderboard.length}
     <IntelligenceScoreBar title="Attempted score, best to worst" data={leaderboard} />
-    <div class="overflow-x-auto rounded-xl border"><table class="w-full text-left text-sm"><thead class="bg-muted"><tr><th class="p-3">Model</th><th class="p-3">Run / profile</th><th class="p-3">Score / suite maximum</th><th class="p-3">Score / attempted maximum</th></tr></thead><tbody>
-      {#each results as result}{#each result.models as model}{@const attempted = attemptedScore(model.items, { humanScores, modelID: model.model_id })}<tr class="border-t"><td class="p-3 font-medium">{model.model_name}</td><td class="p-3">{new Date(result.run.started_at * 1000).toLocaleString()} · {result.run.params.profile}</td><td class="p-3">{round1(model.totals.score)} / {round1(model.totals.max_total)}</td><td class="p-3">{round1(attempted.score)} / {round1(attempted.max)}</td></tr>{/each}{/each}
+    <div class="overflow-x-auto rounded-xl border"><table class="w-full text-left text-sm"><thead class="bg-muted"><tr>
+      {#each [["model", "Model"], ["run", "Run / profile"], ["score", "Score / suite maximum"], ["suitePct", "% of suite"], ["attempted", "Score / attempted maximum"], ["attemptedPct", "% attempted"]] as [key, label] (key)}
+        <th class="p-3"><button type="button" class="flex items-center gap-1 font-medium" onclick={() => toggleSort(key as SortKey)}>{label}{#if sortKey === key}<span class="text-muted-foreground">{sortDir === "asc" ? "▲" : "▼"}</span>{/if}</button></th>
+      {/each}
+    </tr></thead><tbody>
+      {#each sortedRows as row (row.modelID + row.startedAt)}
+        <tr class="border-t">
+          <td class="p-3 font-medium">{row.modelName}</td>
+          <td class="p-3">{new Date(row.startedAt * 1000).toLocaleString()} · {row.profile}</td>
+          <td class="p-3">{row.score} / {row.maxTotal}</td>
+          <td class="p-3 tabular-nums">{row.suitePct}%</td>
+          <td class="p-3">{row.attemptedScoreValue} / {row.attemptedMax}</td>
+          <td class="p-3 tabular-nums">{row.attemptedPct}%</td>
+        </tr>
+      {/each}
     </tbody></table></div>
     <p class="text-muted-foreground text-sm">Attempted totals exclude unsupported, diagnostic and unscored rubric items. Different profiles or coverage are not directly comparable.</p>
   {/if}
@@ -200,7 +262,7 @@
           }))} />
       {/if}
 
-      {#each result.models as model (model.model_id)}
+      {#each sortedModels(result) as model (model.model_id)}
         {@const attempted = attemptedScore(model.items, { humanScores, modelID: model.model_id })}
         <details class="rounded-lg border p-4"><summary class="cursor-pointer font-medium">{model.model_name} · {round1(model.totals.score)} points ({pct(model.totals.score, model.totals.max_total)}%) - ({pct(attempted.score, attempted.max)}% on attempted)</summary>
           <div class="my-3"><IntelligenceMeter value={model.totals.score} max={model.totals.max_total} color={modelColors.get(model.model_id) ?? "#898781"} /></div>
