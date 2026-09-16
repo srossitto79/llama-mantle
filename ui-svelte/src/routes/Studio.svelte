@@ -423,7 +423,7 @@
 
 <div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-2">
   {#if showWelcome}
-    <Card.Root class="border-primary/40 bg-primary/5 shrink-0"><Card.Header><div class="flex gap-3"><div class="min-w-0 flex-1"><Card.Title>Welcome to Llama Studio</Card.Title><Card.Description>Choose an outcome below. Studio will help select resources, check hardware fit, run the job, compare the result, and prepare it for serving.</Card.Description></div><Button size="sm" variant="ghost" onclick={dismissWelcome}>Dismiss</Button></div></Card.Header><Card.Content><ol class="grid gap-2 text-sm md:grid-cols-4"><li>1. Select or download a model</li><li>2. Choose a guided recipe</li><li>3. Check hardware fit</li><li>4. Run and review the artifacts</li></ol></Card.Content></Card.Root>
+    <Card.Root class="border-primary/40 bg-primary/5 shrink-0"><Card.Header><div class="flex gap-3"><div class="min-w-0 flex-1"><Card.Title>Welcome to Runner</Card.Title><Card.Description>Choose an outcome below. Runner will help select resources, check hardware fit, run the job, compare the result, and prepare it for serving.</Card.Description></div><Button size="sm" variant="ghost" onclick={dismissWelcome}>Dismiss</Button></div></Card.Header><Card.Content><ol class="grid gap-2 text-sm md:grid-cols-4"><li>1. Select or download a model</li><li>2. Choose a guided recipe</li><li>3. Check hardware fit</li><li>4. Run and review the artifacts</li></ol></Card.Content></Card.Root>
   {/if}
   <Card.Root class="shrink-0"><Card.Header><Card.Title>Start with an outcome</Card.Title><Card.Description>Recipes fill in safe defaults; every setting remains editable.</Card.Description></Card.Header><Card.Content class="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
     {#each recipes as recipe (recipe.id)}<button type="button" class="hover:bg-muted rounded-md border p-3 text-left" class:border-primary={activeRecipe === recipe.id} onclick={() => applyRecipe(recipe)}><span class="block text-sm font-medium">{recipe.title}</span><span class="text-muted-foreground mt-1 block text-xs">{recipe.description}</span></button>{/each}
@@ -432,7 +432,7 @@
     <Card.Header class="border-b px-4 py-3">
       <div class="flex items-center gap-2">
         <Workflow class="size-5" />
-        <Card.Title class="text-lg">Llama Studio</Card.Title>
+        <Card.Title class="text-lg">Runner</Card.Title>
         <span class="text-muted-foreground text-sm">GGUF model pipelines</span>
       </div>
     </Card.Header>

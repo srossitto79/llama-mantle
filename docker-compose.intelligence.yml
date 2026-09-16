@@ -1,0 +1,23 @@
+# Merge with docker-compose.yml. The sibling repository supplies the backend image.
+services:
+  llama-swap:
+    environment:
+      LLAMA_INTELLIGENCE_URL: http://intelligence:8000
+
+  intelligence:
+    image: measure-model-intelligence:local
+    build:
+      context: ${MMI_SOURCE_DIR:-../Measure Model Intelligence}
+    init: true
+    environment:
+      MMI_MODEL_BASE_URL: http://llama-swap:8080/v1
+      MMI_MODEL_API_KEY: ${MMI_MODEL_API_KEY:-}
+    volumes:
+      - intelligence-data:/data
+      - intelligence-benchmarks:/app/benchmarks
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+volumes:
+  intelligence-data:
+  intelligence-benchmarks:

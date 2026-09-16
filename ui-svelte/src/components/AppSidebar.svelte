@@ -17,6 +17,13 @@
   import { activeStudioProject } from "../stores/studioProject";
   import ConnectionStatus from "./ConnectionStatus.svelte";
 
+  const sidebar = Sidebar.useSidebar();
+  let studioMenuOpen = $state(false);
+
+  $effect(() => {
+    if ($currentRoute === "/studio" || $currentRoute.startsWith("/studio/")) studioMenuOpen = true;
+  });
+
   let studioProjects = $state<StudioProject[]>([]);
 
   onMount(() => {
@@ -180,32 +187,55 @@
           </Sidebar.MenuItem>
 
           <Sidebar.MenuItem>
-            <Sidebar.MenuButton isActive={isActive("/studio/datasets", $currentRoute)} tooltipContent="Studio Datasets">
-              {#snippet child({ props })}
-                <a href="/studio/datasets" use:link {...props}>
-                  <Database />
-                  <span>Datasets</span>
-                </a>
-              {/snippet}
-            </Sidebar.MenuButton>
-          </Sidebar.MenuItem>
-
-          <Sidebar.MenuItem>
-            <div class="px-2 py-1">
-              <label class="text-muted-foreground mb-1 flex items-center gap-1 text-[0.65rem] font-medium uppercase tracking-wide" for="active-studio-project"><FolderKanban class="size-3" />Active project</label>
-              <select id="active-studio-project" class="border-input bg-background h-8 w-full min-w-0 rounded-md border px-2 text-xs" value={$activeStudioProject} onchange={(event) => activeStudioProject.set(event.currentTarget.value)}>
-                <option value="">All Studio work</option>
-                {#each studioProjects as project (project.id)}<option value={project.id}>{project.name}</option>{/each}
-              </select>
-            </div>
-            <Sidebar.MenuSub>
-              <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={$currentRoute === "/studio"}>{#snippet child({ props })}<a href="/studio" use:link {...props}><Wrench /><span>Llama Studio</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
-              <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={isActive("/studio/projects", $currentRoute)}>{#snippet child({ props })}<a href="/studio/projects" use:link {...props}><FolderKanban /><span>Projects</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
-              <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={isActive("/studio/evaluations", $currentRoute)}>{#snippet child({ props })}<a href="/studio/evaluations" use:link {...props}><BarChart3 /><span>Evaluations</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
-              <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={isActive("/studio/artifacts", $currentRoute)}>{#snippet child({ props })}<a href="/studio/artifacts" use:link {...props}><Boxes /><span>Artifacts</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
-              <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={isActive("/studio/pipelines", $currentRoute)}>{#snippet child({ props })}<a href="/studio/pipelines" use:link {...props}><Workflow /><span>Recipes &amp; pipelines</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
-              <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={isActive("/studio/jobs", $currentRoute)}>{#snippet child({ props })}<a href="/studio/jobs" use:link {...props}><Workflow /><span>Studio Jobs</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
-            </Sidebar.MenuSub>
+            <Collapsible.Root
+              open={studioMenuOpen}
+              onOpenChange={(open) => {
+                if (!sidebar.isMobile && !sidebar.open) {
+                  sidebar.setOpen(true);
+                  studioMenuOpen = true;
+                } else {
+                  studioMenuOpen = open;
+                }
+              }}
+              class="gap-0"
+            >
+              <Collapsible.Trigger>
+                {#snippet child({ props })}
+                  <Sidebar.MenuButton
+                    {...props}
+                    isActive={isActive("/studio", $currentRoute)}
+                    tooltipContent="Llama Studio"
+                  >
+                    <Workflow />
+                    <span>Llama Studio</span>
+                    <ChevronRight class="ml-auto transition-transform duration-200 {studioMenuOpen ? 'rotate-90' : ''}" />
+                  </Sidebar.MenuButton>
+                {/snippet}
+              </Collapsible.Trigger>
+              <Collapsible.Content>
+                <div class="px-2 py-1 group-data-[collapsible=icon]:hidden">
+                  <label class="text-muted-foreground mb-1 flex items-center gap-1 text-[0.65rem] font-medium uppercase tracking-wide" for="active-studio-project"><FolderKanban class="size-3" />Active project</label>
+                  <select id="active-studio-project" class="border-input bg-background h-8 w-full min-w-0 rounded-md border px-2 text-xs" value={$activeStudioProject} onchange={(event) => activeStudioProject.set(event.currentTarget.value)}>
+                    <option value="">All Studio work</option>
+                    {#each studioProjects as project (project.id)}<option value={project.id}>{project.name}</option>{/each}
+                  </select>
+                </div>
+                <Sidebar.MenuSub>
+                  <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={$currentRoute === "/studio"}>{#snippet child({ props })}<a href="/studio" use:link {...props}><Wrench /><span>Runner</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
+                  <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={isActive("/studio/projects", $currentRoute)}>{#snippet child({ props })}<a href="/studio/projects" use:link {...props}><FolderKanban /><span>Projects</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
+                  <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={isActive("/studio/evaluations", $currentRoute)}>{#snippet child({ props })}<a href="/studio/evaluations" use:link {...props}><BarChart3 /><span>Evaluations</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
+                  <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={isActive("/studio/artifacts", $currentRoute)}>{#snippet child({ props })}<a href="/studio/artifacts" use:link {...props}><Boxes /><span>Artifacts</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
+                  <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={isActive("/studio/pipelines", $currentRoute)}>{#snippet child({ props })}<a href="/studio/pipelines" use:link {...props}><Workflow /><span>Recipes &amp; pipelines</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
+                  <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={isActive("/studio/jobs", $currentRoute)}>{#snippet child({ props })}<a href="/studio/jobs" use:link {...props}><Workflow /><span>Jobs</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
+                  <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={isActive("/studio/datasets", $currentRoute)}>{#snippet child({ props })}<a href="/studio/datasets" use:link {...props}><Database /><span>Datasets</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
+                </Sidebar.MenuSub>
+                <div class="text-muted-foreground px-4 pt-3 text-xs font-medium group-data-[collapsible=icon]:hidden">Intelligence</div>
+                <Sidebar.MenuSub>
+                  <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={isActive("/studio/intelligence/run", $currentRoute)}>{#snippet child({ props })}<a href="/studio/intelligence/run" use:link {...props}><Gauge /><span>Run Suite</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
+                  <Sidebar.MenuSubItem><Sidebar.MenuSubButton isActive={isActive("/studio/intelligence/results", $currentRoute)}>{#snippet child({ props })}<a href="/studio/intelligence/results" use:link {...props}><BarChart3 /><span>Results</span></a>{/snippet}</Sidebar.MenuSubButton></Sidebar.MenuSubItem>
+                </Sidebar.MenuSub>
+              </Collapsible.Content>
+            </Collapsible.Root>
           </Sidebar.MenuItem>
 
           <Sidebar.MenuItem>

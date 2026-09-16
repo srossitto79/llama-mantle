@@ -60,6 +60,7 @@ func (h *Handler) jsonStudioTaskResponse(w http.ResponseWriter, r *http.Request,
 
 // RegisterRoutes adds all mantle API endpoints to the given mux.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
+	h.registerIntelligenceRoutes(mux)
 	// HF model browsing
 	mux.HandleFunc("GET /api/mantle/models/search", h.handleSearchModels)
 	mux.HandleFunc("GET /api/mantle/models/files", h.handleListModelFiles)
