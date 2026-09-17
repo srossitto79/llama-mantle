@@ -1,4 +1,4 @@
 include:
   - docker-compose.llama-swap.yml
   - docker-compose.webui.yml
-  - docker-compose.docker-compose.intelligence.yml
+  - docker-compose.intelligence.yml
