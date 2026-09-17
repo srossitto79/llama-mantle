@@ -6,6 +6,7 @@
   import { Badge, type BadgeVariant } from "$lib/components/ui/badge/index.js";
   import IntelligenceScoreBar from "../components/IntelligenceScoreBar.svelte";
   import IntelligenceCategoryRadar from "../components/IntelligenceCategoryRadar.svelte";
+  import IntelligenceBestAt from "../components/IntelligenceBestAt.svelte";
   import IntelligenceMeter from "../components/IntelligenceMeter.svelte";
   import { CategoricalAssignment, OUTCOME } from "$lib/intelligenceColors";
   import { isDarkMode } from "../stores/theme";
@@ -49,6 +50,30 @@
         color: modelColors.get(model.model_id) ?? "#898781",
       };
     })).sort((a, b) => (b.max ? b.value / b.max : 0) - (a.max ? a.value / a.max : 0)));
+
+  // Top 3 models per category, across every compared run — a "best at" leaderboard
+  // alongside the overall one above.
+  let bestAt = $derived.by(() => {
+    const categoryNames = new Map<string, string>();
+    for (const result of results) for (const c of result.suite.categories) categoryNames.set(c.id, c.name);
+    const entries = results.flatMap(result => result.models.map(model => ({ result, model })));
+    return [...categoryNames.entries()].map(([id, name]) => {
+      const ranked = entries
+        .map(({ result, model }) => {
+          const max = model.totals.by_category_max[id] ?? 0;
+          if (max <= 0) return null;
+          return {
+            label: multiRun ? `${model.model_name} · ${new Date(result.run.started_at * 1000).toLocaleDateString()}` : model.model_name,
+            pct: Math.round(((model.totals.by_category[id] ?? 0) / max) * 100),
+            color: modelColors.get(model.model_id) ?? "#898781",
+          };
+        })
+        .filter((e): e is { label: string; pct: number; color: string } => e !== null)
+        .sort((a, b) => b.pct - a.pct)
+        .slice(0, 3);
+      return { name, ranked };
+    }).filter(c => c.ranked.length);
+  });
 
   interface TableRow {
     modelID: string; modelName: string; startedAt: number; profile: string;
@@ -245,6 +270,8 @@
     </tbody></table></div>
     <p class="text-muted-foreground text-sm">Attempted totals exclude unsupported, diagnostic and unscored rubric items. Different profiles or coverage are not directly comparable.</p>
   {/if}
+
+  {#if bestAt.length}<IntelligenceBestAt categories={bestAt} />{/if}
 
   {#each results as result (result.run.run_id)}
     <section class="space-y-4 rounded-xl border p-5">

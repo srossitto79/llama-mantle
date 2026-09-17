@@ -45,6 +45,15 @@ export const OUTCOME = {
 
 export type Outcome = keyof typeof OUTCOME;
 
+// Medal tiers for a "best at" leaderboard. Decorative accents, not a data
+// encoding — rank is already carried by row position and the label text, so
+// these don't need CVD separation from each other or from the categorical set.
+export const RANK_TIERS = [
+  { color: "#9c6b0a", label: "Gold" },
+  { color: "#75766f", label: "Silver" },
+  { color: "#8a5a2c", label: "Bronze" },
+] as const;
+
 /** Assigns a stable slot to each key in first-seen order, capped at 8; folds the rest to gray. */
 export class CategoricalAssignment {
   private order: string[] = [];
