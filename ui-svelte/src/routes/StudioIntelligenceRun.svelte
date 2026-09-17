@@ -143,63 +143,62 @@
   <div><h1 class="text-2xl font-semibold">Run intelligence suite</h1><p class="text-muted-foreground mt-1">Measure model capabilities with reproducible, automatically graded tasks.</p></div>
   {#if error}<p role="alert" class="text-destructive rounded-lg border p-4">{error}</p>{/if}
   {#if configError}<p role="alert" class="text-destructive rounded-lg border p-4">{configError} <button class="underline" onclick={() => loadConfig().catch(e => configError = String(e))}>Retry model discovery</button></p>{/if}
-  <div class="grid gap-6 lg:grid-cols-2">
-    <section class="space-y-4 rounded-xl border p-5">
-      <h2 class="font-semibold">Models and profile</h2>
-      {#if !config}<p class="text-muted-foreground">Waiting for the Intelligence service…</p>
-      {:else}
-        <fieldset disabled={blocked} class="space-y-3">
-          <legend class="mb-2 text-sm">Models</legend>
-          {#if config.models.length}
-            <input type="text" placeholder="Filter models…" class="bg-background block w-full rounded-md border p-2 text-sm" bind:value={modelFilter} />
-          {/if}
-          <div class="max-h-64 space-y-2 overflow-auto">
-            {#each filteredModels as model (model.id)}
-              <label class="flex items-center gap-2 text-sm"><input type="checkbox" bind:group={selected} value={model.id} />{model.name}</label>
-            {:else}<p class="text-muted-foreground text-sm">{config.models.length ? "No models match the filter." : "No models available. Configure models in Mantle, then refresh this page."}</p>{/each}
+
+  <section class="space-y-4 rounded-xl border p-5">
+    <h2 class="font-semibold">Models and profile</h2>
+    {#if !config}<p class="text-muted-foreground">Waiting for the Intelligence service…</p>
+    {:else}
+      <fieldset disabled={blocked} class="space-y-3">
+        <legend class="mb-2 text-sm">Models</legend>
+        {#if config.models.length}
+          <input type="text" placeholder="Filter models…" class="bg-background block w-full rounded-md border p-2 text-sm" bind:value={modelFilter} />
+        {/if}
+        <div class="max-h-64 space-y-2 overflow-auto">
+          {#each filteredModels as model (model.id)}
+            <label class="flex items-center gap-2 text-sm"><input type="checkbox" bind:group={selected} value={model.id} />{model.name}</label>
+          {:else}<p class="text-muted-foreground text-sm">{config.models.length ? "No models match the filter." : "No models available. Configure models in Mantle, then refresh this page."}</p>{/each}
+        </div>
+        <label for="intelligence-profile" class="block text-sm">Profile</label><select id="intelligence-profile" class="bg-background block w-full rounded-md border p-2" bind:value={profile}>{#each config.profiles as p}<option value={p.id}>{p.id}</option>{/each}</select>
+        <p class="text-muted-foreground text-sm">{config.profiles.find(p => p.id === profile)?.description}</p>
+        <details open><summary class="cursor-pointer text-sm">Advanced settings</summary>
+          <div class="mt-3 grid grid-cols-2 gap-3">
+            <label class="text-sm">
+              <span class="flex items-center gap-2"><input type="checkbox" bind:checked={useCustomTemperature} />Temperature</span>
+              {#if useCustomTemperature}
+                <input type="number" min="0" max="2" step="0.1" class="mt-1 w-full rounded border p-2" bind:value={temperature} />
+              {:else}
+                <input type="text" value="Default" disabled class="text-muted-foreground mt-1 w-full rounded border p-2" />
+              {/if}
+            </label>
+            <label class="text-sm">Thinking effort
+              <select class="bg-background mt-1 block w-full rounded-md border p-2" bind:value={reasoningEffort}>
+                <option value="">Model default</option>
+                {#each REASONING_EFFORTS as effort}<option value={effort}>{effort}</option>{/each}
+              </select>
+            </label>
+            <label class="text-sm">Timeout (seconds)<input type="number" min="1" class="mt-1 w-full rounded border p-2" bind:value={timeout} /></label>
+            <label class="text-sm">Maximum tokens<input type="number" min="1" class="mt-1 w-full rounded border p-2" bind:value={maxTokens} /></label>
           </div>
-          <label for="intelligence-profile" class="block text-sm">Profile</label><select id="intelligence-profile" class="bg-background block w-full rounded-md border p-2" bind:value={profile}>{#each config.profiles as p}<option value={p.id}>{p.id}</option>{/each}</select>
-          <p class="text-muted-foreground text-sm">{config.profiles.find(p => p.id === profile)?.description}</p>
-          <details open><summary class="cursor-pointer text-sm">Advanced settings</summary>
-            <div class="mt-3 grid grid-cols-2 gap-3">
-              <label class="text-sm">
-                <span class="flex items-center gap-2"><input type="checkbox" bind:checked={useCustomTemperature} />Temperature</span>
-                {#if useCustomTemperature}
-                  <input type="number" min="0" max="2" step="0.1" class="mt-1 w-full rounded border p-2" bind:value={temperature} />
-                {:else}
-                  <input type="text" value="Default" disabled class="text-muted-foreground mt-1 w-full rounded border p-2" />
-                {/if}
-              </label>
-              <label class="text-sm">Thinking effort
-                <select class="bg-background mt-1 block w-full rounded-md border p-2" bind:value={reasoningEffort}>
-                  <option value="">Model default</option>
-                  {#each REASONING_EFFORTS as effort}<option value={effort}>{effort}</option>{/each}
-                </select>
-              </label>
-              <label class="text-sm">Timeout (seconds)<input type="number" min="1" class="mt-1 w-full rounded border p-2" bind:value={timeout} /></label>
-              <label class="text-sm">Maximum tokens<input type="number" min="1" class="mt-1 w-full rounded border p-2" bind:value={maxTokens} /></label>
-            </div>
-            <label class="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={resume} />Reuse matching answers from the latest results</label>
-            <label class="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={retryFailed} />Retry failed items</label>
-            {#if retryFailed}
-              <label class="mt-2 ml-6 flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={retryUnsupported} />Also retry unsupported items</label>
-            {/if}
-          </details>
-        </fieldset>
-        <Button disabled={blocked || !selected.length || !(timeout > 0) || !(maxTokens > 0)} onclick={() => action("run", { models: selected, profile, temperature: useCustomTemperature ? temperature : false, reasoning_effort: reasoningEffort, timeout, max_tokens: maxTokens, only_missing: resume, retry_failed: retryFailed, retry_unsupported: retryFailed && retryUnsupported, stream: true })}>Start run</Button>
-      {/if}
-    </section>
-    <details class="space-y-4 rounded-xl border p-5">
-      <summary class="cursor-pointer font-semibold">External datasets</summary>
-      <div class="mt-4 space-y-4">
-        <p class="text-muted-foreground text-sm">Prepare polyglot exercises and SWE-bench tasks before using external profiles. Preparation and benchmark runs execute one at a time.</p>
-        <div class="flex flex-wrap gap-2"><Button variant="outline" disabled={blocked || !config} onclick={() => action("download/polyglot")}>Download Polyglot</Button><Button variant="outline" disabled={blocked || !config} onclick={() => action("download/swebench")}>Download SWE-bench</Button></div>
-        <p class="text-sm">{download.kind ?? "Preparation"}: {download.state}{download.finished_at ? ` · ${new Date(download.finished_at * 1000).toLocaleString()}` : ""}</p>
-        {#if download.error}<p class="text-destructive text-sm">{download.error}</p>{/if}
-        {#if download.logs.length}<pre class="bg-muted max-h-56 overflow-auto rounded p-3 text-xs whitespace-pre-wrap">{download.logs.join("\n")}</pre>{/if}
-      </div>
-    </details>
-  </div>
+          <label class="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={resume} />Reuse matching answers from the latest results</label>
+          <label class="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={retryFailed} />Retry failed items</label>
+          {#if retryFailed}
+            <label class="mt-2 ml-6 flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={retryUnsupported} />Also retry unsupported items</label>
+          {/if}
+        </details>
+      </fieldset>
+      <Button disabled={blocked || !selected.length || !(timeout > 0) || !(maxTokens > 0)} onclick={() => action("run", { models: selected, profile, temperature: useCustomTemperature ? temperature : false, reasoning_effort: reasoningEffort, timeout, max_tokens: maxTokens, only_missing: resume, retry_failed: retryFailed, retry_unsupported: retryFailed && retryUnsupported, stream: true })}>Start run</Button>
+    {/if}
+  </section>
+  <details class="space-y-4 rounded-xl border p-5">
+    <summary class="cursor-pointer font-semibold">External datasets</summary>
+    <div class="mt-4 space-y-4">
+      <p class="text-muted-foreground text-sm">Prepare polyglot exercises and SWE-bench tasks before using external profiles. Preparation and benchmark runs execute one at a time.</p>
+      <div class="flex flex-wrap gap-2"><Button variant="outline" disabled={blocked || !config} onclick={() => action("download/polyglot")}>Download Polyglot</Button><Button variant="outline" disabled={blocked || !config} onclick={() => action("download/swebench")}>Download SWE-bench</Button></div>
+      <p class="text-sm">{download.kind ?? "Preparation"}: {download.state}{download.finished_at ? ` · ${new Date(download.finished_at * 1000).toLocaleString()}` : ""}</p>
+      {#if download.error}<p class="text-destructive text-sm">{download.error}</p>{/if}
+      {#if download.logs.length}<pre class="bg-muted max-h-56 overflow-auto rounded p-3 text-xs whitespace-pre-wrap">{download.logs.join("\n")}</pre>{/if}
+    </div>
+  </details>
   <section class="space-y-3 rounded-xl border p-5">
     <div class="flex items-center justify-between"><h2 class="font-semibold">Live progress · {run?.state ?? "idle"}</h2>{#if active}<Button variant="outline" disabled={busy || stopping} onclick={() => action("run/stop")}>{stopping ? "Stopping…" : "Stop run"}</Button>{/if}</div>
     {#if run?.totals}<progress class="w-full" max={run.totals.items_total || 1} value={run.totals.items_done}></progress><p class="text-sm">{run.totals.items_done} / {run.totals.items_total} items</p>{/if}

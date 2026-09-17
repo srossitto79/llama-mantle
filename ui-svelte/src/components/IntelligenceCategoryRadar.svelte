@@ -23,6 +23,8 @@
     if (next.has(label)) next.delete(label); else next.add(label);
     hidden = next;
   }
+  function selectAll() { hidden = new Set(); }
+  function clearAll() { hidden = new Set(series.map(s => s.label)); }
   function datasets() {
     return series.map(s => ({
       label: s.label, data: s.values, borderColor: s.color, backgroundColor: s.color + "1a",
@@ -81,7 +83,12 @@
     <h3 class="mb-2 text-sm font-medium">{title}</h3>
     <div class="flex gap-4">
       {#if series.length > 1}
-        <div class="flex max-h-[280px] flex-col flex-wrap gap-x-4 gap-y-1.5 text-xs">
+        <div class="flex flex-col gap-2">
+          <div class="flex gap-2 text-xs">
+            <button type="button" class="text-primary underline" onclick={selectAll}>Select all</button>
+            <button type="button" class="text-primary underline" onclick={clearAll}>Clear all</button>
+          </div>
+          <div class="flex max-h-[280px] flex-col flex-wrap gap-x-4 gap-y-1.5 text-xs">
           {#each series as s (s.label)}
             <label class="flex items-center gap-1.5" class:opacity-50={hidden.has(s.label)}>
               <input type="checkbox" checked={!hidden.has(s.label)} onchange={() => toggle(s.label)} />
@@ -89,6 +96,7 @@
               <span class="truncate">{s.label}</span>
             </label>
           {/each}
+          </div>
         </div>
       {/if}
       <div class="h-[280px] min-w-0 flex-1"><canvas bind:this={canvas}></canvas></div>
