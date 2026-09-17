@@ -7,8 +7,8 @@ The Intelligence pages use the companion backend from the **Measure Model Intell
 Place the companion checkout beside this repository as `../Measure Model Intelligence`, or set `MMI_SOURCE_DIR` to its path. Both checkouts must include the integration changes.
 
 ```sh
-docker compose -f docker-compose.yml -f docker-compose.intelligence.yml build intelligence llama-swap
-docker compose -f docker-compose.yml -f docker-compose.intelligence.yml up -d intelligence llama-swap
+docker compose build intelligence llama-swap
+docker compose up -d intelligence llama-swap
 ```
 
 The existing Mantle Compose configuration still controls models, GPU access, and ports. Open Studio → Intelligence → Run Suite. Models are discovered from `http://llama-swap:8080/v1/models`. If Mantle requires an API key, set `MMI_MODEL_API_KEY` for the companion.
