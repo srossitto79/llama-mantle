@@ -1,3 +1,17 @@
+# llama-mantle
+
+**llama-mantle** is a fork of [llama-swap](https://github.com/mostlygeek/llama-swap) that adds a management layer on top of the proxy:
+
+- **Model management** — browse and download GGUF models from Hugging Face, with resumable downloads and progress tracking
+- **Configuration management** — view and edit the YAML config in-browser, with validation and hot-reload
+- **Backend build management** — trigger Docker builds of any llama.cpp fork from the UI, with live progress and a list of compiled backends
+- **Llama Studio** — a local GGUF lifecycle workspace: datasets, quantization, merging, pruning, QLoRA training, distillation, evaluations, multi-step pipelines, projects, and artifacts with lineage and retention. See the [getting-started guide](docs/llama-studio-getting-started.md)
+- **Intelligence suite** — model benchmark runs and results via a companion service. See [docs/intelligence.md](docs/intelligence.md)
+
+See [PROJECT.md](PROJECT.md) for architecture, package layout, and the API reference.
+
+---
+
 ![llama-swap header image](docs/assets/hero4.webp)
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/mostlygeek/llama-swap/total)
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/mostlygeek/llama-swap/go-ci.yml)
