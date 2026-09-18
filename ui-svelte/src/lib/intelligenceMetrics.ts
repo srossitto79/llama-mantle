@@ -184,7 +184,17 @@ export function speedTotals(items: IntelligenceItem[], firstItemID: string | und
 export type DuplicateMode = "all" | "latest" | "average";
 
 export interface ResolvedModel {
+  /** Unique per rendered row -- use for #each keys and sorting. */
   key: string;
+  /**
+   * The underlying configuration (model + effort + temperature + context +
+   * provider + suite), independent of which run(s) the row draws from. Two
+   * rows with the same configKey are the same configuration shown twice (e.g.
+   * "all" mode's un-collapsed repeats) and must render in the same color --
+   * `key` alone cannot be used for that, since "all" mode gives every run its
+   * own `key` so repeats can appear as separate rows.
+   */
+  configKey: string;
   label: string;
   modelID: string;
   /** Every source run this row draws from -- one entry unless mode is "average". */
@@ -197,8 +207,16 @@ export interface ResolvedModel {
   byCategory: Record<string, number>;
   byCategoryMax: Record<string, number>;
   attempted: { score: number; max: number; awaitingHuman: number };
+  coverage: Coverage;
   cost: CostTotals;
   speed: SpeedTotals;
+  /**
+   * Wall time per category (ms), from the same counted items as `byCategory` --
+   * a tied score is a common outcome (see the Best At panel), and the category
+   * that took four times as long to reach the same score is the tiebreaker a
+   * viewer actually wants to see next to the percentage.
+   */
+  byCategoryTimeMs: Record<string, number>;
 }
 
 interface Entry { result: IntelligenceResult; model: IntelligenceResultModel; key: string }
@@ -207,7 +225,54 @@ function firstItemID(items: IntelligenceItem[]): string | undefined {
   return items[0]?.item_id;
 }
 
-function buildRow(key: string, label: string, entries: Entry[], humanScores: HumanScores): ResolvedModel {
+/**
+ * How much of the suite this model actually attempted, as a real fraction rather
+ * than the old "score / suite maximum" -- which conflated coverage with quality.
+ * `total` falls back to this model's own item count when the run predates the
+ * suite item list being stored, so an older run still renders a (trivially full)
+ * coverage figure instead of a blank one.
+ */
+export interface Coverage {
+  attempted: number; total: number;
+  unsupported: number; diagnostic: number; awaitingHuman: number;
+}
+
+function coverageFor(result: IntelligenceResult, model: IntelligenceResultModel, humanScores: HumanScores): Coverage {
+  let unsupported = 0, diagnostic = 0;
+  for (const item of model.items) {
+    if (item.role === "diagnostic") diagnostic++;
+    else if (item.unsupported || item.grade?.unsupported) unsupported++;
+  }
+  const awaitingHuman = attemptedScore(model.items, { humanScores, modelID: model.model_id }).awaitingHuman;
+  const total = result.suite.items?.length ?? model.items.length;
+  return {
+    attempted: model.items.length - unsupported - diagnostic - awaitingHuman,
+    total, unsupported, diagnostic, awaitingHuman,
+  };
+}
+
+// Grouped the same way `attemptedScore` counts items, so a category's time and
+// its score cover exactly the same set of attempts.
+function categoryTime(items: IntelligenceItem[]): Record<string, number> {
+  const time: Record<string, number> = {};
+  for (const item of items) {
+    if (!isCounted(item)) continue;
+    time[item.category] = (time[item.category] ?? 0) + (item.latency_ms ?? 0);
+  }
+  return time;
+}
+
+function averageCoverage(parts: Coverage[]): Coverage {
+  return {
+    attempted: average(parts.map(p => p.attempted)),
+    total: average(parts.map(p => p.total)),
+    unsupported: average(parts.map(p => p.unsupported)),
+    diagnostic: average(parts.map(p => p.diagnostic)),
+    awaitingHuman: average(parts.map(p => p.awaitingHuman)),
+  };
+}
+
+function buildRow(rowKey: string, configKeyValue: string, label: string, entries: Entry[], humanScores: HumanScores): ResolvedModel {
   // "average" spans several runs; every other mode has exactly one entry here.
   const items = entries.flatMap(e => e.model.items);
   const modelID = entries[0].model.model_id;
@@ -224,16 +289,24 @@ function buildRow(key: string, label: string, entries: Entry[], humanScores: Hum
   }
   const cost = averageCost(entries.map(e => costTotals(e.model.items, attemptedScore(e.model.items, { humanScores, modelID: e.model.model_id }).score)));
   const speed = averageSpeed(entries.map(e => speedTotals(e.model.items, firstItemID(e.model.items))));
+  const coverage = entries.length === 1
+    ? coverageFor(entries[0].result, entries[0].model, humanScores)
+    : averageCoverage(entries.map(e => coverageFor(e.result, e.model, humanScores)));
+  const perEntryCategoryTime = entries.map(e => categoryTime(e.model.items));
+  const byCategoryTimeMs: Record<string, number> = {};
+  for (const cat of new Set(perEntryCategoryTime.flatMap(t => Object.keys(t)))) {
+    byCategoryTimeMs[cat] = average(perEntryCategoryTime.map(t => t[cat] ?? 0));
+  }
   return {
-    key, label, modelID,
+    key: rowKey, configKey: configKeyValue, label, modelID,
     sourceRunIDs: entries.map(e => e.result.run.run_id),
     startedAt: Math.max(...entries.map(e => e.result.run.started_at)),
     profile: entries[entries.length - 1].result.run.params.profile,
     items,
     score: average(entries.map(e => e.model.totals.score)),
     maxTotal: average(entries.map(e => e.model.totals.max_total)),
-    byCategory, byCategoryMax,
-    attempted, cost, speed,
+    byCategory, byCategoryMax, byCategoryTimeMs,
+    attempted, coverage, cost, speed,
   };
 }
 
@@ -327,7 +400,7 @@ export function resolveModels(
       const dated = siblings.length > 1;
       const base = labelFor(entry.model.model_name, configParts(entry.result, entry.model), varying);
       const label = dated ? `${base} · ${new Date(entry.result.run.started_at * 1000).toLocaleDateString()}` : base;
-      return buildRow(`${entry.key}#${entry.result.run.run_id}`, label, [entry], humanScores);
+      return buildRow(`${entry.key}#${entry.result.run.run_id}`, entry.key, label, [entry], humanScores);
     });
   }
 
@@ -335,9 +408,9 @@ export function resolveModels(
     const label = labelFor(group[0].model.model_name, configParts(group[0].result, group[0].model), varying);
     if (mode === "latest") {
       const latest = group.reduce((a, b) => (b.result.run.started_at > a.result.run.started_at ? b : a));
-      return buildRow(key, label, [latest], humanScores);
+      return buildRow(key, key, label, [latest], humanScores);
     }
     // "average"
-    return buildRow(key, label, group, humanScores);
+    return buildRow(key, key, label, group, humanScores);
   });
 }

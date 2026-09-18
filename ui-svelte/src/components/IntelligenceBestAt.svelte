@@ -2,7 +2,7 @@
   import * as Card from "$lib/components/ui/card/index.js";
   import { RANK_TIERS } from "$lib/intelligenceColors";
 
-  interface Ranked { label: string; pct: number; color: string }
+  interface Ranked { label: string; pct: number; color: string; time?: string }
   interface CategoryBest { name: string; ranked: Ranked[] }
   interface Props { categories: CategoryBest[] }
   let { categories }: Props = $props();
@@ -22,7 +22,7 @@
                 <span class="flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white" style="background:{tier.color}" title={tier.label}>{i + 1}</span>
                 <span class="size-2 shrink-0 rounded-full" style="background:{entry.color}"></span>
                 <span class="truncate" title={entry.label}>{entry.label}</span>
-                <span class="text-muted-foreground ml-auto shrink-0 tabular-nums">{entry.pct}%</span>
+                <span class="text-muted-foreground ml-auto shrink-0 tabular-nums">{entry.pct}%{#if entry.time} · {entry.time}{/if}</span>
               </div>
             {/each}
           </div>

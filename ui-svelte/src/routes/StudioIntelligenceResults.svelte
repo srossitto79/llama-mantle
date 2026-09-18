@@ -10,7 +10,8 @@
   import IntelligenceMeter from "../components/IntelligenceMeter.svelte";
   import { CategoricalAssignment, OUTCOME } from "$lib/intelligenceColors";
   import { isDarkMode } from "../stores/theme";
-  import { attemptedScore, deleteIntelligenceRun, intelligenceRequest, intelligenceURL, loadHumanScores, needsHumanScore, saveHumanScore, type HumanScores, type IntelligenceItem, type IntelligenceRun, type IntelligenceResult } from "$lib/intelligenceApi";
+  import { configKey, resolveModels, type Coverage, type DuplicateMode, type ResolvedModel } from "$lib/intelligenceMetrics";
+  import { deleteIntelligenceRun, intelligenceRequest, intelligenceURL, loadHumanScores, needsHumanScore, saveHumanScore, type HumanScores, type IntelligenceItem, type IntelligenceRun, type IntelligenceResult } from "$lib/intelligenceApi";
 
   let runs = $state<IntelligenceRun[]>([]);
   let selected = $state<string[]>([]);
@@ -21,112 +22,139 @@
   let deletingID = $state("");
   let humanScores = $state<HumanScores>({});
   let savingScore = $state("");
+  let duplicateMode = $state<DuplicateMode>("latest");
   let generation = 0;
   let visible = $derived(runs.filter(r => `${r.params.profile} ${r.state} ${new Date(r.started_at * 1000).toLocaleString()}`.toLowerCase().includes(filter.toLowerCase())));
   let differentSuites = $derived(new Set(results.map(r => r.run.suite_sha256)).size > 1);
-  let multiRun = $derived(results.length > 1);
 
   const STATE_VARIANT: Record<string, BadgeVariant> = {
     done: "secondary", running: "default", starting: "default",
     error: "destructive", interrupted: "destructive", stopped: "outline",
   };
 
-  // One color per model, assigned in first-seen order across every visible run —
-  // every chart and meter on the page reads the same model in the same color.
+  // The duplicate-mode control only needs to appear once two selected models
+  // actually share a configuration (same model, effort, temperature, context,
+  // provider and suite) -- otherwise there is no choice to make.
+  let hasDuplicates = $derived.by(() => {
+    const seen = new Set<string>();
+    for (const result of results) for (const model of result.models) {
+      const key = configKey(result, model);
+      if (seen.has(key)) return true;
+      seen.add(key);
+    }
+    return false;
+  });
+
+  // The single source every panel below reads. Fixes two problems at once: models
+  // that differ only in reasoning effort used to collapse into one color and one
+  // row, and re-running the same configuration used to duplicate every chart.
+  let resolvedModels = $derived(resolveModels(results, duplicateMode, humanScores));
+
+  let allCategories = $derived.by(() => {
+    const map = new Map<string, string>();
+    for (const result of results) for (const c of result.suite.categories) map.set(c.id, c.name);
+    return [...map.entries()].map(([id, name]) => ({ id, name }));
+  });
+
+  // One color per resolved configuration, assigned in first-seen order -- every
+  // chart and meter on the page reads the same configuration in the same color.
   let modelColors = $derived.by(() => {
     const assignment = new CategoricalAssignment();
     const map = new Map<string, string>();
-    for (const result of results) for (const model of result.models)
-      if (!map.has(model.model_id)) map.set(model.model_id, assignment.color(model.model_id, $isDarkMode));
+    for (const rm of resolvedModels) map.set(rm.configKey, assignment.color(rm.configKey, $isDarkMode));
     return map;
   });
 
-  let leaderboard = $derived.by(() =>
-    results.flatMap(result => result.models.map(model => {
-      const attempted = attemptedScore(model.items, { humanScores, modelID: model.model_id });
-      return {
-        label: multiRun ? `${model.model_name} · ${new Date(result.run.started_at * 1000).toLocaleDateString()}` : model.model_name,
-        value: round1(attempted.score), max: round1(attempted.max),
-        color: modelColors.get(model.model_id) ?? "#898781",
-      };
-    })).sort((a, b) => (b.max ? b.value / b.max : 0) - (a.max ? a.value / a.max : 0)));
+  let leaderboard = $derived(
+    resolvedModels
+      .map(rm => ({
+        label: rm.label, value: round1(rm.attempted.score), max: round1(rm.attempted.max),
+        color: modelColors.get(rm.configKey) ?? "#898781",
+        // Shown in the tooltip, not the bar itself: a tied or near-tied score is
+        // common here, and the time spent reaching it is the detail that explains
+        // the tie rather than another number competing with the bar for space.
+        meta: rm.cost.wallMs ? formatDuration(rm.cost.wallMs) : undefined,
+      }))
+      .sort((a, b) => (b.max ? b.value / b.max : 0) - (a.max ? a.value / a.max : 0)));
 
-  // Top 3 models per category, across every compared run — a "best at" leaderboard
-  // alongside the overall one above.
+  // Top 3 configurations per category, across the resolved set -- a "best at"
+  // leaderboard alongside the overall one above. Category time rides along for
+  // the same reason as the leaderboard's: ties at 100% are the norm in a
+  // saturated category, and time is what actually separates them.
   let bestAt = $derived.by(() => {
-    const categoryNames = new Map<string, string>();
-    for (const result of results) for (const c of result.suite.categories) categoryNames.set(c.id, c.name);
-    const entries = results.flatMap(result => result.models.map(model => ({ result, model })));
-    return [...categoryNames.entries()].map(([id, name]) => {
-      const ranked = entries
-        .map(({ result, model }) => {
-          const max = model.totals.by_category_max[id] ?? 0;
+    return allCategories.map(({ id, name }) => {
+      const ranked = resolvedModels
+        .map(rm => {
+          const max = rm.byCategoryMax[id] ?? 0;
           if (max <= 0) return null;
+          const ms = rm.byCategoryTimeMs[id];
           return {
-            label: multiRun ? `${model.model_name} · ${new Date(result.run.started_at * 1000).toLocaleDateString()}` : model.model_name,
-            pct: Math.round(((model.totals.by_category[id] ?? 0) / max) * 100),
-            color: modelColors.get(model.model_id) ?? "#898781",
+            label: rm.label, pct: Math.round(((rm.byCategory[id] ?? 0) / max) * 100),
+            color: modelColors.get(rm.configKey) ?? "#898781", time: ms ? formatDuration(ms) : undefined,
           };
         })
-        .filter((e): e is { label: string; pct: number; color: string } => e !== null)
+        .filter((e): e is { label: string; pct: number; color: string; time: string | undefined } => e !== null)
         .sort((a, b) => b.pct - a.pct)
         .slice(0, 3);
       return { name, ranked };
     }).filter(c => c.ranked.length);
   });
 
-  interface TableRow {
-    modelID: string; modelName: string; startedAt: number; profile: string;
-    score: number; maxTotal: number; suitePct: number;
-    attemptedScoreValue: number; attemptedMax: number; attemptedPct: number;
-  }
-  let tableRows = $derived.by((): TableRow[] =>
-    results.flatMap(result => result.models.map(model => {
-      const attempted = attemptedScore(model.items, { humanScores, modelID: model.model_id });
-      return {
-        modelID: model.model_id, modelName: model.model_name,
-        startedAt: result.run.started_at, profile: result.run.params.profile,
-        score: round1(model.totals.score), maxTotal: round1(model.totals.max_total),
-        suitePct: pct(model.totals.score, model.totals.max_total),
-        attemptedScoreValue: round1(attempted.score), attemptedMax: round1(attempted.max),
-        attemptedPct: pct(attempted.score, attempted.max),
-      };
-    })));
-  type SortKey = "model" | "run" | "score" | "attempted" | "suitePct" | "attemptedPct";
-  let sortKey = $state<SortKey>("suitePct");
+  type SortKey = "model" | "run" | "score" | "attemptedPct" | "coverage" | "time" | "tokens" | "tokensPerPoint" | "tokensPerSecond";
+  const COLUMNS: [SortKey, string][] = [
+    ["model", "Model"], ["run", "Run / profile"], ["score", "Score"], ["attemptedPct", "%"],
+    ["coverage", "Coverage"], ["time", "Time"], ["tokens", "Tokens"], ["tokensPerPoint", "tok/pt"], ["tokensPerSecond", "tok/s"],
+  ];
+  // Lower is better for time and tokens-per-point, so clicking them the first
+  // time should surface the cheapest row, not the most expensive one.
+  const ASCENDING_DEFAULT = new Set<SortKey>(["model", "run", "time", "tokensPerPoint"]);
+  let sortKey = $state<SortKey>("attemptedPct");
   let sortDir = $state<"asc" | "desc">("desc");
   function toggleSort(key: SortKey) {
     if (sortKey === key) sortDir = sortDir === "asc" ? "desc" : "asc";
-    else { sortKey = key; sortDir = key === "model" || key === "run" ? "asc" : "desc"; }
+    else { sortKey = key; sortDir = ASCENDING_DEFAULT.has(key) ? "asc" : "desc"; }
   }
-  const SORT_VALUE: Record<SortKey, (r: TableRow) => number | string> = {
-    model: r => r.modelName.toLowerCase(),
+  const SORT_VALUE: Record<SortKey, (r: ResolvedModel) => number | string> = {
+    model: r => r.label.toLowerCase(),
     run: r => r.startedAt,
-    score: r => r.score,
-    attempted: r => r.attemptedScoreValue,
-    suitePct: r => r.suitePct,
-    attemptedPct: r => r.attemptedPct,
+    score: r => r.attempted.score,
+    attemptedPct: r => pct(r.attempted.score, r.attempted.max),
+    coverage: r => (r.coverage.total > 0 ? r.coverage.attempted / r.coverage.total : 0),
+    time: r => r.cost.wallMs,
+    tokens: r => r.cost.completionTokens,
+    tokensPerPoint: r => r.cost.tokensPerPoint ?? Infinity,
+    tokensPerSecond: r => r.speed.tokensPerSecond ?? -1,
   };
   let sortedRows = $derived.by(() => {
     const get = SORT_VALUE[sortKey];
     const dir = sortDir === "asc" ? 1 : -1;
-    return [...tableRows].sort((a, b) => {
+    return [...resolvedModels].sort((a, b) => {
       const av = get(a), bv = get(b);
       return av < bv ? -dir : av > bv ? dir : 0;
     });
   });
+  let sortedResolvedModels = $derived(
+    [...resolvedModels].sort((a, b) =>
+      pct(b.attempted.score, b.attempted.max) - pct(a.attempted.score, a.attempted.max)
+      || pct(b.score, b.maxTotal) - pct(a.score, a.maxTotal)));
 
   let kpis = $derived.by(() => {
-    const allModels = results.flatMap(r => r.models);
-    const uniqueModels = new Set(allModels.map(m => m.model_id));
+    const uniqueModels = new Set(resolvedModels.map(rm => rm.modelID));
     // Distinct items, not rows: comparing three runs of one model must not treble it.
-    const uniqueItems = new Set(allModels.flatMap(m => m.items.map(i => i.item_id)));
-    const awaiting = allModels.reduce(
-      (n, m) => n + attemptedScore(m.items, { humanScores, modelID: m.model_id }).awaitingHuman, 0);
-    const best = leaderboard[0];
+    const uniqueItems = new Set(resolvedModels.flatMap(rm => rm.items.map(i => i.item_id)));
+    const awaiting = resolvedModels.reduce((n, rm) => n + rm.attempted.awaitingHuman, 0);
+    const totalWallMs = resolvedModels.reduce((n, rm) => n + rm.cost.wallMs, 0);
+    // Derived straight from resolvedModels rather than the leaderboard array, so
+    // the tile can carry how long the best score took alongside the percentage --
+    // the most common question this page exists to answer.
+    const best = [...resolvedModels].sort((a, b) => pct(b.attempted.score, b.attempted.max) - pct(a.attempted.score, a.attempted.max))[0];
+    const cheapest = [...resolvedModels]
+      .filter(rm => rm.cost.tokensPerPoint != null)
+      .sort((a, b) => a.cost.tokensPerPoint! - b.cost.tokensPerPoint!)[0];
     return {
-      runs: results.length, models: uniqueModels.size, items: uniqueItems.size, awaiting,
-      best: best ? { label: best.label, pct: best.max ? Math.round((best.value / best.max) * 100) : 0 } : null,
+      runs: results.length, models: uniqueModels.size, items: uniqueItems.size, awaiting, totalWallMs,
+      best: best ? { label: best.label, pct: pct(best.attempted.score, best.attempted.max), wallMs: best.cost.wallMs } : null,
+      cheapest: cheapest ? { label: cheapest.label, tokensPerPoint: Math.round(cheapest.cost.tokensPerPoint!) } : null,
     };
   });
 
@@ -142,14 +170,6 @@
     return item.score > 0 ? OUTCOME.part.color : OUTCOME.fail.color;
   }
 
-  function sortedModels(result: IntelligenceResult) {
-    return [...result.models].sort((a, b) => {
-      const attemptedA = attemptedScore(a.items, { humanScores, modelID: a.model_id });
-      const attemptedB = attemptedScore(b.items, { humanScores, modelID: b.model_id });
-      return pct(attemptedB.score, attemptedB.max) - pct(attemptedA.score, attemptedA.max)
-        || pct(b.totals.score, b.totals.max_total) - pct(a.totals.score, a.totals.max_total);
-    });
-  }
   function scoreFor(modelID: string, item: IntelligenceItem): number | undefined {
     return humanScores[item.item_id]?.[modelID];
   }
@@ -158,6 +178,40 @@
   }
   function pct(value: number, max: number): number {
     return max > 0 ? round1((value / max) * 100) : 0;
+  }
+  function formatDuration(ms: number): string {
+    if (!ms) return "—";
+    const seconds = ms / 1000;
+    if (seconds < 60) return `${Math.round(seconds)}s`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+    return `${Math.floor(seconds / 3600)}h ${Math.round((seconds % 3600) / 60)}m`;
+  }
+  function formatTokens(n: number): string {
+    if (!n) return "0";
+    if (n >= 1_000_000) return `${round1(n / 1_000_000)}M`;
+    if (n >= 1_000) return `${round1(n / 1_000)}k`;
+    return String(Math.round(n));
+  }
+  function runLabel(rm: ResolvedModel): string {
+    if (rm.sourceRunIDs.length > 1) return `${rm.profile} · ${rm.sourceRunIDs.length} runs averaged`;
+    return `${new Date(rm.startedAt * 1000).toLocaleString()} · ${rm.profile}`;
+  }
+  // Only the excluded categories that are actually nonzero earn a place in the
+  // tooltip -- an all-zero breakdown would otherwise read "0 unsupported · 0
+  // diagnostic · 0 awaiting a score" for nothing.
+  function coverageTooltip(c: Coverage): string {
+    const parts: string[] = [];
+    if (c.unsupported) parts.push(`${Math.round(c.unsupported)} unsupported`);
+    if (c.diagnostic) parts.push(`${Math.round(c.diagnostic)} diagnostic`);
+    if (c.awaitingHuman) parts.push(`${Math.round(c.awaitingHuman)} awaiting a score`);
+    if (!parts.length) return "";
+    return `${Math.round(c.total - c.attempted)} not attempted: ${parts.join(" · ")}`;
+  }
+  function itemCost(item: IntelligenceItem): string {
+    const parts: string[] = [];
+    if (item.latency_ms != null) parts.push(`${(item.latency_ms / 1000).toFixed(1)}s`);
+    if (item.tokens_completion) parts.push(`${item.tokens_completion} tok`);
+    return parts.join(" · ");
   }
   // The endpoint replaces every score for an item, so the other models' scores
   // have to go back with it.
@@ -212,7 +266,7 @@
   {#if error}<p role="alert" class="text-destructive rounded-lg border p-4">{error}</p>{/if}
 
   {#if kpis.runs}
-    <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
       <Card.Root class="py-0"><Card.Content class="space-y-1 p-4">
         <p class="text-muted-foreground text-xs">Runs compared</p><p class="text-2xl font-semibold">{kpis.runs}</p>
       </Card.Content></Card.Root>
@@ -226,7 +280,16 @@
       <Card.Root class="py-0"><Card.Content class="space-y-1 p-4">
         <p class="text-muted-foreground text-xs">Best attempted score</p>
         <p class="text-2xl font-semibold">{kpis.best?.pct ?? 0}%</p>
-        {#if kpis.best}<p class="text-muted-foreground truncate text-xs" title={kpis.best.label}>{kpis.best.label}</p>{/if}
+        {#if kpis.best}<p class="text-muted-foreground truncate text-xs" title={kpis.best.label}>{kpis.best.label} · {formatDuration(kpis.best.wallMs)}</p>{/if}
+      </Card.Content></Card.Root>
+      <Card.Root class="py-0"><Card.Content class="space-y-1 p-4">
+        <p class="text-muted-foreground text-xs">Total time</p>
+        <p class="text-2xl font-semibold">{formatDuration(kpis.totalWallMs)}</p>
+      </Card.Content></Card.Root>
+      <Card.Root class="py-0"><Card.Content class="space-y-1 p-4">
+        <p class="text-muted-foreground text-xs">Best value (tok/pt)</p>
+        <p class="text-2xl font-semibold">{kpis.cheapest?.tokensPerPoint ?? "—"}</p>
+        {#if kpis.cheapest}<p class="text-muted-foreground truncate text-xs" title={kpis.cheapest.label}>{kpis.cheapest.label}</p>{/if}
       </Card.Content></Card.Root>
     </div>
   {/if}
@@ -250,57 +313,77 @@
 
   {#if differentSuites}<p class="rounded-lg border p-4 text-sm">These runs use different suite versions. Compare item coverage before interpreting score differences.</p>{/if}
 
+  {#if hasDuplicates}
+    <div class="flex flex-wrap items-center gap-2 text-sm">
+      <span class="text-muted-foreground">Duplicates</span>
+      <div class="inline-flex overflow-hidden rounded-md border">
+        {#each [["latest", "Latest"], ["average", "Average"], ["all", "Show all"]] as [mode, label] (mode)}
+          <button type="button" class="px-3 py-1.5" class:bg-muted={duplicateMode === mode} class:font-medium={duplicateMode === mode} onclick={() => duplicateMode = mode as DuplicateMode}>{label}</button>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
   {#if leaderboard.length}
     <IntelligenceScoreBar title="Attempted score, best to worst" data={leaderboard} />
     <div class="overflow-x-auto rounded-xl border"><table class="w-full text-left text-sm"><thead class="bg-muted"><tr>
-      {#each [["model", "Model"], ["run", "Run / profile"], ["score", "Score / suite maximum"], ["suitePct", "% of suite"], ["attempted", "Score / attempted maximum"], ["attemptedPct", "% attempted"]] as [key, label] (key)}
-        <th class="p-3"><button type="button" class="flex items-center gap-1 font-medium" onclick={() => toggleSort(key as SortKey)}>{label}{#if sortKey === key}<span class="text-muted-foreground">{sortDir === "asc" ? "▲" : "▼"}</span>{/if}</button></th>
+      {#each COLUMNS as [key, label] (key)}
+        <th class="p-3"><button type="button" class="flex items-center gap-1 font-medium" onclick={() => toggleSort(key)}>{label}{#if sortKey === key}<span class="text-muted-foreground">{sortDir === "asc" ? "▲" : "▼"}</span>{/if}</button></th>
       {/each}
     </tr></thead><tbody>
-      {#each sortedRows as row (row.modelID + row.startedAt)}
+      {#each sortedRows as row (row.key)}
         <tr class="border-t">
-          <td class="p-3 font-medium">{row.modelName}</td>
-          <td class="p-3">{new Date(row.startedAt * 1000).toLocaleString()} · {row.profile}</td>
-          <td class="p-3">{row.score} / {row.maxTotal}</td>
-          <td class="p-3 tabular-nums">{row.suitePct}%</td>
-          <td class="p-3">{row.attemptedScoreValue} / {row.attemptedMax}</td>
-          <td class="p-3 tabular-nums">{row.attemptedPct}%</td>
+          <td class="p-3 font-medium">{row.label}</td>
+          <td class="p-3">{runLabel(row)}</td>
+          <td class="p-3">{round1(row.attempted.score)} / {round1(row.attempted.max)}</td>
+          <td class="p-3 tabular-nums">{pct(row.attempted.score, row.attempted.max)}%</td>
+          <td class="p-3 tabular-nums" title={coverageTooltip(row.coverage)}>{Math.round(row.coverage.attempted)} / {Math.round(row.coverage.total)}</td>
+          <td class="p-3 tabular-nums">{formatDuration(row.cost.wallMs)}</td>
+          <td class="p-3 tabular-nums">{formatTokens(row.cost.completionTokens)}</td>
+          <td class="p-3 tabular-nums">{row.cost.tokensPerPoint != null ? Math.round(row.cost.tokensPerPoint) : "—"}</td>
+          <td class="p-3 tabular-nums">{row.speed.tokensPerSecond != null ? round1(row.speed.tokensPerSecond) : "—"}{#if row.speed.basis === "endToEnd" && row.speed.tokensPerSecond != null}<span class="text-muted-foreground" title="End-to-end throughput where time to first token was not recorded.">†</span>{/if}</td>
         </tr>
       {/each}
     </tbody></table></div>
-    <p class="text-muted-foreground text-sm">Attempted totals exclude unsupported, diagnostic and unscored rubric items. Different profiles or coverage are not directly comparable.</p>
+    <p class="text-muted-foreground text-sm">Attempted totals exclude unsupported, diagnostic and unscored rubric items. Different profiles or coverage are not directly comparable. † End-to-end throughput where time to first token was not recorded.</p>
   {/if}
 
   {#if bestAt.length}<IntelligenceBestAt categories={bestAt} />{/if}
 
-  {#each results as result (result.run.run_id)}
+  {#if resolvedModels.length}
     <section class="space-y-4 rounded-xl border p-5">
-      <div class="flex flex-wrap items-center justify-between gap-2"><h2 class="font-semibold">{result.run.params.profile} · {new Date(result.run.started_at * 1000).toLocaleString()}</h2><a class="text-primary text-sm underline" href={`${intelligenceURL}/runs/${result.run.run_id}`} download={`intelligence-${result.run.run_id}.json`}>Download raw JSON</a></div>
-      {#if !result.models.length}<p class="text-muted-foreground text-sm">No item results saved yet. Run status: {result.run.state}.</p>{/if}
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="font-semibold">Model results</h2>
+        <div class="flex flex-wrap gap-3 text-sm">
+          {#each results as result (result.run.run_id)}
+            <a class="text-primary underline" href={`${intelligenceURL}/runs/${result.run.run_id}`} download={`intelligence-${result.run.run_id}.json`}>{new Date(result.run.started_at * 1000).toLocaleDateString()} raw JSON</a>
+          {/each}
+        </div>
+      </div>
 
-      {#if result.suite.categories.length >= 3 && result.models.length}
-        <IntelligenceCategoryRadar title="Category coverage" categories={result.suite.categories.map(c => c.name)}
-          series={result.models.map(model => ({
-            label: model.model_name, color: modelColors.get(model.model_id) ?? "#898781",
-            values: result.suite.categories.map(c => {
-              const max = model.totals.by_category_max[c.id] ?? 0;
-              return max > 0 ? Math.round(((model.totals.by_category[c.id] ?? 0) / max) * 100) : 0;
+      {#if allCategories.length >= 3}
+        <IntelligenceCategoryRadar title="Category coverage" categories={allCategories.map(c => c.name)}
+          series={resolvedModels.map(rm => ({
+            label: rm.label, color: modelColors.get(rm.configKey) ?? "#898781",
+            values: allCategories.map(c => {
+              const max = rm.byCategoryMax[c.id] ?? 0;
+              return max > 0 ? Math.round(((rm.byCategory[c.id] ?? 0) / max) * 100) : 0;
             }),
+            times: allCategories.map(c => { const ms = rm.byCategoryTimeMs[c.id]; return ms ? formatDuration(ms) : ""; }),
           }))} />
       {/if}
 
-      {#each sortedModels(result) as model (model.model_id)}
-        {@const attempted = attemptedScore(model.items, { humanScores, modelID: model.model_id })}
-        <details class="rounded-lg border p-4"><summary class="cursor-pointer font-medium">{model.model_name} · {round1(model.totals.score)} points ({pct(model.totals.score, model.totals.max_total)}%) - ({pct(attempted.score, attempted.max)}% on attempted)</summary>
-          <div class="my-3"><IntelligenceMeter value={model.totals.score} max={model.totals.max_total} color={modelColors.get(model.model_id) ?? "#898781"} /></div>
-          <div class="my-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{#each Object.entries(model.totals.by_category) as [category, score]}<div class="bg-muted rounded p-3 text-sm"><IntelligenceMeter label={result.suite.categories.find(c => c.id === category)?.name ?? category} value={score} max={model.totals.by_category_max[category] ?? 0} color={modelColors.get(model.model_id) ?? "#898781"} /></div>{/each}</div>
-          <div class="space-y-2">{#each model.items as item (item.item_id)}<details class="rounded border p-3"><summary class="flex cursor-pointer items-center gap-2 text-sm"><span class="size-2.5 shrink-0 rounded-[3px]" style="background:{outcomeColor(model.model_id, item)}"></span><span class="truncate">{item.title ?? item.item_id}</span><span class="text-muted-foreground shrink-0 tabular-nums">{needsHumanScore(item) ? scoreFor(model.model_id, item) ?? "—" : round1(item.score ?? 0)} / {item.max_score}</span>{#if item.role === "diagnostic"}<span class="text-muted-foreground shrink-0 text-xs">diagnostic</span>{/if}{#if item.unsupported || item.grade?.unsupported}<span class="text-muted-foreground shrink-0 text-xs">unsupported</span>{/if}</summary><div class="mt-3 space-y-3">
+      {#each sortedResolvedModels as rm (rm.key)}
+        <details class="rounded-lg border p-4"><summary class="cursor-pointer font-medium">{rm.label} · {round1(rm.attempted.score)} / {round1(rm.attempted.max)} points ({pct(rm.attempted.score, rm.attempted.max)}% attempted) · {formatDuration(rm.cost.wallMs)} · {formatTokens(rm.cost.completionTokens)} tok{#if rm.speed.tokensPerSecond != null} · {round1(rm.speed.tokensPerSecond)} tok/s{/if}</summary>
+          <div class="my-3"><IntelligenceMeter value={rm.attempted.score} max={rm.attempted.max} color={modelColors.get(rm.configKey) ?? "#898781"} /></div>
+          <div class="my-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{#each Object.entries(rm.byCategory) as [category, score]}<div class="bg-muted rounded p-3 text-sm"><IntelligenceMeter label={allCategories.find(c => c.id === category)?.name ?? category} value={score} max={rm.byCategoryMax[category] ?? 0} color={modelColors.get(rm.configKey) ?? "#898781"} /></div>{/each}</div>
+          <div class="space-y-2">{#each rm.items as item, index (item.item_id + "-" + index)}<details class="rounded border p-3"><summary class="flex cursor-pointer items-center gap-2 text-sm"><span class="size-2.5 shrink-0 rounded-[3px]" style="background:{outcomeColor(rm.modelID, item)}"></span><span class="truncate">{item.title ?? item.item_id}</span><span class="text-muted-foreground shrink-0 tabular-nums">{needsHumanScore(item) ? scoreFor(rm.modelID, item) ?? "—" : round1(item.score ?? 0)} / {item.max_score}</span>{#if itemCost(item)}<span class="text-muted-foreground shrink-0 text-xs tabular-nums">{itemCost(item)}</span>{/if}{#if item.role === "diagnostic"}<span class="text-muted-foreground shrink-0 text-xs">diagnostic</span>{/if}{#if item.unsupported || item.grade?.unsupported}<span class="text-muted-foreground shrink-0 text-xs">unsupported</span>{/if}</summary><div class="mt-3 space-y-3">
             {#if needsHumanScore(item)}
               <label class="flex flex-wrap items-center gap-2 text-sm">Rubric score
                 <input type="number" min="0" max={item.max_score} step="1" class="bg-background w-24 rounded-md border p-2"
-                  disabled={savingScore === `${item.item_id}:${model.model_id}`}
-                  value={scoreFor(model.model_id, item) ?? ""}
-                  onchange={(e) => void setHumanScore(model.model_id, item, e.currentTarget.value)} />
+                  disabled={savingScore === `${item.item_id}:${rm.modelID}`}
+                  value={scoreFor(rm.modelID, item) ?? ""}
+                  onchange={(e) => void setHumanScore(rm.modelID, item, e.currentTarget.value)} />
                 <span class="text-muted-foreground">of {item.max_score}</span>
               </label>
             {/if}
@@ -312,5 +395,7 @@
         </details>
       {/each}
     </section>
-  {/each}
+  {:else if results.length}
+    <p class="text-muted-foreground text-sm">No item results saved yet for the selected runs.</p>
+  {/if}
 </div>

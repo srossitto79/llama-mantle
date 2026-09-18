@@ -107,6 +107,62 @@ describe("speedTotals", () => {
   });
 });
 
+describe("resolveModels coverage", () => {
+  it("excludes unsupported, diagnostic and awaiting-human items from the attempted count", () => {
+    const items = [
+      item({ item_id: "a" }),
+      item({ item_id: "b" }),
+      item({ item_id: "c", unsupported: true }),
+      item({ item_id: "d", role: "diagnostic" }),
+      item({ item_id: "e", needs_human: true }),
+    ];
+    const r = result(
+      { suite: { categories: [], items: [{ item_id: "a" }, { item_id: "b" }, { item_id: "c" }, { item_id: "d" }, { item_id: "e" }, { item_id: "f" }] } },
+      [modelResult({ items })],
+    );
+    const [row] = resolveModels([r], "latest", {});
+    expect(row.coverage).toEqual({ attempted: 2, total: 6, unsupported: 1, diagnostic: 1, awaitingHuman: 1 });
+  });
+
+  it("falls back to the model's own item count when the run predates a stored suite item list", () => {
+    const r = result({ suite: { categories: [] } }, [modelResult({ items: [item({ item_id: "a" }), item({ item_id: "b" })] })]);
+    const [row] = resolveModels([r], "latest", {});
+    expect(row.coverage.total).toBe(2);
+  });
+});
+
+describe("resolveModels with run-level reasoning effort", () => {
+  // The companion only records a per-model reasoning_effort when it is hardcoded
+  // in that model's own config entry; the common case -- picking an effort on the
+  // run form -- leaves it null on every model and lands only in run.settings.
+  // configKey and the label must fall back to that, or two runs of the identical
+  // model at different efforts would silently collapse into one unlabelled row.
+  it("keeps two runs of one model_id separate when only run.settings.reasoning_effort differs", () => {
+    const model = modelResult({ reasoning_effort: null });
+    const off = result({ run: { run_id: "run-1", state: "done", started_at: 1000, params: { profile: "quick", models: ["model-a"] }, suite_sha256: "sha-1", settings: { temperature: 0, max_tokens: 4096, timeout: 60, reasoning_effort: "off" } } }, [model]);
+    const high = result({ run: { run_id: "run-2", state: "done", started_at: 2000, params: { profile: "quick", models: ["model-a"] }, suite_sha256: "sha-1", settings: { temperature: 0, max_tokens: 4096, timeout: 60, reasoning_effort: "high" } } }, [model]);
+
+    expect(configKey(off, model)).not.toEqual(configKey(high, model));
+
+    const rows = resolveModels([off, high], "latest", {});
+    expect(rows).toHaveLength(2);
+    expect(rows.map(r => r.label).sort()).toEqual(["Model A · high", "Model A · off"]);
+  });
+});
+
+describe("resolveModels category time", () => {
+  it("sums latency per category from the same counted items as byCategory", () => {
+    const items = [
+      item({ item_id: "a", category: "logic", latency_ms: 1000 }),
+      item({ item_id: "b", category: "logic", latency_ms: 2000 }),
+      item({ item_id: "c", category: "code", latency_ms: 500 }),
+      item({ item_id: "d", category: "logic", latency_ms: 9999, unsupported: true }),
+    ];
+    const [row] = resolveModels([result({}, [modelResult({ items })])], "latest", {});
+    expect(row.byCategoryTimeMs).toEqual({ logic: 3000, code: 500 });
+  });
+});
+
 describe("resolveModels", () => {
   const low = modelResult({ reasoning_effort: "low", model_name: "Model A" });
   const high = modelResult({ reasoning_effort: "high", model_name: "Model A" });
@@ -126,6 +182,19 @@ describe("resolveModels", () => {
     expect(resolveModels([earlier, later], "all", {})).toHaveLength(2);
     expect(resolveModels([earlier, later], "latest", {})).toHaveLength(1);
     expect(resolveModels([earlier, later], "average", {})).toHaveLength(1);
+  });
+
+  it("gives repeat runs of the identical config the same configKey under all mode, even though rows stay separate", () => {
+    // A consumer keys color assignment off configKey, not key, so that repeats
+    // of one configuration always render in the same color -- key alone is
+    // unique per row here (it embeds the run id) and would wrongly split them.
+    const earlier = result({ run: { run_id: "run-1", state: "done", started_at: 1000, params: { profile: "quick", models: ["model-a"] }, suite_sha256: "sha-1" } });
+    const later = result({ run: { run_id: "run-2", state: "done", started_at: 2000, params: { profile: "quick", models: ["model-a"] }, suite_sha256: "sha-1" } });
+
+    const rows = resolveModels([earlier, later], "all", {});
+    expect(rows).toHaveLength(2);
+    expect(rows[0].key).not.toEqual(rows[1].key);
+    expect(rows[0].configKey).toEqual(rows[1].configKey);
   });
 
   it("latest picks the row from the run with the greatest started_at", () => {

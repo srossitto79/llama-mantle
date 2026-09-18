@@ -9,7 +9,9 @@
 
   Chart.register(RadarController, RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
 
-  interface Series { label: string; color: string; values: number[] }
+  // `times` is parallel to `values` (one formatted duration per category) and
+  // optional -- an older caller passing just values still renders correctly.
+  interface Series { label: string; color: string; values: number[]; times?: string[] }
   interface Props { title: string; categories: string[]; series: Series[] }
   let { title, categories, series }: Props = $props();
 
@@ -45,7 +47,12 @@
         tooltip: {
           backgroundColor: c.surface, titleColor: c.primary, bodyColor: c.secondary,
           borderColor: c.grid, borderWidth: 1,
-          callbacks: { label: (ctx: { dataset: { label?: string }; raw: unknown }) => ` ${ctx.dataset.label}: ${ctx.raw}%` },
+          callbacks: {
+            label: (ctx: { datasetIndex: number; dataIndex: number; dataset: { label?: string }; raw: unknown }) => {
+              const time = series[ctx.datasetIndex]?.times?.[ctx.dataIndex];
+              return ` ${ctx.dataset.label}: ${ctx.raw}%${time ? ` · ${time}` : ""}`;
+            },
+          },
         },
       },
       scales: {

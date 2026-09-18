@@ -7,7 +7,7 @@
 
   Chart.register(BarController, BarElement, LinearScale, CategoryScale, Tooltip);
 
-  interface Datum { label: string; value: number; max: number; color: string }
+  interface Datum { label: string; value: number; max: number; color: string; meta?: string }
   interface Props { title: string; data: Datum[] }
   let { title, data }: Props = $props();
 
@@ -15,9 +15,11 @@
   let chart: Chart;
   // One legend entry per distinct color, in first-seen order — mirrors whichever
   // models/runs are actually plotted, without chart.js trying to legend per-bar colors.
+  // The full label is kept, not just its first segment: a " · " suffix now carries
+  // real identity (reasoning effort, temperature, ...), not just a disposable date.
   let legend = $derived.by(() => {
     const seen = new Map<string, string>();
-    for (const d of data) if (!seen.has(d.color)) seen.set(d.color, d.label.split(" · ")[0]);
+    for (const d of data) if (!seen.has(d.color)) seen.set(d.color, d.label);
     return [...seen.entries()].map(([color, label]) => ({ color, label }));
   });
 
@@ -39,7 +41,7 @@
           callbacks: {
             label: (ctx: { dataIndex: number }) => {
               const d = data[ctx.dataIndex];
-              return ` ${d.value} / ${d.max} - ${pct(d)}% success`;
+              return ` ${d.value} / ${d.max} - ${pct(d)}% success${d.meta ? ` · ${d.meta}` : ""}`;
             },
           },
         },

@@ -86,7 +86,9 @@ export interface IntelligenceResultModel {
 }
 export interface IntelligenceResult {
   run: IntelligenceRun;
-  suite: { categories: { id: string; name: string }[] };
+  // `items` is the full suite definition for this run (used to size the coverage
+  // denominator); older stored runs may lack it, so it stays optional.
+  suite: { categories: { id: string; name: string }[]; items?: { item_id: string; role?: string }[] };
   models: IntelligenceResultModel[];
 }
 
