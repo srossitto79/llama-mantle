@@ -81,9 +81,13 @@
   // leaderboard alongside the overall one above. Category time rides along for
   // the same reason as the leaderboard's: ties at 100% are the norm in a
   // saturated category, and time is what actually separates them.
+  //
+  // Sorted by spread, not by name: with most categories saturated (every model
+  // at or near 100%), a podium built from whatever .sort() does with the ties is
+  // noise, not a result. The category where models actually differ belongs first.
   let bestAt = $derived.by(() => {
-    return allCategories.map(({ id, name }) => {
-      const ranked = resolvedModels
+    const scored = allCategories.map(({ id, name }) => {
+      const entries = resolvedModels
         .map(rm => {
           const max = rm.byCategoryMax[id] ?? 0;
           if (max <= 0) return null;
@@ -93,12 +97,18 @@
             color: modelColors.get(rm.configKey) ?? "#898781", time: ms ? formatDuration(ms) : undefined,
           };
         })
-        .filter((e): e is { label: string; pct: number; color: string; time: string | undefined } => e !== null)
-        .sort((a, b) => b.pct - a.pct)
-        .slice(0, 3);
-      return { name, ranked };
-    }).filter(c => c.ranked.length);
+        .filter((e): e is { label: string; pct: number; color: string; time: string | undefined } => e !== null);
+      if (!entries.length) return null;
+      const pcts = entries.map(e => e.pct);
+      const top = Math.max(...pcts);
+      return {
+        name, spread: top - Math.min(...pcts), tiedAtTop: pcts.filter(p => p === top).length, modelCount: entries.length,
+        ranked: [...entries].sort((a, b) => b.pct - a.pct).slice(0, 3),
+      };
+    }).filter((c): c is NonNullable<typeof c> => c !== null);
+    return scored.sort((a, b) => b.spread - a.spread);
   });
+  let saturatedCount = $derived(bestAt.filter(c => c.spread === 0).length);
 
   type SortKey = "model" | "run" | "score" | "attemptedPct" | "coverage" | "time" | "tokens" | "tokensPerPoint" | "tokensPerSecond";
   const COLUMNS: [SortKey, string][] = [
@@ -348,7 +358,10 @@
     <p class="text-muted-foreground text-sm">Attempted totals exclude unsupported, diagnostic and unscored rubric items. Different profiles or coverage are not directly comparable. † End-to-end throughput where time to first token was not recorded.</p>
   {/if}
 
-  {#if bestAt.length}<IntelligenceBestAt categories={bestAt} />{/if}
+  {#if bestAt.length}
+    <IntelligenceBestAt categories={bestAt} />
+    {#if resolvedModels.length > 1 && saturatedCount}<p class="text-muted-foreground text-sm">{saturatedCount} of {bestAt.length} categories are saturated across the compared models.</p>{/if}
+  {/if}
 
   {#if resolvedModels.length}
     <section class="space-y-4 rounded-xl border p-5">
