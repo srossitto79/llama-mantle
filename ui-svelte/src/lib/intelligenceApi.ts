@@ -22,7 +22,9 @@ export interface IntelligenceRun {
     id: string; name: string; state: string; score?: number;
     item_count?: number; carried?: number; retry?: unknown; resume?: boolean;
     started_at?: number; finished_at?: number;
-    totals?: { tokens_per_second?: number };
+    // decode_tokens_per_second is present once the companion is TTFT-aware
+    // (see intelligenceMetrics.ts); absent, not zero, on an older one.
+    totals?: { tokens_per_second?: number; decode_tokens_per_second?: number };
     items?: IntelligenceItem[];
   }[];
   suite?: { item_count?: number };

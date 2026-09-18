@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { configKey, costTotals, resolveModels, speedTotals, type DuplicateMode } from "./intelligenceMetrics";
+import { configKey, costTotals, paretoFrontier, resolveModels, speedTotals, type DuplicateMode } from "./intelligenceMetrics";
 import type { IntelligenceItem, IntelligenceResult, IntelligenceResultModel } from "./intelligenceApi";
 
 function item(overrides: Partial<IntelligenceItem> = {}): IntelligenceItem {
@@ -206,5 +206,29 @@ describe("resolveModels", () => {
     const [row] = resolveModels([earlier, later], "latest", {});
     expect(row.score).toBe(9);
     expect(row.sourceRunIDs).toEqual(["run-2"]);
+  });
+});
+
+describe("paretoFrontier", () => {
+  it("marks a point dominated once another is no worse on both axes with a strict improvement on one", () => {
+    // b is cheaper (lower x) and no worse on y -- a is dominated.
+    const points = [{ x: 10, y: 90 }, { x: 5, y: 90 }];
+    expect(paretoFrontier(points)).toEqual([false, true]);
+  });
+
+  it("keeps a point on the frontier when it is the only one cheaper, even if others score higher", () => {
+    // Cheapest-but-worse and priciest-but-best both stay -- neither dominates the other.
+    const points = [{ x: 1, y: 50 }, { x: 10, y: 100 }];
+    expect(paretoFrontier(points)).toEqual([true, true]);
+  });
+
+  it("leaves both points on the frontier when tied on both axes", () => {
+    const points = [{ x: 5, y: 90 }, { x: 5, y: 90 }];
+    expect(paretoFrontier(points)).toEqual([true, true]);
+  });
+
+  it("keeps every point on the frontier when each is best on at least one axis", () => {
+    const points = [{ x: 1, y: 60 }, { x: 5, y: 80 }, { x: 20, y: 100 }];
+    expect(paretoFrontier(points)).toEqual([true, true, true]);
   });
 });

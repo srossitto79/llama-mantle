@@ -24,6 +24,7 @@
   function tooltip(item: IntelligenceItem): string {
     const parts = [`${item.title || item.item_id} — ${item.score} / ${item.max_score}`, OUTCOME[outcomeOf(item)].label];
     if (item.latency_ms != null) parts.push(`${(item.latency_ms / 1000).toFixed(1)}s`);
+    if (item.ttft_ms != null) parts.push(`${(item.ttft_ms / 1000).toFixed(1)}s to first token`);
     if (item.error) parts.push(String(item.error).slice(0, 120));
     return parts.join(" · ");
   }
@@ -55,6 +56,7 @@
     const time = elapsed(model);
     if (time) notes.push(time);
     if (model.totals?.tokens_per_second) notes.push(`${model.totals.tokens_per_second.toFixed(1)} tok/s`);
+    if (model.totals?.decode_tokens_per_second) notes.push(`${model.totals.decode_tokens_per_second.toFixed(1)} tok/s decode`);
     if (model.carried) notes.push(`${model.carried} carried over`);
     return {
       items, planned, live, notes,

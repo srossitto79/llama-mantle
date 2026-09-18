@@ -5,6 +5,7 @@
   import * as Card from "$lib/components/ui/card/index.js";
   import { Badge, type BadgeVariant } from "$lib/components/ui/badge/index.js";
   import IntelligenceScoreBar from "../components/IntelligenceScoreBar.svelte";
+  import IntelligenceQualityCost from "../components/IntelligenceQualityCost.svelte";
   import IntelligenceCategoryRadar from "../components/IntelligenceCategoryRadar.svelte";
   import IntelligenceBestAt from "../components/IntelligenceBestAt.svelte";
   import IntelligenceMeter from "../components/IntelligenceMeter.svelte";
@@ -76,6 +77,31 @@
         meta: rm.cost.wallMs ? formatDuration(rm.cost.wallMs) : undefined,
       }))
       .sort((a, b) => (b.max ? b.value / b.max : 0) - (a.max ? a.value / a.max : 0)));
+
+  // Quality against what it cost to get there -- attempted score has no relation
+  // to wall time or tokens spent, so this is the only place on the page that
+  // answers "which one do I actually run" rather than "which one scores highest".
+  let qualityCostPoints = $derived(
+    resolvedModels
+      .filter(rm => rm.cost.wallMs > 0)
+      .map(rm => ({
+        key: rm.key, label: rm.label,
+        minutes: rm.cost.wallMs / 60000, tokens: rm.cost.completionTokens,
+        pct: pct(rm.attempted.score, rm.attempted.max),
+        tokensPerPoint: rm.cost.tokensPerPoint, tokensPerSecond: rm.speed.tokensPerSecond,
+      })));
+
+  // The efficiency leaderboard: separates models attempted % cannot, since a slow
+  // model that spends few tokens and a fast model that spends many can land on
+  // the identical score.
+  let costLeaderboard = $derived(
+    resolvedModels
+      .filter(rm => rm.cost.tokensPerPoint != null)
+      .map(rm => ({
+        label: rm.label, value: Math.round(rm.cost.tokensPerPoint!),
+        color: modelColors.get(rm.configKey) ?? "#898781",
+      }))
+      .sort((a, b) => a.value - b.value));
 
   // Top 3 configurations per category, across the resolved set -- a "best at"
   // leaderboard alongside the overall one above. Category time rides along for
@@ -357,6 +383,9 @@
     </tbody></table></div>
     <p class="text-muted-foreground text-sm">Attempted totals exclude unsupported, diagnostic and unscored rubric items. Different profiles or coverage are not directly comparable. † End-to-end throughput where time to first token was not recorded.</p>
   {/if}
+
+  {#if qualityCostPoints.length}<IntelligenceQualityCost title="Quality vs cost" points={qualityCostPoints} />{/if}
+  {#if costLeaderboard.length}<IntelligenceScoreBar title="Tokens per point (lower is better)" data={costLeaderboard} unit="tok/pt" />{/if}
 
   {#if bestAt.length}
     <IntelligenceBestAt categories={bestAt} />

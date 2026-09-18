@@ -414,3 +414,22 @@ export function resolveModels(
     return buildRow(key, key, label, group, humanScores);
   });
 }
+
+// ---------------------------------------------------------------------------
+// Pareto frontier -- for the quality-vs-cost scatter's "which do I run" emphasis.
+// ---------------------------------------------------------------------------
+
+export interface FrontierPoint { x: number; y: number }
+
+/**
+ * Marks each point as on the frontier (true) or dominated (false): a point is
+ * dominated once another point is both no worse on x (lower, since x is a cost
+ * a viewer wants to minimize) and no worse on y (higher, a quality a viewer
+ * wants to maximize), with a strict improvement on at least one axis. Ties on
+ * both axes leave both points on the frontier, since neither actually beats
+ * the other.
+ */
+export function paretoFrontier<T extends FrontierPoint>(points: T[]): boolean[] {
+  return points.map(p =>
+    !points.some(o => o !== p && o.x <= p.x && o.y >= p.y && (o.x < p.x || o.y > p.y)));
+}

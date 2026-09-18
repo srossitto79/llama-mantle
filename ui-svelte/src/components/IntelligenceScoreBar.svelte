@@ -7,9 +7,14 @@
 
   Chart.register(BarController, BarElement, LinearScale, CategoryScale, Tooltip);
 
-  interface Datum { label: string; value: number; max: number; color: string; meta?: string }
-  interface Props { title: string; data: Datum[] }
-  let { title, data }: Props = $props();
+  // `max` present plots a percentage bar (the original behaviour, unchanged for
+  // every existing caller). `max` absent plots the raw value instead -- an
+  // efficiency figure like tokens-per-point has no natural ceiling to plot
+  // against, and forcing one would be fabricated, not measured.
+  interface Datum { label: string; value: number; max?: number; color: string; meta?: string; display?: string }
+  interface Props { title: string; data: Datum[]; unit?: string }
+  let { title, data, unit }: Props = $props();
+  let percentMode = $derived(data.every(d => d.max != null));
 
   let canvas: HTMLCanvasElement;
   let chart: Chart;
@@ -41,16 +46,25 @@
           callbacks: {
             label: (ctx: { dataIndex: number }) => {
               const d = data[ctx.dataIndex];
-              return ` ${d.value} / ${d.max} - ${pct(d)}% success${d.meta ? ` · ${d.meta}` : ""}`;
+              const body = d.max != null
+                ? `${d.value} / ${d.max} - ${pct(d)}% success`
+                : `${d.display ?? d.value}${unit ? ` ${unit}` : ""}`;
+              return ` ${body}${d.meta ? ` · ${d.meta}` : ""}`;
             },
           },
         },
       },
       scales: {
-        x: {
-          min: 0, max: 100, ticks: { color: c.muted, font: { size: 10 }, callback: (v: string | number) => v + "%" },
-          grid: { color: c.grid }, border: { color: c.baseline },
-        },
+        x: percentMode
+          ? {
+              min: 0, max: 100, ticks: { color: c.muted, font: { size: 10 }, callback: (v: string | number) => v + "%" },
+              grid: { color: c.grid }, border: { color: c.baseline },
+            }
+          : {
+              beginAtZero: true,
+              ticks: { color: c.muted, font: { size: 10 }, callback: (v: string | number) => unit ? `${v} ${unit}` : String(v) },
+              grid: { color: c.grid }, border: { color: c.baseline },
+            },
         y: {
           ticks: { color: c.secondary, font: { size: 11 } },
           grid: { display: false }, border: { color: c.baseline },
@@ -60,7 +74,10 @@
   }
 
   function pct(d: Datum) {
-    return d.max > 0 ? Math.round((d.value / d.max) * 1000) / 10 : 0;
+    return d.max ? Math.round((d.value / d.max) * 1000) / 10 : 0;
+  }
+  function barValue(d: Datum) {
+    return d.max != null ? pct(d) : d.value;
   }
 
   onMount(() => {
@@ -69,7 +86,7 @@
       data: {
         labels: data.map(d => d.label),
         datasets: [{
-          data: data.map(pct),
+          data: data.map(barValue),
           backgroundColor: data.map(d => d.color),
           borderRadius: 4,
           maxBarThickness: 22,
@@ -87,7 +104,7 @@
     const dark = $isDarkMode;
     chart.options = buildOptions(dark) as never;
     chart.data.labels = data.map(d => d.label);
-    chart.data.datasets[0].data = data.map(pct);
+    chart.data.datasets[0].data = data.map(barValue);
     chart.data.datasets[0].backgroundColor = data.map(d => d.color);
     chart.update("none");
   });
