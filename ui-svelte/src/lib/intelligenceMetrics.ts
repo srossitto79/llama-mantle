@@ -6,7 +6,7 @@
 // Every panel on the results page should read `resolveModels` rather than walking
 // `IntelligenceResult[]` itself -- that is what keeps the leaderboard, the category
 // radar, the table and the Best At panel showing the same set of rows.
-import { attemptedScore, type HumanScores, type IntelligenceItem, type IntelligenceResult, type IntelligenceResultModel } from "./intelligenceApi";
+import { attemptedScore, needsHumanScore, type HumanScores, type IntelligenceItem, type IntelligenceResult, type IntelligenceResultModel } from "./intelligenceApi";
 
 // ---------------------------------------------------------------------------
 // Configuration identity
@@ -201,9 +201,9 @@ export interface ResolvedModel {
   sourceRunIDs: string[];
   startedAt: number;
   profile: string;
+  /** Already scoped to this row's own profile -- see scopeToProfile. */
   items: IntelligenceItem[];
-  score: number;
-  maxTotal: number;
+  /** Recomputed from the same profile-scoped item list as `attempted` (see categoryScores) -- a category this row's profile never touches cannot appear here, even when carry-forward left it on the model's file. */
   byCategory: Record<string, number>;
   byCategoryMax: Record<string, number>;
   attempted: { score: number; max: number; awaitingHuman: number };
@@ -226,6 +226,29 @@ function firstItemID(items: IntelligenceItem[]): string | undefined {
 }
 
 /**
+ * A model's saved file can hold more than this run's own profile: the
+ * companion's carry-forward feature (--only-missing / retry / resume) copies
+ * items an earlier, broader run already answered into a narrower run's output,
+ * so `model.items` is "everything this model has ever recorded", not "what this
+ * run asked for". Scoring, coverage, cost and speed must all read the same
+ * profile-scoped list, or a `quick` run silently pulls in a `default` run's
+ * extra items and the score stops meaning what the "Run / profile" column says
+ * it does.
+ *
+ * Falls back to the unfiltered `model.items` when the per-run suite snapshot
+ * lacks a usable item list (an older run) or the profile is "full" (which the
+ * companion itself never filters by profile -- see run.py's select_suite).
+ */
+function scopeToProfile(result: IntelligenceResult, model: IntelligenceResultModel): IntelligenceItem[] {
+  const profile = result.run.params.profile;
+  const catalog = result.suite.items;
+  if (!catalog || !catalog.length || profile === "full") return model.items;
+  const inProfile = new Set(catalog.filter(i => (i.profiles ?? []).includes(profile)).map(i => i.id));
+  if (!inProfile.size) return model.items; // an unrecognized profile name: filtering would drop everything
+  return model.items.filter(item => inProfile.has(item.item_id));
+}
+
+/**
  * How much of the suite this model actually attempted, as a real fraction rather
  * than the old "score / suite maximum" -- which conflated coverage with quality.
  *
@@ -238,24 +261,63 @@ function firstItemID(items: IntelligenceItem[]): string | undefined {
  * it would make a complete `default` run of 48 read as covering a fraction of
  * ~200 and look barely started. `model.items.length` is the last resort, for a
  * run archived before `run.suite.item_count` existed.
+ *
+ * `total` is never let fall below the item count actually on the model: the
+ * companion's carry-forward feature (--only-missing / retry / resume) lets a
+ * narrow run's saved file keep items recorded by an earlier, broader run of
+ * the same model, so `run.suite.item_count` -- this run's own requested plan
+ * size -- can be smaller than what the file actually holds. Clamping avoids
+ * an impossible "50 / 21"; it does not make the true current plan size known,
+ * so a clamped total is a lower bound, not a fully trustworthy one.
  */
 export interface Coverage {
   attempted: number; total: number;
   unsupported: number; diagnostic: number; awaitingHuman: number;
+  /** True when `total` was raised to match `attempted` -- see the note above. */
+  totalUncertain: boolean;
 }
 
-function coverageFor(result: IntelligenceResult, model: IntelligenceResultModel, humanScores: HumanScores): Coverage {
+// `items` must already be scoped to the run's own profile (scopeToProfile) --
+// otherwise a carried-forward item from a broader profile inflates `attempted`
+// the same way it used to inflate the raw, unscoped count.
+function coverageFor(items: IntelligenceItem[], plannedCount: number, humanScores: HumanScores, modelID: string): Coverage {
   let unsupported = 0, diagnostic = 0;
-  for (const item of model.items) {
+  for (const item of items) {
     if (item.role === "diagnostic") diagnostic++;
     else if (item.unsupported || item.grade?.unsupported) unsupported++;
   }
-  const awaitingHuman = attemptedScore(model.items, { humanScores, modelID: model.model_id }).awaitingHuman;
-  const total = result.run.suite?.item_count ?? model.items.length;
+  const awaitingHuman = attemptedScore(items, { humanScores, modelID }).awaitingHuman;
+  const planned = plannedCount || items.length;
+  const total = Math.max(planned, items.length);
   return {
-    attempted: model.items.length - unsupported - diagnostic - awaitingHuman,
+    attempted: items.length - unsupported - diagnostic - awaitingHuman,
     total, unsupported, diagnostic, awaitingHuman,
+    totalUncertain: total > planned,
   };
+}
+
+// Grouped the same way `attemptedScore` counts a single item, so a category's
+// score/max here covers exactly the items `attempted` counts -- unsupported and
+// diagnostic items excluded, a rubric item held out until it has a human score.
+function categoryScores(
+  items: IntelligenceItem[],
+  humanScores: HumanScores,
+  modelID: string,
+): { score: Record<string, number>; max: Record<string, number> } {
+  const score: Record<string, number> = {};
+  const max: Record<string, number> = {};
+  for (const item of items) {
+    if (item.role === "diagnostic" || item.unsupported || item.grade?.unsupported) continue;
+    let points = item.score || 0;
+    if (needsHumanScore(item)) {
+      const human = humanScores[item.item_id]?.[modelID];
+      if (typeof human !== "number") continue;
+      points = human;
+    }
+    score[item.category] = (score[item.category] ?? 0) + points;
+    max[item.category] = (max[item.category] ?? 0) + item.max_score;
+  }
+  return { score, max };
 }
 
 // Grouped the same way `attemptedScore` counts items, so a category's time and
@@ -276,30 +338,34 @@ function averageCoverage(parts: Coverage[]): Coverage {
     unsupported: average(parts.map(p => p.unsupported)),
     diagnostic: average(parts.map(p => p.diagnostic)),
     awaitingHuman: average(parts.map(p => p.awaitingHuman)),
+    totalUncertain: parts.some(p => p.totalUncertain),
   };
 }
 
 function buildRow(rowKey: string, configKeyValue: string, label: string, entries: Entry[], humanScores: HumanScores): ResolvedModel {
   // "average" spans several runs; every other mode has exactly one entry here.
-  const items = entries.flatMap(e => e.model.items);
+  // Every item-derived figure below reads the profile-scoped list (scopeToProfile),
+  // never entry.model.items directly -- see its docstring for why.
+  const scoped = entries.map(e => scopeToProfile(e.result, e.model));
+  const items = scoped.flat();
   const modelID = entries[0].model.model_id;
   const attempted = entries.length === 1
-    ? attemptedScore(entries[0].model.items, { humanScores, modelID })
-    : averageAttempted(entries, humanScores, modelID);
+    ? attemptedScore(scoped[0], { humanScores, modelID })
+    : averageAttempted(scoped, humanScores, modelID);
+  const perEntryCategory = scoped.map(its => categoryScores(its, humanScores, modelID));
   const byCategory: Record<string, number> = {};
   const byCategoryMax: Record<string, number> = {};
-  for (const cat of new Set(entries.flatMap(e => Object.keys(e.model.totals.by_category_max)))) {
-    const scores = entries.map(e => e.model.totals.by_category[cat] ?? 0);
-    const maxes = entries.map(e => e.model.totals.by_category_max[cat] ?? 0);
-    byCategory[cat] = average(scores);
-    byCategoryMax[cat] = average(maxes);
+  for (const cat of new Set(perEntryCategory.flatMap(c => Object.keys(c.max)))) {
+    byCategory[cat] = average(perEntryCategory.map(c => c.score[cat] ?? 0));
+    byCategoryMax[cat] = average(perEntryCategory.map(c => c.max[cat] ?? 0));
   }
-  const cost = averageCost(entries.map(e => costTotals(e.model.items, attemptedScore(e.model.items, { humanScores, modelID: e.model.model_id }).score)));
-  const speed = averageSpeed(entries.map(e => speedTotals(e.model.items, firstItemID(e.model.items))));
+  const cost = averageCost(scoped.map(its => costTotals(its, attemptedScore(its, { humanScores, modelID }).score)));
+  const speed = averageSpeed(scoped.map(its => speedTotals(its, firstItemID(its))));
+  const plannedCounts = entries.map(e => e.result.run.suite?.item_count ?? 0);
   const coverage = entries.length === 1
-    ? coverageFor(entries[0].result, entries[0].model, humanScores)
-    : averageCoverage(entries.map(e => coverageFor(e.result, e.model, humanScores)));
-  const perEntryCategoryTime = entries.map(e => categoryTime(e.model.items));
+    ? coverageFor(scoped[0], plannedCounts[0], humanScores, modelID)
+    : averageCoverage(scoped.map((its, i) => coverageFor(its, plannedCounts[i], humanScores, modelID)));
+  const perEntryCategoryTime = scoped.map(its => categoryTime(its));
   const byCategoryTimeMs: Record<string, number> = {};
   for (const cat of new Set(perEntryCategoryTime.flatMap(t => Object.keys(t)))) {
     byCategoryTimeMs[cat] = average(perEntryCategoryTime.map(t => t[cat] ?? 0));
@@ -310,8 +376,6 @@ function buildRow(rowKey: string, configKeyValue: string, label: string, entries
     startedAt: Math.max(...entries.map(e => e.result.run.started_at)),
     profile: entries[entries.length - 1].result.run.params.profile,
     items,
-    score: average(entries.map(e => e.model.totals.score)),
-    maxTotal: average(entries.map(e => e.model.totals.max_total)),
     byCategory, byCategoryMax, byCategoryTimeMs,
     attempted, coverage, cost, speed,
   };
@@ -324,8 +388,8 @@ function average(values: number[]): number {
 // Coverage can differ between runs of the same config, so the attempted score is
 // itself an average of ratios' numerator and denominator, not just re-summed --
 // a run that skipped an item must not silently shrink another run's max.
-function averageAttempted(entries: Entry[], humanScores: HumanScores, modelID: string) {
-  const parts = entries.map(e => attemptedScore(e.model.items, { humanScores, modelID }));
+function averageAttempted(itemLists: IntelligenceItem[][], humanScores: HumanScores, modelID: string) {
+  const parts = itemLists.map(its => attemptedScore(its, { humanScores, modelID }));
   return {
     score: average(parts.map(p => p.score)),
     max: average(parts.map(p => p.max)),

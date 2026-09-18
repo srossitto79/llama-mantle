@@ -26,7 +26,16 @@
   let duplicateMode = $state<DuplicateMode>("latest");
   let generation = 0;
   let visible = $derived(runs.filter(r => `${r.params.profile} ${r.state} ${new Date(r.started_at * 1000).toLocaleString()}`.toLowerCase().includes(filter.toLowerCase())));
-  let differentSuites = $derived(new Set(results.map(r => r.run.suite_sha256)).size > 1);
+  // suite_sha256 alone misses the common case: it hashes the companion's entire
+  // unfiltered catalog, which is identical across every profile run from the
+  // same suite version. Comparing a `quick` run (a handful of items) against a
+  // `default` run (four times as many) never trips it, and that's exactly the
+  // comparison whose % figures are not directly comparable -- so this also
+  // checks profile and the run's own item_count.
+  let differentSuites = $derived(
+    new Set(results.map(r => r.run.suite_sha256)).size > 1
+    || new Set(results.map(r => r.run.params.profile)).size > 1
+    || new Set(results.map(r => r.run.suite?.item_count)).size > 1);
 
   const STATE_VARIANT: Record<string, BadgeVariant> = {
     done: "secondary", running: "default", starting: "default",
@@ -172,7 +181,7 @@
   let sortedResolvedModels = $derived(
     [...resolvedModels].sort((a, b) =>
       pct(b.attempted.score, b.attempted.max) - pct(a.attempted.score, a.attempted.max)
-      || pct(b.score, b.maxTotal) - pct(a.score, a.maxTotal)));
+      || a.label.localeCompare(b.label)));
 
   let kpis = $derived.by(() => {
     const uniqueModels = new Set(resolvedModels.map(rm => rm.modelID));
@@ -240,8 +249,10 @@
     if (c.unsupported) parts.push(`${Math.round(c.unsupported)} unsupported`);
     if (c.diagnostic) parts.push(`${Math.round(c.diagnostic)} diagnostic`);
     if (c.awaitingHuman) parts.push(`${Math.round(c.awaitingHuman)} awaiting a score`);
-    if (!parts.length) return "";
-    return `${Math.round(c.total - c.attempted)} not attempted: ${parts.join(" · ")}`;
+    const base = parts.length ? `${Math.round(c.total - c.attempted)} not attempted: ${parts.join(" · ")}` : "";
+    if (!c.totalUncertain) return base;
+    const note = "Total may be higher than shown.";
+    return base ? `${base} · ${note}` : note;
   }
   function itemCost(item: IntelligenceItem): string {
     const parts: string[] = [];
@@ -347,7 +358,7 @@
     </div>
   </section>
 
-  {#if differentSuites}<p class="rounded-lg border p-4 text-sm">These runs use different suite versions. Compare item coverage before interpreting score differences.</p>{/if}
+  {#if differentSuites}<p class="rounded-lg border p-4 text-sm">These runs cover different items. Check coverage before comparing scores.</p>{/if}
 
   {#if hasDuplicates}
     <div class="flex flex-wrap items-center gap-2 text-sm">
@@ -373,7 +384,7 @@
           <td class="p-3">{runLabel(row)}</td>
           <td class="p-3">{round1(row.attempted.score)} / {round1(row.attempted.max)}</td>
           <td class="p-3 tabular-nums">{pct(row.attempted.score, row.attempted.max)}%</td>
-          <td class="p-3 tabular-nums" title={coverageTooltip(row.coverage)}>{Math.round(row.coverage.attempted)} / {Math.round(row.coverage.total)}</td>
+          <td class="p-3 tabular-nums" title={coverageTooltip(row.coverage)}>{Math.round(row.coverage.attempted)} / {row.coverage.totalUncertain ? "≥" : ""}{Math.round(row.coverage.total)}</td>
           <td class="p-3 tabular-nums">{formatDuration(row.cost.wallMs)}</td>
           <td class="p-3 tabular-nums">{formatTokens(row.cost.completionTokens)}</td>
           <td class="p-3 tabular-nums">{row.cost.tokensPerPoint != null ? Math.round(row.cost.tokensPerPoint) : "—"}</td>

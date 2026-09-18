@@ -90,9 +90,12 @@ export interface IntelligenceResult {
   run: IntelligenceRun;
   // The companion writes the *entire unfiltered* suite catalog here regardless
   // of the run's profile -- categories is safe to read (the same set for every
-  // profile), but never size a coverage denominator off an `items` list here;
-  // use run.suite.item_count instead (see intelligenceMetrics.ts).
-  suite: { categories: { id: string; name: string }[] };
+  // profile). `items` is that same whole catalog, so its length is never a
+  // coverage denominator (see run.suite.item_count for that) -- but `id` and
+  // `profiles` per item are exactly what scopeToProfile (intelligenceMetrics.ts)
+  // needs to tell which of a model's *recorded* items actually belong to this
+  // run's own profile, versus carried forward from a broader one.
+  suite: { categories: { id: string; name: string }[]; items?: { id: string; role?: string; profiles?: string[] }[] };
   models: IntelligenceResultModel[];
 }
 

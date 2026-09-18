@@ -121,13 +121,30 @@ describe("resolveModels coverage", () => {
       [modelResult({ items })],
     );
     const [row] = resolveModels([r], "latest", {});
-    expect(row.coverage).toEqual({ attempted: 2, total: 6, unsupported: 1, diagnostic: 1, awaitingHuman: 1 });
+    expect(row.coverage).toEqual({ attempted: 2, total: 6, unsupported: 1, diagnostic: 1, awaitingHuman: 1, totalUncertain: false });
   });
 
   it("falls back to the model's own item count when the run predates run.suite.item_count", () => {
     const r = result({ suite: { categories: [] } }, [modelResult({ items: [item({ item_id: "a" }), item({ item_id: "b" })] })]);
     const [row] = resolveModels([r], "latest", {});
     expect(row.coverage.total).toBe(2);
+    expect(row.coverage.totalUncertain).toBe(false);
+  });
+
+  it("clamps total to the model's actual item count and flags it uncertain when carry-forward left more items on the file than this run's own plan", () => {
+    // The companion's carry-forward feature (retry/resume/only-missing) can leave
+    // a narrow run's saved model file holding items from an earlier, broader run,
+    // so item_count (this run's own requested plan) can be smaller than what is
+    // actually on the file. "50 / 21" must never render -- see coverageFor.
+    const items = Array.from({ length: 50 }, (_, i) => item({ item_id: `x${i}` }));
+    const r = result(
+      { run: { run_id: "run-1", state: "done", started_at: 1000, params: { profile: "iron-tensor", models: ["model-a"] }, suite_sha256: "sha-1", suite: { item_count: 21 } } },
+      [modelResult({ items })],
+    );
+    const [row] = resolveModels([r], "latest", {});
+    expect(row.coverage.total).toBe(50);
+    expect(row.coverage.attempted).toBe(50);
+    expect(row.coverage.totalUncertain).toBe(true);
   });
 });
 
@@ -199,12 +216,12 @@ describe("resolveModels", () => {
 
   it("latest picks the row from the run with the greatest started_at", () => {
     const earlier = result({ run: { run_id: "run-1", state: "done", started_at: 1000, params: { profile: "quick", models: ["model-a"] }, suite_sha256: "sha-1" } },
-      [modelResult({ totals: { score: 1, max_total: 10, by_category: {}, by_category_max: {} } })]);
+      [modelResult({ items: [item({ item_id: "a", score: 1, max_score: 10 })] })]);
     const later = result({ run: { run_id: "run-2", state: "done", started_at: 2000, params: { profile: "quick", models: ["model-a"] }, suite_sha256: "sha-1" } },
-      [modelResult({ totals: { score: 9, max_total: 10, by_category: {}, by_category_max: {} } })]);
+      [modelResult({ items: [item({ item_id: "a", score: 9, max_score: 10 })] })]);
 
     const [row] = resolveModels([earlier, later], "latest", {});
-    expect(row.score).toBe(9);
+    expect(row.attempted.score).toBe(9);
     expect(row.sourceRunIDs).toEqual(["run-2"]);
   });
 });
@@ -230,5 +247,82 @@ describe("paretoFrontier", () => {
   it("keeps every point on the frontier when each is best on at least one axis", () => {
     const points = [{ x: 1, y: 60 }, { x: 5, y: 80 }, { x: 20, y: 100 }];
     expect(paretoFrontier(points)).toEqual([true, true, true]);
+  });
+});
+
+describe("resolveModels profile scoping (carry-forward)", () => {
+  // The companion's carry-forward feature (--only-missing / retry / resume)
+  // copies items an earlier, broader run already answered into a narrower
+  // run's saved file, so model.items can hold more than this run's own
+  // profile ever asked for -- confirmed against a live iron-tensor run, where
+  // a 21-item profile's saved file held 50 items from an earlier default run.
+  const catalog = [
+    { id: "a", profiles: ["quick"] },
+    { id: "b", profiles: ["quick"] },
+    { id: "c", profiles: ["default"] }, // carried forward, not part of "quick"
+  ];
+  const items = [
+    item({ item_id: "a", score: 10, max_score: 10, category: "logic" }),
+    item({ item_id: "b", score: 0, max_score: 10, category: "logic" }),
+    item({ item_id: "c", score: 10, max_score: 10, category: "logic" }),
+  ];
+
+  it("excludes a carried-forward item outside this run's profile from score, coverage and item count", () => {
+    const r = result(
+      { run: { run_id: "run-1", state: "done", started_at: 1000, params: { profile: "quick", models: ["model-a"] }, suite_sha256: "sha-1", suite: { item_count: 2 } } },
+      [modelResult({ items })],
+    );
+    // Attach the profile catalog the way run_results actually returns it.
+    (r.suite as { items?: typeof catalog }).items = catalog;
+
+    const [row] = resolveModels([r], "latest", {});
+    expect(row.items.map(i => i.item_id).sort()).toEqual(["a", "b"]);
+    expect(row.attempted).toEqual({ score: 10, max: 20, awaitingHuman: 0 });
+    expect(row.coverage.total).toBe(2);
+    expect(row.coverage.totalUncertain).toBe(false);
+  });
+
+  it("falls back to the unfiltered items when the run predates a per-run suite item catalog", () => {
+    const r = result(
+      { run: { run_id: "run-1", state: "done", started_at: 1000, params: { profile: "quick", models: ["model-a"] }, suite_sha256: "sha-1" } },
+      [modelResult({ items })],
+    );
+    const [row] = resolveModels([r], "latest", {});
+    expect(row.items).toHaveLength(3);
+  });
+
+  it("does not filter by profile at all when the profile is 'full'", () => {
+    const r = result(
+      { run: { run_id: "run-1", state: "done", started_at: 1000, params: { profile: "full", models: ["model-a"] }, suite_sha256: "sha-1" } },
+      [modelResult({ items })],
+    );
+    (r.suite as { items?: typeof catalog }).items = catalog;
+    const [row] = resolveModels([r], "latest", {});
+    expect(row.items).toHaveLength(3);
+  });
+
+  it("excludes a carried-forward category from byCategory/byCategoryMax, even when the companion's own totals still carry it", () => {
+    // Item "c" is category "external", out of "quick"'s profile (like the real
+    // catalog, where "external" only ever belongs to default/iron-tensor/full
+    // etc, never "quick") -- but the model's saved totals were computed over
+    // the whole (carry-forward-widened) file and still report it, the same way
+    // a live "quick" run's Best At panel showed "External Benchmarks".
+    const withExternal = [
+      item({ item_id: "a", score: 10, max_score: 10, category: "logic" }),
+      item({ item_id: "b", score: 0, max_score: 10, category: "logic" }),
+      item({ item_id: "c", score: 10, max_score: 10, category: "external" }),
+    ];
+    const r = result(
+      { run: { run_id: "run-1", state: "done", started_at: 1000, params: { profile: "quick", models: ["model-a"] }, suite_sha256: "sha-1", suite: { item_count: 2 } } },
+      [modelResult({
+        items: withExternal,
+        totals: { score: 20, max_total: 30, by_category: { logic: 10, external: 10 }, by_category_max: { logic: 20, external: 10 } },
+      })],
+    );
+    (r.suite as { items?: typeof catalog }).items = catalog;
+
+    const [row] = resolveModels([r], "latest", {});
+    expect(row.byCategory).toEqual({ logic: 10 });
+    expect(row.byCategoryMax).toEqual({ logic: 20 });
   });
 });
