@@ -52,21 +52,29 @@
   }
 
   // Labels only the frontier -- "selective direct labels, never a number on every
-  // point" -- drawn by hand since no datalabels plugin is in the bundle.
+  // point" -- drawn by hand since no datalabels plugin is in the bundle. Flips to
+  // the point's left, or nudges off the top/bottom edge, whenever the default
+  // placement would run past the plot area and get clipped by the canvas.
   const frontierLabels = {
     id: "frontierLabels",
     afterDatasetsDraw(c: Chart) {
       const meta = c.getDatasetMeta(0);
       const dark = $isDarkMode;
       const ctx = c.ctx;
+      const area = c.chartArea;
       ctx.save();
       ctx.font = "11px sans-serif";
-      ctx.textBaseline = "middle";
       ctx.fillStyle = chartChrome(dark).secondary;
       meta.data.forEach((el, i) => {
         const p = plotted[i];
         if (!p?.frontier) return;
-        ctx.fillText(p.label, el.x + 9, el.y);
+        const width = ctx.measureText(p.label).width;
+        const fitsRight = el.x + 9 + width <= area.right;
+        ctx.textAlign = fitsRight ? "left" : "right";
+        const x = fitsRight ? el.x + 9 : el.x - 9;
+        const y = Math.min(Math.max(el.y, area.top + 6), area.bottom - 6);
+        ctx.textBaseline = y === el.y ? "middle" : y < el.y ? "bottom" : "top";
+        ctx.fillText(p.label, x, y);
       });
       ctx.restore();
     },
@@ -74,10 +82,27 @@
 
   function buildOptions(dark: boolean) {
     const c = chartChrome(dark);
+    const xs = plotted.map(p => p.x);
+    // A log scale bounds itself tightly to the data by default, pinning the
+    // cheapest and priciest point exactly on the plot boundary where their
+    // marker (and label) gets clipped by the canvas edge. A multiplicative
+    // margin -- not an additive one, since this is a log axis -- gives both
+    // ends room without changing what "cheap" or "expensive" means visually.
+    const xMin = xs.length ? Math.min(...xs) / 1.6 : 0.1;
+    const xMax = xs.length ? Math.max(...xs) * 1.6 : 100;
     return {
       responsive: true,
       maintainAspectRatio: false,
       animation: false as const,
+      // Blank space around the plotted area itself, on top of the axis margin
+      // above -- keeps a point's ring and hover target clear of the canvas edge.
+      layout: { padding: { top: 14, right: 12, bottom: 6, left: 6 } },
+      // The default (intersect: true) only shows a tooltip when the cursor is
+      // exactly over a point's hit area -- unreliable once points sit close
+      // together, since the nearer one can eat the hover for its neighbours.
+      // Nearest-without-intersect is this chart's equivalent of the "nearest
+      // point" hover layer a dense scatter needs, without a zoom control.
+      interaction: { mode: "nearest" as const, intersect: false },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -97,6 +122,7 @@
       scales: {
         x: {
           type: "logarithmic" as const,
+          min: xMin, max: xMax,
           title: { display: true, text: xMode === "time" ? "Wall time (minutes, log)" : "Completion tokens (log)", color: c.muted, font: { size: 10 } },
           ticks: { color: c.muted, font: { size: 10 } },
           grid: { color: c.grid }, border: { color: c.baseline },
@@ -121,6 +147,11 @@
       pointRadius: 5,
       pointHoverRadius: 7,
       hitRadius: 12,
+      // A point sitting exactly at an axis boundary (0%, 100%, or the cheapest/
+      // priciest x) would otherwise have its marker sliced off at the chart
+      // area's edge; the axis margin above keeps this from moving the point
+      // itself, just from clipping its rendering.
+      clip: false,
     };
   }
 
@@ -128,7 +159,7 @@
     const dark = $isDarkMode;
     chart = new Chart(canvas, {
       type: "scatter",
-      data: { datasets: [buildDataset(dark)] },
+      data: { datasets: [buildDataset(dark) as never] },
       options: buildOptions(dark),
       plugins: [frontierLabels],
     });
