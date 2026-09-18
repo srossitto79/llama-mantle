@@ -88,9 +88,11 @@ export interface IntelligenceResultModel {
 }
 export interface IntelligenceResult {
   run: IntelligenceRun;
-  // `items` is the full suite definition for this run (used to size the coverage
-  // denominator); older stored runs may lack it, so it stays optional.
-  suite: { categories: { id: string; name: string }[]; items?: { item_id: string; role?: string }[] };
+  // The companion writes the *entire unfiltered* suite catalog here regardless
+  // of the run's profile -- categories is safe to read (the same set for every
+  // profile), but never size a coverage denominator off an `items` list here;
+  // use run.suite.item_count instead (see intelligenceMetrics.ts).
+  suite: { categories: { id: string; name: string }[] };
   models: IntelligenceResultModel[];
 }
 

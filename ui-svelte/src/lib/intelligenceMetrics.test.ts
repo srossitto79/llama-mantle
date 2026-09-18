@@ -117,14 +117,14 @@ describe("resolveModels coverage", () => {
       item({ item_id: "e", needs_human: true }),
     ];
     const r = result(
-      { suite: { categories: [], items: [{ item_id: "a" }, { item_id: "b" }, { item_id: "c" }, { item_id: "d" }, { item_id: "e" }, { item_id: "f" }] } },
+      { run: { run_id: "run-1", state: "done", started_at: 1000, params: { profile: "quick", models: ["model-a"] }, suite_sha256: "sha-1", suite: { item_count: 6 } } },
       [modelResult({ items })],
     );
     const [row] = resolveModels([r], "latest", {});
     expect(row.coverage).toEqual({ attempted: 2, total: 6, unsupported: 1, diagnostic: 1, awaitingHuman: 1 });
   });
 
-  it("falls back to the model's own item count when the run predates a stored suite item list", () => {
+  it("falls back to the model's own item count when the run predates run.suite.item_count", () => {
     const r = result({ suite: { categories: [] } }, [modelResult({ items: [item({ item_id: "a" }), item({ item_id: "b" })] })]);
     const [row] = resolveModels([r], "latest", {});
     expect(row.coverage.total).toBe(2);

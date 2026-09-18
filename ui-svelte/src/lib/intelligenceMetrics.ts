@@ -228,9 +228,16 @@ function firstItemID(items: IntelligenceItem[]): string | undefined {
 /**
  * How much of the suite this model actually attempted, as a real fraction rather
  * than the old "score / suite maximum" -- which conflated coverage with quality.
- * `total` falls back to this model's own item count when the run predates the
- * suite item list being stored, so an older run still renders a (trivially full)
- * coverage figure instead of a blank one.
+ *
+ * `total` reads `run.suite.item_count`: the companion writes this at run start
+ * from the profile-sliced item list (`len(suite_sel["items"])`), which is the
+ * right denominator -- a `default`-profile run plans 48 items, not the ~200 in
+ * the whole catalog. `result.suite.items` (the per-run `suite.json` snapshot)
+ * is NOT that: the companion writes the *entire unfiltered* suite there
+ * regardless of profile, so its length must never be used as a denominator --
+ * it would make a complete `default` run of 48 read as covering a fraction of
+ * ~200 and look barely started. `model.items.length` is the last resort, for a
+ * run archived before `run.suite.item_count` existed.
  */
 export interface Coverage {
   attempted: number; total: number;
@@ -244,7 +251,7 @@ function coverageFor(result: IntelligenceResult, model: IntelligenceResultModel,
     else if (item.unsupported || item.grade?.unsupported) unsupported++;
   }
   const awaitingHuman = attemptedScore(model.items, { humanScores, modelID: model.model_id }).awaitingHuman;
-  const total = result.suite.items?.length ?? model.items.length;
+  const total = result.run.suite?.item_count ?? model.items.length;
   return {
     attempted: model.items.length - unsupported - diagnostic - awaitingHuman,
     total, unsupported, diagnostic, awaitingHuman,
