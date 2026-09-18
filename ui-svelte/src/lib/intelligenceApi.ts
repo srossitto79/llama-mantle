@@ -39,21 +39,55 @@ export interface IntelligenceDownload {
 export interface IntelligenceItem {
   item_id: string; category: string; score: number; max_score: number;
   title?: string; answer?: string; prompt?: string;
-  raw?: { error?: string };
+  raw?: { error?: string; usage_estimated?: boolean };
   role?: string; unsupported?: boolean; error?: string;
   needs_human?: boolean; truncated?: boolean; latency_ms?: number; finish_reason?: string | null;
   grade?: { unsupported?: boolean; needs_human?: boolean; note?: string };
+  // Wall clock is measured around the whole call; `generation_time_ms` is currently
+  // equal to `latency_ms` (not yet split into prefill/decode). ttft_ms and the
+  // decode_* fields exist only on runs from a companion new enough to stamp the
+  // first streamed token -- absent on older runs, never zero.
+  generation_time_ms?: number;
+  ttft_ms?: number;
+  decode_time_ms?: number;
+  decode_tokens_per_second?: number;
+  prefill_tokens_per_second?: number;
+  tokens_per_second?: number;
+  tokens_prompt?: number;
+  tokens_completion?: number;
+  tokens_total?: number;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+  // Set when the server sent no usage block and completion tokens were estimated
+  // from streamed deltas instead of measured -- these counts must not be presented
+  // as measured.
+  usage_estimated?: boolean;
+  // A multi-turn item (tool-loop episode or decision scenario): its latency_ms spans
+  // tool calls and sandboxed test execution, not just generation, so it is excluded
+  // from inference-speed aggregates while still counting toward cost.
+  episode?: unknown;
+  decision?: unknown;
   [key: string]: unknown;
 }
 /** Rubric scores entered by an operator, keyed by item then model. */
 export type HumanScores = Record<string, Record<string, number>>;
+export interface IntelligenceResultModel {
+  model_id: string; model_name: string; items: IntelligenceItem[];
+  reasoning_effort?: string | null;
+  context?: number | string | null;
+  provider?: string | null;
+  totals: {
+    score: number; max_total: number;
+    by_category: Record<string, number>; by_category_max: Record<string, number>;
+    total_time_ms?: number; total_tokens?: number; total_completion_tokens?: number;
+    tokens_per_second?: number;
+    // Present only on runs from a TTFT-aware companion (see intelligenceMetrics.ts).
+    total_ttft_ms?: number; total_decode_time_ms?: number; decode_tokens_per_second?: number;
+  };
+}
 export interface IntelligenceResult {
   run: IntelligenceRun;
   suite: { categories: { id: string; name: string }[] };
-  models: {
-    model_id: string; model_name: string; items: IntelligenceItem[];
-    totals: { score: number; max_total: number; by_category: Record<string, number>; by_category_max: Record<string, number> };
-  }[];
+  models: IntelligenceResultModel[];
 }
 
 export async function intelligenceRequest<T>(path: string, body?: unknown): Promise<T> {
