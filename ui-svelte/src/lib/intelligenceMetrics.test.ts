@@ -302,21 +302,21 @@ describe("resolveModels profile scoping (carry-forward)", () => {
   });
 
   it("excludes a carried-forward category from byCategory/byCategoryMax, even when the companion's own totals still carry it", () => {
-    // Item "c" is category "external", out of "quick"'s profile (like the real
-    // catalog, where "external" only ever belongs to default/iron-tensor/full
-    // etc, never "quick") -- but the model's saved totals were computed over
-    // the whole (carry-forward-widened) file and still report it, the same way
-    // a live "quick" run's Best At panel showed "External Benchmarks".
-    const withExternal = [
+    // Item "c" is category "other", carried forward from outside "quick"'s profile
+    // (catalog marks it "default" only, see above) -- but the model's saved totals
+    // were computed over the whole (carry-forward-widened) file and still report it,
+    // the same way a live "quick" run's Best At panel would still show a category
+    // "quick" itself never selects.
+    const withCarriedCategory = [
       item({ item_id: "a", score: 10, max_score: 10, category: "logic" }),
       item({ item_id: "b", score: 0, max_score: 10, category: "logic" }),
-      item({ item_id: "c", score: 10, max_score: 10, category: "external" }),
+      item({ item_id: "c", score: 10, max_score: 10, category: "other" }),
     ];
     const r = result(
       { run: { run_id: "run-1", state: "done", started_at: 1000, params: { profile: "quick", models: ["model-a"] }, suite_sha256: "sha-1", suite: { item_count: 2 } } },
       [modelResult({
-        items: withExternal,
-        totals: { score: 20, max_total: 30, by_category: { logic: 10, external: 10 }, by_category_max: { logic: 20, external: 10 } },
+        items: withCarriedCategory,
+        totals: { score: 20, max_total: 30, by_category: { logic: 10, other: 10 }, by_category_max: { logic: 20, other: 10 } },
       })],
     );
     (r.suite as { items?: typeof catalog }).items = catalog;

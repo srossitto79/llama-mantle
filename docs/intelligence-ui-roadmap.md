@@ -12,6 +12,12 @@ The Intelligence results page today ranks models on score alone. Two findings fr
 `external` discriminates across the whole range (9–92%). Ranking models on a total
 dominated by items every model passes measures almost nothing.
 
+> Update: the companion's v3.0 suite redesign removed the `external` category —
+> fetched items (Polyglot, SWE-bench) now get real categories (`code`, `debugging`)
+> instead of one undifferentiated slot. The discrimination numbers above are a
+> point-in-time snapshot from before that change and should be re-measured against
+> the current suite rather than assumed to still hold per-category.
+
 **Cost is invisible and enormous.** Measured on the same runs:
 
 ```
