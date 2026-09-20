@@ -11,7 +11,7 @@ services:
         BUILD_IK_LLAMA: "false"
     runtime: nvidia
     ports:
-      - "9292:8080"
+      - "9292:8080"    
     command:
       - -config
       - /etc/llama-swap/config/config.yaml

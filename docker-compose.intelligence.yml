@@ -9,6 +9,8 @@ services:
     build:
       context: ${MMI_SOURCE_DIR:-../Measure Model Intelligence}
     init: true
+    ports: # expose the service on port 8000
+      - "8000:8000"
     environment:
       MMI_MODEL_BASE_URL: http://llama-swap:8080/v1
       MMI_MODEL_API_KEY: ${MMI_MODEL_API_KEY:-}
