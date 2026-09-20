@@ -96,6 +96,28 @@ func TestIntelligence_Stream(t *testing.T) {
 	}
 }
 
+func TestIntelligence_ProxyDownloadAnyKind(t *testing.T) {
+	// The companion, not this proxy, decides which kinds it will actually fetch (see
+	// FETCHABLE_KINDS in dashboard/studio.py) -- this proxy just forwards whatever kind
+	// segment it is given, including new suites added there without a matching Mantle change.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(r.Method + " " + r.URL.Path))
+	}))
+	defer upstream.Close()
+	t.Setenv("LLAMA_INTELLIGENCE_URL", upstream.URL)
+	mux := http.NewServeMux()
+	(&Handler{}).registerIntelligenceRoutes(mux)
+	for _, kind := range []string{"polyglot", "swebench", "gsm8k", "mgsm", "bfcl", "ifeval", "ruler"} {
+		r := httptest.NewRequest("POST", "/api/mantle/studio/intelligence/download/"+kind, strings.NewReader("{}"))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		want := "POST /api/download/" + kind
+		if w.Code != http.StatusOK || w.Body.String() != want {
+			t.Errorf("download/%s: got %d %q, want %q", kind, w.Code, w.Body, want)
+		}
+	}
+}
+
 func TestIntelligence_ProxySuiteAndHumanScores(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(r.Method + " " + r.URL.Path))

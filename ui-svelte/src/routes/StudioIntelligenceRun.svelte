@@ -5,6 +5,17 @@
   import IntelligenceRunHeatmap from "../components/IntelligenceRunHeatmap.svelte";
   import { intelligenceRequest, intelligenceURL, REASONING_EFFORTS, type IntelligenceConfig, type IntelligenceRun, type IntelligenceDownload } from "$lib/intelligenceApi";
 
+// Display names for known suite kinds; an unrecognised kind (a new suite the companion
+// added before this map was updated) still gets a working button, just labelled by its
+// raw id instead of a friendly name.
+const SUITE_LABELS: Record<string, string> = {
+  polyglot: "Polyglot", swebench: "SWE-bench", gsm8k: "GSM8K", mgsm: "MGSM",
+  bfcl: "BFCL", ifeval: "IFEval", ruler: "RULER",
+};
+function suiteLabel(kind: string): string {
+  return SUITE_LABELS[kind] ?? kind;
+}
+
   // Per-viewer convenience only: this component is fully remounted on every
   // navigation (svelte-spa-router) and on reload, which would otherwise wipe
   // the form and blank the live-progress section for one round trip. Reads
@@ -192,8 +203,17 @@
   <details class="space-y-4 rounded-xl border p-5">
     <summary class="cursor-pointer font-semibold">External datasets</summary>
     <div class="mt-4 space-y-4">
-      <p class="text-muted-foreground text-sm">Prepare polyglot exercises and SWE-bench tasks before using external profiles. Preparation and benchmark runs execute one at a time.</p>
-      <div class="flex flex-wrap gap-2"><Button variant="outline" disabled={blocked || !config} onclick={() => action("download/polyglot")}>Download Polyglot</Button><Button variant="outline" disabled={blocked || !config} onclick={() => action("download/swebench")}>Download SWE-bench</Button></div>
+      <p class="text-muted-foreground text-sm">Prepare external benchmark suites before using external profiles. Preparation and benchmark runs execute one at a time.</p>
+      <div class="space-y-2">
+        {#each download.suites ?? [] as suite (suite.kind)}
+          <div class="flex flex-wrap items-center gap-2">
+            <Button variant="outline" disabled={blocked || !config} onclick={() => action(`download/${suite.kind}`)}>Download {suiteLabel(suite.kind)}</Button>
+            <span class="text-muted-foreground text-sm">{suite.cached ? "Cached" : "Not downloaded"}</span>
+          </div>
+        {:else}
+          <p class="text-muted-foreground text-sm">No downloadable datasets reported by the Intelligence service.</p>
+        {/each}
+      </div>
       <p class="text-sm">{download.kind ?? "Preparation"}: {download.state}{download.finished_at ? ` · ${new Date(download.finished_at * 1000).toLocaleString()}` : ""}</p>
       {#if download.error}<p class="text-destructive text-sm">{download.error}</p>{/if}
       {#if download.logs.length}<pre class="bg-muted max-h-56 overflow-auto rounded p-3 text-xs whitespace-pre-wrap">{download.logs.join("\n")}</pre>{/if}

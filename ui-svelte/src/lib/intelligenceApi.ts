@@ -37,6 +37,19 @@ export interface IntelligenceDownload {
   logs: string[];
   error?: string;
   finished_at?: number;
+  // One entry per suite the companion knows how to fetch (its FETCHABLE_KINDS), so the
+  // UI can offer a control per suite without hardcoding the list itself. `cached` is read
+  // straight off the companion's benchmarks/cache/ -- not inferred from `state`/`kind`
+  // above, which only ever describe the single most recent download operation. `state`
+  // and `finished_at` are present on a suite entry only when that suite was the one most
+  // recently (or currently) fetched.
+  suites?: IntelligenceDownloadSuite[];
+}
+export interface IntelligenceDownloadSuite {
+  kind: string;
+  cached: boolean;
+  state?: string;
+  finished_at?: number;
 }
 export interface IntelligenceItem {
   item_id: string; category: string; score: number; max_score: number;

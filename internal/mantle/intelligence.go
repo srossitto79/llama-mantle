@@ -40,7 +40,10 @@ func (h *Handler) registerIntelligenceRoutes(mux *http.ServeMux) {
 	for _, route := range []string{
 		"GET config", "GET results", "GET run/status", "GET run/stream",
 		"POST run", "POST run/stop", "GET runs", "GET runs/{id}", "DELETE runs/{id}",
-		"GET download/status", "POST download/polyglot", "POST download/swebench",
+		// {kind} is forwarded as-is; the companion is the source of truth on which
+		// kinds it will actually fetch (see its FETCHABLE_KINDS), so this proxy does
+		// not keep its own copy of that list to fall out of sync with.
+		"GET download/status", "POST download/{kind}",
 		// Item definitions and rubric scores. Human-graded items are never scored by
 		// the runner, so without these the UI cannot tell an unscored rubric item
 		// from a zero, and reports totals that are too low.
