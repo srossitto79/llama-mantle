@@ -3,6 +3,7 @@
   import { link } from "svelte-spa-router";
   import { Button } from "$lib/components/ui/button/index.js";
   import IntelligenceRunHeatmap from "../components/IntelligenceRunHeatmap.svelte";
+  import { shouldAutoScroll } from "$lib/scroll";
   import { intelligenceRequest, intelligenceURL, REASONING_EFFORTS, type IntelligenceConfig, type IntelligenceRun, type IntelligenceDownload } from "$lib/intelligenceApi";
 
 // Display names for known suite kinds; an unrecognised kind (a new suite the companion
@@ -63,6 +64,8 @@ function suiteLabel(kind: string): string {
   let streamID = "";
   let refreshing = false;
   let disposed = false;
+  let previewElement: HTMLPreElement | undefined = $state();
+  let wasAtBottom = $state(true);
   let active = $derived(run?.state === "starting" || run?.state === "running");
   let blocked = $derived(busy || active || download.state === "running");
   let filteredModels = $derived(
@@ -139,6 +142,22 @@ function suiteLabel(kind: string): string {
     } catch (e) { error = String(e); }
     finally { busy = false; }
   }
+
+  function updatePreviewScrollState() {
+    if (!previewElement) return;
+    wasAtBottom = shouldAutoScroll(previewElement);
+  }
+
+  $effect(() => {
+    if (previewElement && run?.current) {
+      const text = run.current.content || run.current.reasoning || "Waiting for model response…";
+      if (wasAtBottom) {
+        previewElement.scrollTop = previewElement.scrollHeight;
+      }
+      if (text.length === 0) return;
+    }
+  });
+
   $effect(() => {
     saveCache(FORM_KEY, { selected, profile, useCustomTemperature, temperature, timeout, maxTokens, reasoningEffort, resume, retryFailed, retryUnsupported } satisfies FormCache);
   });
@@ -225,7 +244,14 @@ function suiteLabel(kind: string): string {
     {#if run?.models?.length}<IntelligenceRunHeatmap {run} />{/if}
     {#if stopping}<p class="text-muted-foreground text-sm">Stopping at the next runner checkpoint. An active request or code test may finish first.</p>{/if}
     {#if run?.error}<p class="text-destructive">{run.error}</p>{/if}
-    {#if run?.current}<p class="text-sm font-medium">{run.current.title}</p><pre class="bg-muted max-h-72 overflow-auto rounded p-3 text-xs whitespace-pre-wrap">{run.current.content || run.current.reasoning || "Waiting for model response…"}</pre>{/if}
+    {#if run?.current}
+      <p class="text-sm font-medium">{run.current.title}</p>
+      <pre
+        bind:this={previewElement}
+        onscroll={updatePreviewScrollState}
+        class="bg-muted max-h-72 overflow-auto rounded p-3 text-xs whitespace-pre-wrap"
+      >{run.current.content || run.current.reasoning || "Waiting for model response…"}</pre>
+    {/if}
     <a class="text-primary text-sm underline" href="/studio/intelligence/results" use:link>View results</a>
   </section>
 </div>
