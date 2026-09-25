@@ -1,0 +1,81 @@
+services:
+  llama-swap:
+    image: llama-swap:unified-cuda
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        BACKEND: cuda
+        MAX_BUILD_JOBS: 1
+        BUILD_WHISPER: "false"
+        BUILD_IK_LLAMA: "false"
+    runtime: nvidia
+    ports:
+      - "9292:8080"
+    command:
+      - -config
+      - /etc/llama-swap/config/config.yaml
+      - -models-dir
+      - /models
+      - -backends-dir
+      - /backends
+      - -watch-config
+    volumes:
+      - /mnt/storage/lm_storage/models/gguf:/models
+      - /mnt/storage/lm_storage/backends:/backends
+      - /mnt/storage/lm_storage/configs/config.yaml:/etc/llama-swap/config/config.yaml
+      - /mnt/storage/ComfyUI/models:/ComfyUI-Models
+      - ./docker/build-llamacpp.sh:/usr/local/bin/build-llamacpp.sh
+      - ./docker/build-llamacpp.sh:/etc/llama-swap/config/build-llamacpp.sh
+      - ./scripts/pipe-wrap.py:/usr/local/bin/pipe-wrap.py
+    environment:
+      LLAMA_INTELLIGENCE_URL: http://intelligence:8000
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      LD_LIBRARY_PATH: /usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu
+    restart: unless-stopped
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    ports:
+      - "8080:8080"
+    volumes:
+      - /mnt/storage/open-webui-data:/app/backend/data
+    environment:
+      OLLAMA_BASE_URL: http://llama-swap:8080
+      WEBUI_SECRET_KEY: ""
+    restart: unless-stopped
+    depends_on:
+      - llama-swap
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    profiles: ["search"]
+    restart: unless-stopped
+    ports:
+      - "8888:8080"
+    environment:
+      - BASE_URL=http://localhost:8888/
+    volumes:
+      - /mnt/storage/searxng:/etc/searxng
+
+  intelligence:
+    image: measure-model-intelligence:local
+    build:
+      context: ${MMI_SOURCE_DIR:-../The-Iron-Tensor}
+    init: true
+    ports:
+      - "8000:8000"
+    environment:
+      MMI_MODEL_BASE_URL: http://llama-swap:8080/v1
+      MMI_MODEL_API_KEY: ${MMI_MODEL_API_KEY:-}
+    volumes:
+      - intelligence-data:/data
+      - intelligence-benchmarks:/app/benchmarks
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+volumes:
+  intelligence-data:
+  intelligence-benchmarks:
