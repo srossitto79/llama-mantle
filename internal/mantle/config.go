@@ -8,20 +8,21 @@ import (
 	"unicode"
 )
 
-// ListBackends returns the directories in the backends folder.
-// Each directory represents a compiled backend build.
+// ListBackends returns the built-in backends found on PATH followed by the
+// directories in the backends folder, each of which is a compiled backend
+// build.
 func ListBackends(backendsDir string) ([]BackendEntry, error) {
+	backends := listBuiltinBackends()
 	entries, err := os.ReadDir(backendsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return []BackendEntry{}, nil
+			return backends, nil
 		}
 		return nil, err
 	}
 
-	backends := []BackendEntry{}
 	for _, e := range entries {
-		if !e.IsDir() {
+		if !e.IsDir() || isBuiltinBackendName(e.Name()) {
 			continue
 		}
 		binPath := filepath.Join(backendsDir, e.Name(), "llama-server")
@@ -60,6 +61,12 @@ type BackendEntry struct {
 	TaskID string `json:"taskID,omitempty"`
 	Repo   string `json:"repo,omitempty"`
 	Branch string `json:"branch,omitempty"`
+	// Builtin marks a backend baked into the image and found on PATH; it
+	// can't be updated or deleted from the UI.
+	Builtin bool `json:"builtin,omitempty"`
+	// Kind is "llm", "image" or "transcription" for built-ins; compiled
+	// backends are always llama.cpp forks and leave it empty.
+	Kind string `json:"kind,omitempty"`
 }
 
 // DeleteBackend removes a compiled backend directory.

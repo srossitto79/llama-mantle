@@ -766,6 +766,10 @@ export interface BackendEntry {
 	taskID?: string;
 	repo?: string;
 	branch?: string;
+	/** Baked into the image and found on PATH; not updatable/deletable. */
+	builtin?: boolean;
+	/** Set for built-ins: "llm", "image" or "transcription". */
+	kind?: "llm" | "image" | "transcription";
 }
 
 export interface BuildRequest {

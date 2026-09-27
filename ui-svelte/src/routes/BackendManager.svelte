@@ -12,6 +12,8 @@
 
   let backends = $state<BackendEntry[]>([]);
   let loadingBackends = $state(false);
+  let builtinBackends = $derived(backends.filter((b) => b.builtin));
+  let compiledBackends = $derived(backends.filter((b) => !b.builtin));
 
   let adoptingBackend = $state<string | null>(null);
   let adoptRepo = $state("");
@@ -171,6 +173,26 @@
     </div>
   {/if}
 
+  <!-- Built-in backends (baked into the image, on PATH) -->
+  {#if builtinBackends.length > 0}
+    <div class="mb-4">
+      <h3 class="text-sm font-semibold mb-2">Built-in Backends</h3>
+      {#each builtinBackends as be (be.name)}
+        <div class="py-2 px-2 border-b border-border text-sm flex items-center gap-2">
+          <span class="font-medium">{be.name}</span>
+          <span class="font-mono text-xs text-txtsecondary">{be.path}</span>
+          {#if be.repo}
+            <span class="text-txtsecondary text-xs">{shortRepo(be.repo)}{be.branch ? `@${be.branch.slice(0, 12)}` : ""}</span>
+          {/if}
+          {#if be.size}
+            <span class="text-txtsecondary">{formatSize(be.size)}</span>
+          {/if}
+          <span class="ml-auto text-xs text-txtsecondary italic">{be.kind ?? ""} · part of the image</span>
+        </div>
+      {/each}
+    </div>
+  {/if}
+
   <!-- Compiled backends -->
   <div class="flex-1 min-h-0">
     <div class="flex items-center justify-between mb-2">
@@ -179,11 +201,11 @@
     </div>
     {#if loadingBackends}
       <p class="text-sm text-txtsecondary">Loading...</p>
-    {:else if backends.length === 0}
+    {:else if compiledBackends.length === 0}
       <p class="text-sm text-txtsecondary">No compiled backends yet. Build one above.</p>
     {:else}
       <div class="overflow-y-auto max-h-64">
-        {#each backends as be}
+        {#each compiledBackends as be}
           <div class="py-2 px-2 border-b border-border hover:bg-secondary-hover text-sm">
             <div class="flex items-center justify-between">
               <div class="flex-1 min-w-0">
