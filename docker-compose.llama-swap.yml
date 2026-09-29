@@ -6,7 +6,7 @@ services:
       dockerfile: docker/Dockerfile
       args:
         BACKEND: cuda
-        MAX_BUILD_JOBS: 1
+        MAX_BUILD_JOBS: 16
         BUILD_WHISPER: "false"
         BUILD_IK_LLAMA: "false"
     runtime: nvidia
@@ -27,6 +27,7 @@ services:
       # - /mnt/f/ComfyUI/models:/ComfyUI-Models
       # - /mnt/c/Users/sross/.lmstudio/models:/models
       - /home/sross/gguf_models:/models
+      - /mnt/w/rbot_images_cli/ComfyUI/models/:/ComfyUI-Models
       - /mnt/f/huggingface:/root/.cache/huggingface
       - /mnt/f/llm-arena-storage/models:/models2
       - /mnt/c/Users/sross/.ollama/models/blobs:/mnt/c/Users/sross/.ollama/models/blobs

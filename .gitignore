@@ -16,3 +16,4 @@ config.yaml
 turistation_config.yaml
 turiserver_config.yaml
 gguf_files.txt
+llama-mantle.code-workspace
