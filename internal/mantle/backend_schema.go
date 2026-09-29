@@ -292,13 +292,17 @@ func RunHelp(binPath string) (string, error) {
 // write failure is not returned as an error, since the schema was still
 // computed successfully and can simply be regenerated next time.
 func LoadOrBuildBackendSchema(backendsDir, name string) (*BackendSchema, error) {
-	binPath := filepath.Join(backendsDir, name, "llama-server")
+	return loadOrBuildSchema(name,
+		filepath.Join(backendsDir, name, "llama-server"),
+		filepath.Join(backendsDir, name, "schema.json"))
+}
+
+func loadOrBuildSchema(name, binPath, schemaPath string) (*BackendSchema, error) {
 	binInfo, err := os.Stat(binPath)
 	if err != nil {
 		return nil, err
 	}
 
-	schemaPath := filepath.Join(backendsDir, name, "schema.json")
 	if schemaInfo, err := os.Stat(schemaPath); err == nil && schemaInfo.ModTime().After(binInfo.ModTime()) {
 		if data, err := os.ReadFile(schemaPath); err == nil {
 			var schema BackendSchema

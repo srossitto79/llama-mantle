@@ -1115,6 +1115,10 @@ func (h *Handler) handleStartBuild(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusBadRequest, "backendName may only contain letters, numbers, dot, underscore, and hyphen")
 		return
 	}
+	if isBuiltinBackendName(req.BackendName) {
+		jsonError(w, http.StatusBadRequest, fmt.Sprintf("backendName %q is reserved for a built-in backend", req.BackendName))
+		return
+	}
 	cmakeArgs := req.CMakeArgs
 	if req.CMakeFlags != "" {
 		var parsed []string
@@ -1169,7 +1173,11 @@ func (h *Handler) handleGetBackendSchema(w http.ResponseWriter, r *http.Request)
 		jsonError(w, http.StatusBadRequest, "invalid backend name")
 		return
 	}
-	schema, err := LoadOrBuildBackendSchema(h.backendsDir, name)
+	load := LoadOrBuildBackendSchema
+	if isBuiltinBackendName(name) {
+		load = LoadOrBuildBuiltinSchema
+	}
+	schema, err := load(h.backendsDir, name)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, err.Error())
 		return
@@ -1185,6 +1193,10 @@ func (h *Handler) handleDeleteBackend(w http.ResponseWriter, r *http.Request) {
 	}
 	if !isSafeBackendName(name) {
 		jsonError(w, http.StatusBadRequest, "invalid backend name")
+		return
+	}
+	if isBuiltinBackendName(name) {
+		jsonError(w, http.StatusBadRequest, "built-in backends are part of the image and can't be modified")
 		return
 	}
 	if err := DeleteBackend(h.backendsDir, name); err != nil {
@@ -1211,6 +1223,10 @@ func (h *Handler) handleUpdateBackend(w http.ResponseWriter, r *http.Request) {
 	}
 	if !isSafeBackendName(name) {
 		jsonError(w, http.StatusBadRequest, "invalid backend name")
+		return
+	}
+	if isBuiltinBackendName(name) {
+		jsonError(w, http.StatusBadRequest, "built-in backends are part of the image and can't be modified")
 		return
 	}
 

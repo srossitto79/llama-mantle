@@ -426,10 +426,11 @@
                     <div class="flex gap-2 items-center">
                       <label for="model-config-backend" class="w-20 text-txtsecondary">Backend</label>
                       <select id="model-config-backend" class="input flex-1 px-2 py-1 border rounded bg-surface text-xs" bind:value={formBackend} onchange={regenerateYaml}>
-                        <option value="llama-server">llama-server (default)</option>
-                        <option value="ik-llama-server">ik-llama-server (bundled)</option>
-                        {#each backends as be}
-                          <option value={be.path}>{be.name}</option>
+                        {#if !backends.some((b) => b.path === "llama-server")}
+                          <option value="llama-server">llama-server (default)</option>
+                        {/if}
+                        {#each backends.filter((b) => !b.builtin || b.kind === "llm") as be}
+                          <option value={be.path}>{be.builtin ? `${be.name} (built-in: ${be.path})` : be.name}</option>
                         {/each}
                       </select>
                     </div>

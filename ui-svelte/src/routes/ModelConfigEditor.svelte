@@ -184,8 +184,16 @@
     return draft.argv[0] ?? "llama-server";
   }
 
+  // The flag form only understands llama.cpp-style --help output, so it is
+  // skipped for built-in image/transcription servers.
   function selectedBackendName(draft: ModelDraft): string {
-    return backends.find((b) => b.path === draft.argv[0])?.name ?? "";
+    const be = backends.find((b) => b.path === selectedBackendValue(draft));
+    if (!be || (be.builtin && be.kind !== "llm")) return "";
+    return be.name;
+  }
+
+  function backendLabel(be: BackendEntry): string {
+    return be.builtin ? `${be.name} (built-in: ${be.path})` : be.name;
   }
 
   function setBackend(draft: ModelDraft, value: string) {
@@ -246,8 +254,13 @@
                   value={selectedBackendValue(draft)}
                   onchange={(e) => setBackend(draft, e.currentTarget.value)}
                 >
-                  <option value="llama-server">llama-server (default)</option>
-                  {#each backends as be (be.path)}<option value={be.path}>{be.name}</option>{/each}
+                  {#if !backends.some((b) => b.path === "llama-server")}
+                    <option value="llama-server">llama-server (default)</option>
+                  {/if}
+                  {#each backends as be (be.path)}<option value={be.path}>{backendLabel(be)}</option>{/each}
+                  {#if selectedBackendValue(draft) !== "llama-server" && !backends.some((b) => b.path === selectedBackendValue(draft))}
+                    <option value={selectedBackendValue(draft)}>{selectedBackendValue(draft)}</option>
+                  {/if}
                 </select>
               </div>
               <div class="space-y-1">
