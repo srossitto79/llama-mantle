@@ -52,7 +52,10 @@ func newSelectorSpilloverTracker(cfg config.Config) *selectorSpilloverTracker {
 			inflight:  make(map[string]int, len(selector.Targets)),
 		}
 		for _, target := range selector.Targets {
-			modelID, _ := cfg.RealModelName(target)
+			modelID, found := cfg.RealModelName(target)
+			if !found {
+				modelID = target
+			}
 			state.targets = append(state.targets, spilloverTarget{target: target, modelID: modelID})
 		}
 		tracker.states[selectorID] = state
@@ -148,13 +151,19 @@ func strategyWarm(cfg config.Config, selector config.SelectorConfig, running map
 	}
 
 	for _, target := range selector.Targets {
-		modelID, _ := cfg.RealModelName(target)
+		modelID, ok := cfg.RealModelName(target)
+		if !ok {
+			modelID = target
+		}
 		if running[modelID] == process.StateReady {
 			return target, nil
 		}
 	}
 	for _, target := range selector.Targets {
-		modelID, _ := cfg.RealModelName(target)
+		modelID, ok := cfg.RealModelName(target)
+		if !ok {
+			modelID = target
+		}
 		if running[modelID] == process.StateStarting {
 			return target, nil
 		}

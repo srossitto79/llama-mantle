@@ -86,10 +86,7 @@ func validateSelectors(config Config) error {
 			}
 
 			if selector.Strategy == SelectorStrategyWarm || selector.Strategy == SelectorStrategySpillover {
-				realName, local := config.RealModelName(target)
-				if !local {
-					return fmt.Errorf("selectors.%s.targets[%d] must resolve to a local model for strategy %q", selectorID, i, selector.Strategy)
-				}
+				realName, _ := config.RealModelName(target)
 				resolvedTargets = append(resolvedTargets, realName)
 			}
 		}
@@ -116,7 +113,13 @@ func validateSelectors(config Config) error {
 }
 
 func validateSpilloverCoexistence(config Config, selectorID string, targets []string) error {
-	if len(targets) <= 1 {
+	localTargets := make([]string, 0, len(targets))
+	for _, target := range targets {
+		if _, found := config.RealModelName(target); found {
+			localTargets = append(localTargets, target)
+		}
+	}
+	if len(localTargets) <= 1 {
 		return nil
 	}
 
@@ -129,7 +132,7 @@ func validateSpilloverCoexistence(config Config, selectorID string, targets []st
 					members[modelID] = struct{}{}
 				}
 				allFound := true
-				for _, target := range targets {
+				for _, target := range localTargets {
 					if _, found := members[target]; !found {
 						allFound = false
 						break
@@ -150,14 +153,14 @@ func validateSpilloverCoexistence(config Config, selectorID string, targets []st
 		}
 	}
 
-	groupID := groupOf[targets[0]]
+	groupID := groupOf[localTargets[0]]
 	if groupID == "" {
-		return fmt.Errorf("selectors.%s target %q is not in a routing group", selectorID, targets[0])
+		return fmt.Errorf("selectors.%s target %q is not in a routing group", selectorID, localTargets[0])
 	}
 	if config.Routing.Router.Settings.Groups[groupID].Swap {
 		return fmt.Errorf("selectors.%s spillover targets must share a group with swap: false", selectorID)
 	}
-	for _, target := range targets[1:] {
+	for _, target := range localTargets[1:] {
 		if groupOf[target] != groupID {
 			return fmt.Errorf("selectors.%s spillover targets must share one routing group", selectorID)
 		}

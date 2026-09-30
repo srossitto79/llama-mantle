@@ -155,26 +155,6 @@ selectors:
 			wantErr: "name conflicts with peer model",
 		},
 		{
-			name: "warm peer target",
-			config: `
-selectors:
-  public:
-    strategy: warm
-    targets: [remote-model]
-`,
-			wantErr: `must resolve to a local model for strategy "warm"`,
-		},
-		{
-			name: "spillover peer target",
-			config: `
-selectors:
-  public:
-    strategy: spillover
-    targets: [remote-model]
-`,
-			wantErr: `must resolve to a local model for strategy "spillover"`,
-		},
-		{
 			name: "invalid spillover",
 			config: `
 selectors:
@@ -299,6 +279,36 @@ selectors:
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must all appear together in one expanded matrix set")
 	})
+}
+
+func TestConfig_Selectors_PeerTargetsAllowed(t *testing.T) {
+	cfg, err := LoadConfigFromReader(strings.NewReader(`
+models:
+  a:
+    cmd: echo ${PORT}
+  b:
+    cmd: echo ${PORT}
+groups:
+  shared:
+    swap: false
+    members: [a, b]
+peers:
+  remote:
+    proxy: http://example.com
+    models: [remote-model]
+selectors:
+  warm-peer:
+    strategy: warm
+    targets: [a, remote-model]
+  spillover-peer:
+    strategy: spillover
+    targets: [a, remote-model]
+    settings:
+      spillover: 1
+`))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a", "remote-model"}, cfg.Selectors["warm-peer"].Targets)
+	assert.Equal(t, []string{"a", "remote-model"}, cfg.Selectors["spillover-peer"].Targets)
 }
 
 func TestConfig_Selectors_ProfileTargetsSelector(t *testing.T) {
