@@ -1,0 +1,26 @@
+# Merge this entry under models: in config.yaml. Paths are Docker host paths.
+swift-1.5-qwen3.8-flash-next-strata-station-128k:
+  name: "Swift 1.5 Flash Next Strata 128K"
+  description: "IQ3_XXS with MTP, INT8 KV and CPU vision"
+  cmd: >-
+    docker run --rm --name strata-swift
+    --gpus all --ulimit memlock=-1 --network llama-mantle_default
+    -v strata-data:/data
+    -v /home/sross/gguf_models/ukisai_Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF:/models/ukisai_Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF
+    -e CONTEXT=131072 -e VISION=cpu -e GPU=0 -e PORT=8080
+    -e STRATA_ALLOWED_HOSTS=strata-swift,llama-swap,turistation,turistation.local
+    strata:6f32ec0
+  cmdStop: docker stop -t 60 strata-swift
+  proxy: http://strata-swift:8080
+  checkEndpoint: /health
+  useModelName: swift-qwen3.8-flash-next
+  filters:
+    setParamsByID:
+      "${MODEL_ID}:off":
+        reasoning_effort: none
+      "${MODEL_ID}:low":
+        reasoning_effort: low
+      "${MODEL_ID}:medium":
+        reasoning_effort: medium
+      "${MODEL_ID}:high":
+        reasoning_effort: high
