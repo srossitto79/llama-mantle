@@ -20,17 +20,18 @@ upstream with `apiKey:`. `GET /health` answers without a key, so the health chec
 needs nothing extra. llama-swap refuses to load `config.yaml` while
 `STRATA_API_KEY` is unset.
 
-## First start and sampling
+## First start and run config
 
 The GGUF folder is mounted read-only at `/models`. The first start prepares the pack
 and MTP layer in the `strata-data` volume; a volume from the older 0.1.x image is
 migrated in place (nothing downloaded again). Later starts serve in about a minute.
 
-Strata decodes greedily when a request sets no sampling. After the first start, seed
-Qwen's thinking-mode defaults into the saved run config:
+Strata decodes greedily when a request sets no sampling, and its reasoning-loop guard
+is off by default. After the first start, seed Qwen's thinking-mode sampling and
+`reasoning_loop_recovery: "recover"` into the saved run config:
 
 ```bash
-bash docker/strata/seed-sampling.sh
+bash docker/strata/seed-run-config.sh
 ```
 
 Requests that set their own sampling (for example `temperature: 0`) still win.
@@ -53,7 +54,7 @@ curl http://localhost:9292/running
 
 ## Updating
 
-Change the image tag in the entry (and `seed-sampling.sh`'s default), then
+Change the image tag in the entry (and `seed-run-config.sh`'s default), then
 `docker pull` it. The volume keeps the pack, preset and run config. A new engine can
 make an old tuning result less useful; upstream suggests one start with
 `-e TUNE=quick -e RETUNE=1`. See upstream `docs/DOCKER.md` for every setting.

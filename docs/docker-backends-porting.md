@@ -45,7 +45,7 @@ What does NOT transfer automatically:
 
 1. **API key.** Create `.env` with `STRATA_API_KEY=...` next to the Compose file (`docker/strata/README.md`). llama-swap will not load `config.yaml` without it.
 2. **Prepared files.** The first start on the new host builds the pack and fetches the MTP layer into `strata-data` from the mounted GGUF shards. Copy the volume instead to skip that.
-3. **Sampling.** Run `bash docker/strata/seed-sampling.sh` once after the first start, otherwise requests without sampling decode greedily.
+3. **Run config.** Run `bash docker/strata/seed-run-config.sh` once after the first start, otherwise requests without sampling decode greedily and the reasoning-loop guard stays off.
 
 Per-entry adjustments in `config.yaml`:
 
@@ -57,6 +57,6 @@ Per-entry adjustments in `config.yaml`:
 
 - [ ] `docker network ls` name matches every `--network`
 - [ ] GGUF/model payload present at the new bind path or inside the named volume
-- [ ] Strata: `STRATA_API_KEY` in `.env`, first start finished, `seed-sampling.sh` run; HyperQwen: first-boot compile awaited (`/health` may take minutes)
+- [ ] Strata: `STRATA_API_KEY` in `.env`, first start finished, `seed-run-config.sh` run; HyperQwen: first-boot compile awaited (`/health` may take minutes)
 - [ ] Proxy hostnames resolve on the Docker network
 - [ ] `docker logs -f <container>` + `/running` + one test chat completion per entry
