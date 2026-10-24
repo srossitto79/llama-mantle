@@ -494,6 +494,11 @@
                         "default": "",
                         "description": "Override the model name sent to upstream server. Useful if upstream expects a different name."
                     },
+                    "apiKey": {
+                        "type": "string",
+                        "default": "",
+                        "description": "A key sent to the upstream server, including health checks. If blank, no key is added. Injected as Authorization: Bearer <key> and x-api-key: <key>, replacing any key sent by the client. Use ${env.VAR} to keep it out of the config file."
+                    },
                     "filters": {
                         "type": "object",
                         "properties": {

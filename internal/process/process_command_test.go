@@ -400,6 +400,52 @@ func TestProcessCommand_ReverseProxyPanicIsRecovered(t *testing.T) {
 	t.Errorf("expected proxy log to contain %q; got:\n%s", want, logBuf.String())
 }
 
+// TestProcessCommand_ApiKeyInjected verifies that a configured apiKey reaches
+// the upstream on health checks and proxied requests, replacing the client's.
+func TestProcessCommand_ApiKeyInjected(t *testing.T) {
+	skipIfNoSimpleResponder(t)
+
+	const key = "upstream-secret"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+key || r.Header.Get("x-api-key") != key {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	cmd, _ := simpleResponderCmd(t, "-silent")
+	p, err := New(context.Background(), t.Name(), config.ModelConfig{
+		Cmd:                cmd,
+		Proxy:              upstream.URL,
+		CheckEndpoint:      "/health",
+		HealthCheckTimeout: 10,
+		ApiKey:             key,
+	}, logmon.NewWriter(io.Discard), logmon.NewWriter(io.Discard))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(func() { p.Stop(testStopTimeout) })
+
+	// Run only returns once the health check passed, which requires the key.
+	_ = runAsync(t, p)
+
+	front := httptest.NewServer(p)
+	t.Cleanup(front.Close)
+
+	req, _ := http.NewRequest("GET", front.URL+"/v1/models", nil)
+	req.Header.Set("Authorization", "Bearer client-key")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 with injected key, got %d", resp.StatusCode)
+	}
+}
+
 // syncBuffer is a concurrent-safe bytes.Buffer for capturing logmon output.
 type syncBuffer struct {
 	mu  sync.Mutex

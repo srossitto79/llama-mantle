@@ -4,16 +4,20 @@ swift-1.5-qwen3.8-flash-next-strata-station-128k:
   description: "IQ3_XXS with MTP, INT8 KV and CPU vision"
   cmd: >-
     docker run --rm --name strata-swift
-    --gpus all --ulimit memlock=-1 --network llama-mantle_default
+    --gpus all --ulimit memlock=-1:-1 --shm-size 2g --network llama-mantle_default
     -v strata-data:/data
-    -v /home/sross/gguf_models/ukisai_Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF:/models/ukisai_Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF
-    -e CONTEXT=131072 -e VISION=cpu -e GPU=0 -e PORT=8080
-    -e STRATA_ALLOWED_HOSTS=strata-swift,llama-swap,turistation,turistation.local
-    strata:6f32ec0
-  cmdStop: docker stop -t 60 strata-swift
+    -v /home/sross/gguf_models/ukisai_Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF:/models:ro
+    -e FAMILY=swift -e MODEL=IQ3_XXS -e MODEL_PATH=/models
+    -e CONTEXT=131072 -e VISION=cpu -e KV=int8 -e GPU=0 -e PORT=8080
+    -e API_KEY
+    ghcr.io/niko1221/strata:0.2.3-cuda13
+  cmdStop: docker stop -t 120 strata-swift
+  env:
+    - "API_KEY=${env.STRATA_API_KEY}"
+  apiKey: ${env.STRATA_API_KEY}
   proxy: http://strata-swift:8080
   checkEndpoint: /health
-  useModelName: swift-qwen3.8-flash-next
+  useModelName: swift-1.5-iq3_xxs
   filters:
     setParamsByID:
       "${MODEL_ID}:off":

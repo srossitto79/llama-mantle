@@ -123,6 +123,10 @@ type ModelConfig struct {
 	Unlisted      bool     `yaml:"unlisted" json:"unlisted,omitempty"`
 	UseModelName  string   `yaml:"useModelName" json:"useModelName,omitempty"`
 
+	// ApiKey is sent upstream as Authorization: Bearer and x-api-key,
+	// replacing any client-supplied key. Never serialized to JSON.
+	ApiKey string `yaml:"apiKey" json:"-"`
+
 	// #179 for /v1/models
 	Name        string `yaml:"name" json:"name,omitempty"`
 	Description string `yaml:"description" json:"description,omitempty"`

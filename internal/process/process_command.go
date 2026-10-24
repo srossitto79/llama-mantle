@@ -384,6 +384,15 @@ func (p *ProcessCommand) doStart(startCtx context.Context, healthCheckTimeout ti
 		MaxIdleConnsPerHost:   10,
 		IdleConnTimeout:       time.Duration(p.config.Timeouts.IdleConn) * time.Second,
 	}
+	// Covers health checks too: they go through the same reverse proxy.
+	if apiKey := p.config.ApiKey; apiKey != "" {
+		director := reverseProxy.Director
+		reverseProxy.Director = func(r *http.Request) {
+			director(r)
+			r.Header.Set("Authorization", "Bearer "+apiKey)
+			r.Header.Set("x-api-key", apiKey)
+		}
+	}
 	reverseProxy.ModifyResponse = func(resp *http.Response) error {
 		if strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream") {
 			resp.Header.Set("X-Accel-Buffering", "no")
@@ -422,7 +431,13 @@ func (p *ProcessCommand) doStart(startCtx context.Context, healthCheckTimeout ti
 	cmd.WaitDelay = p.waitDelay
 	setProcAttributes(cmd)
 
-	p.proxyLogger.Debugf("<%s> Executing start command: %s, env: %s", p.id, strings.Join(args, " "), strings.Join(p.config.Env, ", "))
+	// Log env names only: values may hold secrets such as upstream API keys.
+	envNames := make([]string, 0, len(p.config.Env))
+	for _, kv := range p.config.Env {
+		name, _, _ := strings.Cut(kv, "=")
+		envNames = append(envNames, name)
+	}
+	p.proxyLogger.Debugf("<%s> Executing start command: %s, env: %s", p.id, strings.Join(args, " "), strings.Join(envNames, ", "))
 
 	cmdDone := make(chan struct{})
 	if err := cmd.Start(); err != nil {
