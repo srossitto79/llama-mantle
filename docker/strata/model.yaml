@@ -10,7 +10,7 @@ swift-1.5-qwen3.8-flash-next-strata-station-128k:
     -e FAMILY=swift -e MODEL=IQ3_XXS -e MODEL_PATH=/models
     -e CONTEXT=131072 -e VISION=cpu -e KV=int8 -e GPU=0 -e PORT=8080
     -e API_KEY
-    ghcr.io/niko1221/strata:0.2.3-cuda13
+    ghcr.io/niko1221/strata:0.2.7-cuda13
   cmdStop: docker stop -t 120 strata-swift
   env:
     - "API_KEY=${env.STRATA_API_KEY}"

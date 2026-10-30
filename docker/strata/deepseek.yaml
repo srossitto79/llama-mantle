@@ -1,0 +1,114 @@
+# Merge these entries under models: in config.yaml. Paths are Docker host paths.
+# One volume per context: Strata keeps one run config per model, rewritten when CONTEXT changes.
+# The GGUF folder is shared; each volume holds its own pack, run config and DeepSeek engine.
+deepseek-v4.1-flash-strata-station-16k:
+  name: "DeepSeek V4.1 Flash Strata 16K"
+  description: "IST-DAS 2.00 bpw with DSpark, INT8 KV and vision"
+  cmd: >-
+    docker run --rm --name strata-deepseek-16k
+    --gpus all --ulimit memlock=-1:-1 --shm-size 2g --network llama-mantle_default
+    -v strata-deepseek-16k:/data
+    -v /home/sross/gguf_models/strata-deepseek-v4.1-flash:/data/Strata-data/models
+    -e FAMILY=deepseek41 -e MODEL=IST-DAS-2.00bpw
+    -e CONTEXT=16384 -e VISION=on -e KV=int8 -e GPU=0 -e PORT=8080
+    -e API_KEY
+    ghcr.io/niko1221/strata:0.2.7-cuda13
+  cmdStop: docker stop -t 120 strata-deepseek-16k
+  env: &strata-api-key-env
+    - "API_KEY=${env.STRATA_API_KEY}"
+  apiKey: ${env.STRATA_API_KEY}
+  proxy: http://strata-deepseek-16k:8080
+  checkEndpoint: /health
+  useModelName: deepseek-v4.1-flash
+  filters: &deepseek41-effort
+    setParamsByID:
+      "${MODEL_ID}:off":
+        reasoning_effort: none
+      "${MODEL_ID}:low":
+        reasoning_effort: low
+      "${MODEL_ID}:medium":
+        reasoning_effort: medium
+      "${MODEL_ID}:high":
+        reasoning_effort: high
+      "${MODEL_ID}:max":
+        reasoning_effort: max
+
+deepseek-v4.1-flash-strata-station-32k:
+  name: "DeepSeek V4.1 Flash Strata 32K"
+  description: "IST-DAS 2.00 bpw with DSpark, INT8 KV and vision"
+  cmd: >-
+    docker run --rm --name strata-deepseek-32k
+    --gpus all --ulimit memlock=-1:-1 --shm-size 2g --network llama-mantle_default
+    -v strata-deepseek-32k:/data
+    -v /home/sross/gguf_models/strata-deepseek-v4.1-flash:/data/Strata-data/models
+    -e FAMILY=deepseek41 -e MODEL=IST-DAS-2.00bpw
+    -e CONTEXT=32768 -e VISION=on -e KV=int8 -e GPU=0 -e PORT=8080
+    -e API_KEY
+    ghcr.io/niko1221/strata:0.2.7-cuda13
+  cmdStop: docker stop -t 120 strata-deepseek-32k
+  env: *strata-api-key-env
+  apiKey: ${env.STRATA_API_KEY}
+  proxy: http://strata-deepseek-32k:8080
+  checkEndpoint: /health
+  useModelName: deepseek-v4.1-flash
+  filters: *deepseek41-effort
+
+deepseek-v4.1-flash-strata-station-64k:
+  name: "DeepSeek V4.1 Flash Strata 64K"
+  description: "IST-DAS 2.00 bpw with DSpark, INT8 KV and vision"
+  cmd: >-
+    docker run --rm --name strata-deepseek-64k
+    --gpus all --ulimit memlock=-1:-1 --shm-size 2g --network llama-mantle_default
+    -v strata-deepseek-64k:/data
+    -v /home/sross/gguf_models/strata-deepseek-v4.1-flash:/data/Strata-data/models
+    -e FAMILY=deepseek41 -e MODEL=IST-DAS-2.00bpw
+    -e CONTEXT=65536 -e VISION=on -e KV=int8 -e GPU=0 -e PORT=8080
+    -e API_KEY
+    ghcr.io/niko1221/strata:0.2.7-cuda13
+  cmdStop: docker stop -t 120 strata-deepseek-64k
+  env: *strata-api-key-env
+  apiKey: ${env.STRATA_API_KEY}
+  proxy: http://strata-deepseek-64k:8080
+  checkEndpoint: /health
+  useModelName: deepseek-v4.1-flash
+  filters: *deepseek41-effort
+
+deepseek-v4.1-flash-strata-station-128k:
+  name: "DeepSeek V4.1 Flash Strata 128K"
+  description: "IST-DAS 2.00 bpw with DSpark, INT8 KV and vision"
+  cmd: >-
+    docker run --rm --name strata-deepseek-128k
+    --gpus all --ulimit memlock=-1:-1 --shm-size 2g --network llama-mantle_default
+    -v strata-deepseek-128k:/data
+    -v /home/sross/gguf_models/strata-deepseek-v4.1-flash:/data/Strata-data/models
+    -e FAMILY=deepseek41 -e MODEL=IST-DAS-2.00bpw
+    -e CONTEXT=131072 -e VISION=on -e KV=int8 -e GPU=0 -e PORT=8080
+    -e API_KEY
+    ghcr.io/niko1221/strata:0.2.7-cuda13
+  cmdStop: docker stop -t 120 strata-deepseek-128k
+  env: *strata-api-key-env
+  apiKey: ${env.STRATA_API_KEY}
+  proxy: http://strata-deepseek-128k:8080
+  checkEndpoint: /health
+  useModelName: deepseek-v4.1-flash
+  filters: *deepseek41-effort
+
+deepseek-v4.1-flash-strata-station-256k:
+  name: "DeepSeek V4.1 Flash Strata 256K"
+  description: "IST-DAS 2.00 bpw with DSpark, INT8 KV and vision"
+  cmd: >-
+    docker run --rm --name strata-deepseek-256k
+    --gpus all --ulimit memlock=-1:-1 --shm-size 2g --network llama-mantle_default
+    -v strata-deepseek-256k:/data
+    -v /home/sross/gguf_models/strata-deepseek-v4.1-flash:/data/Strata-data/models
+    -e FAMILY=deepseek41 -e MODEL=IST-DAS-2.00bpw
+    -e CONTEXT=262144 -e VISION=on -e KV=int8 -e GPU=0 -e PORT=8080
+    -e API_KEY
+    ghcr.io/niko1221/strata:0.2.7-cuda13
+  cmdStop: docker stop -t 120 strata-deepseek-256k
+  env: *strata-api-key-env
+  apiKey: ${env.STRATA_API_KEY}
+  proxy: http://strata-deepseek-256k:8080
+  checkEndpoint: /health
+  useModelName: deepseek-v4.1-flash
+  filters: *deepseek41-effort

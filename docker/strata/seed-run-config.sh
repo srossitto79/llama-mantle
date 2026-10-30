@@ -8,7 +8,7 @@ set -euo pipefail
 # Needs no GPU and can run while Strata is stopped.
 docker run --rm -i -v strata-data:/data \
     --entrypoint /opt/strata/terminal/python/bin/python3 \
-    "${STRATA_IMAGE:-ghcr.io/niko1221/strata:0.2.3-cuda13}" - <<'PYEOF'
+    "${STRATA_IMAGE:-ghcr.io/niko1221/strata:0.2.7-cuda13}" - <<'PYEOF'
 import json
 import pathlib
 

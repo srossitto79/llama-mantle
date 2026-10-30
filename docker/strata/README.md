@@ -1,7 +1,7 @@
 # Strata on demand
 
 Swift 1.5 Flash Next IQ3_XXS, 128K context, INT8 KV, CPU vision, GPU 0, from the
-upstream image `ghcr.io/niko1221/strata:0.2.3-cuda13` (nothing is built locally).
+upstream image `ghcr.io/niko1221/strata:0.2.7-cuda13` (nothing is built locally).
 llama-swap starts `strata-swift` when selected and stops it on unload or idle expiry.
 Its OpenAI API stays on the Compose network; no host port is published.
 
@@ -51,6 +51,46 @@ docker logs -f strata-swift
 docker exec -it strata-swift strata monitor
 curl http://localhost:9292/running
 ```
+
+## DeepSeek V4.1 Flash
+
+`deepseek.yaml` holds five entries (16K, 32K, 64K, 128K, 256K) for the IST-DAS 2.00 bpw set:
+138 GB of shards, the 111 GB Engram n-gram table and the 8 GB DSpark drafter, 257 GB
+in total. On a 3090 with 110 GB of RAM, about 20 GB of experts stay on the card and
+the rest are computed on the CPU from RAM.
+
+- `~/gguf_models/strata-deepseek-v4.1-flash` is mounted as Strata's models folder.
+  Setup downloads into it and checks every file against its pinned SHA-256. The
+  Engram is read from disk for every token, so keep the folder off `/mnt/c` and `/mnt/f`.
+- Each entry has its own volume (`strata-deepseek-<ctx>`) for its pack, run config and
+  DeepSeek engine package (`/data/install/engine-dsv41`, about 660 MB).
+- `seed-run-config.sh` does not apply: with no `sampling` block, 0.2.7 uses DeepSeek's
+  model-card sampling, and the loop recovery swaps Qwen's effort sentence.
+
+Download once, without loading the model, then prepare each context volume the same
+way (it finds the files already there and only checks and packs). The two
+`STRATA_*INSTALL*` settings are what `strata launch` passes; without them setup writes
+the run config and engine into the container filesystem.
+
+```bash
+docker run --rm --gpus all \
+  -v strata-deepseek-16k:/data \
+  -v ~/gguf_models/strata-deepseek-v4.1-flash:/data/Strata-data/models \
+  -w /opt/strata/terminal -e PYTHONPATH=/opt/strata/terminal \
+  -e STRATA_CONTROL_INSTALL=1 -e STRATA_INSTALL_DIR=/data/install \
+  --entrypoint /opt/strata/terminal/python/bin/python3 \
+  ghcr.io/niko1221/strata:0.2.7-cuda13 \
+  setup.py --yes --no-start --family deepseek41 --model IST-DAS-2.00bpw \
+  --data-dir /data/Strata-data --context 16384 --vision yes --gpu 0
+```
+
+`--gpu 0` matches the entries' `GPU=0`; a different card makes the start drop the run
+config and prepare it again. Copying `/data/install/engine-dsv41` from a prepared
+volume first skips the engine download.
+
+Merge the entries into `config.yaml` only once the download has finished: an entry
+started earlier runs the same setup into the same folder. Suffixes `:off`, `:low`,
+`:medium`, `:high` and `:max` choose reasoning effort (the template's default is high).
 
 ## Updating
 

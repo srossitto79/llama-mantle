@@ -3,7 +3,7 @@
 Covers the two Docker-based entries in `config.yaml`:
 
 - `swift-1.5-qwen3.8-27b-hyperqwen-station-{150k,240k}` → remote image `ghcr.io/syv-ai/hyperqwen:latest`
-- `swift-1.5-qwen3.8-flash-next-strata-station-128k` → remote image `ghcr.io/niko1221/strata:0.2.3-cuda13` (a former 256k twin was removed: it shared `--name`/`strata-data` with the 128k entry, so it could neither coexist nor hold a different `CONTEXT`)
+- `swift-1.5-qwen3.8-flash-next-strata-station-128k` → remote image `ghcr.io/niko1221/strata:0.2.7-cuda13` (a former 256k twin was removed: it shared `--name`/`strata-data` with the 128k entry, so it could neither coexist nor hold a different `CONTEXT`)
 
 Copying the YAML alone is not enough. The image, volumes, model files, and Docker network must be recreated on the new host.
 
@@ -39,7 +39,7 @@ Verify with `docker logs -f hyperqwen-swift` and `curl http://localhost:9292/run
 
 ## Strata (remote image)
 
-`docker run` pulls `ghcr.io/niko1221/strata:0.2.3-cuda13` on first use. It needs NVIDIA driver 580+ (use the `-cuda12` tag for 575-579 or Pascal/Volta cards) and about 50 GB free for `strata-data`.
+`docker run` pulls `ghcr.io/niko1221/strata:0.2.7-cuda13` on first use. It needs NVIDIA driver 580+ (use the `-cuda12` tag for 575-579 or Pascal/Volta cards) and about 50 GB free for `strata-data`.
 
 What does NOT transfer automatically:
 
@@ -52,6 +52,11 @@ Per-entry adjustments in `config.yaml`:
 - Bind source: replace `/home/sross/gguf_models/...` with the new host path; it is mounted read-only at `/models`.
 - `--network`: see Common section above.
 - Container name: keep `--name` / `proxy` hostname / volume unique per entry. Two entries sharing `--name strata-swift` and `strata-data` with different `CONTEXT` cannot run side by side.
+
+DeepSeek V4.1 Flash (`deepseek-v4.1-flash-strata-station-{16k,32k,64k,128k,256k}`, `docker/strata/deepseek.yaml`) also needs:
+
+- About 260 GB free under the bind source `/home/sross/gguf_models/strata-deepseek-v4.1-flash` (shards, Engram, drafter). Copy that folder to skip the download.
+- One `strata-deepseek-<ctx>` volume per entry (pack, run config, DeepSeek engine), prepared as in `docker/strata/README.md`.
 
 ## Checklist before serving
 
