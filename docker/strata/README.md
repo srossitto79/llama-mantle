@@ -1,7 +1,7 @@
 # Strata on demand
 
 Swift 1.5 Flash Next IQ3_XXS, 128K context, INT8 KV, CPU vision, GPU 0, from the
-upstream image `ghcr.io/niko1221/strata:0.2.7-cuda13` (nothing is built locally).
+upstream image `ghcr.io/niko1221/strata:0.2.9-cuda13` (nothing is built locally).
 llama-swap starts `strata-swift` when selected and stops it on unload or idle expiry.
 Its OpenAI API stays on the Compose network; no host port is published.
 
@@ -79,7 +79,7 @@ docker run --rm --gpus all \
   -w /opt/strata/terminal -e PYTHONPATH=/opt/strata/terminal \
   -e STRATA_CONTROL_INSTALL=1 -e STRATA_INSTALL_DIR=/data/install \
   --entrypoint /opt/strata/terminal/python/bin/python3 \
-  ghcr.io/niko1221/strata:0.2.7-cuda13 \
+  ghcr.io/niko1221/strata:0.2.9-cuda13 \
   setup.py --yes --no-start --family deepseek41 --model IST-DAS-2.00bpw \
   --data-dir /data/Strata-data --context 16384 --vision yes --gpu 0
 ```

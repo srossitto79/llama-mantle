@@ -2,8 +2,8 @@
 
 Covers the two Docker-based entries in `config.yaml`:
 
-- `swift-1.5-qwen3.8-27b-hyperqwen-station-{150k,240k}` → remote image `ghcr.io/syv-ai/hyperqwen:latest`
-- `swift-1.5-qwen3.8-flash-next-strata-station-128k` → remote image `ghcr.io/niko1221/strata:0.2.7-cuda13` (a former 256k twin was removed: it shared `--name`/`strata-data` with the 128k entry, so it could neither coexist nor hold a different `CONTEXT`)
+- `swift-1.5-qwen3.8-27b-hyperqwen-station-{150k,240k}` → remote image `ghcr.io/syv-ai/hyperqwen:sha-f382342`
+- `swift-1.5-qwen3.8-flash-next-strata-station-128k` → remote image `ghcr.io/niko1221/strata:0.2.9-cuda13` (a former 256k twin was removed: it shared `--name`/`strata-data` with the 128k entry, so it could neither coexist nor hold a different `CONTEXT`)
 
 Copying the YAML alone is not enough. The image, volumes, model files, and Docker network must be recreated on the new host.
 
@@ -19,7 +19,7 @@ Copying the YAML alone is not enough. The image, volumes, model files, and Docke
 
 ## HyperQwen (remote image)
 
-`docker run` auto-pulls `ghcr.io/syv-ai/hyperqwen:latest` on first use, so no build step. Manual alternative: `docker pull ghcr.io/syv-ai/hyperqwen:latest`.
+`docker run` auto-pulls `ghcr.io/syv-ai/hyperqwen:sha-f382342` on first use, so no build step. Manual alternative: `docker pull ghcr.io/syv-ai/hyperqwen:sha-f382342`.
 
 What does NOT transfer automatically:
 
@@ -39,7 +39,7 @@ Verify with `docker logs -f hyperqwen-swift` and `curl http://localhost:9292/run
 
 ## Strata (remote image)
 
-`docker run` pulls `ghcr.io/niko1221/strata:0.2.7-cuda13` on first use. It needs NVIDIA driver 580+ (use the `-cuda12` tag for 575-579 or Pascal/Volta cards) and about 50 GB free for `strata-data`.
+`docker run` pulls `ghcr.io/niko1221/strata:0.2.9-cuda13` on first use. It needs NVIDIA driver 580+ (use the `-cuda12` tag for 575-579 or Pascal/Volta cards) and about 50 GB free for `strata-data`.
 
 What does NOT transfer automatically:
 

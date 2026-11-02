@@ -12,7 +12,7 @@ deepseek-v4.1-flash-strata-station-16k:
     -e FAMILY=deepseek41 -e MODEL=IST-DAS-2.00bpw
     -e CONTEXT=16384 -e VISION=on -e KV=int8 -e GPU=0 -e PORT=8080
     -e API_KEY
-    ghcr.io/niko1221/strata:0.2.7-cuda13
+    ghcr.io/niko1221/strata:0.2.9-cuda13
   cmdStop: docker stop -t 120 strata-deepseek-16k
   env: &strata-api-key-env
     - "API_KEY=${env.STRATA_API_KEY}"
@@ -44,7 +44,7 @@ deepseek-v4.1-flash-strata-station-32k:
     -e FAMILY=deepseek41 -e MODEL=IST-DAS-2.00bpw
     -e CONTEXT=32768 -e VISION=on -e KV=int8 -e GPU=0 -e PORT=8080
     -e API_KEY
-    ghcr.io/niko1221/strata:0.2.7-cuda13
+    ghcr.io/niko1221/strata:0.2.9-cuda13
   cmdStop: docker stop -t 120 strata-deepseek-32k
   env: *strata-api-key-env
   apiKey: ${env.STRATA_API_KEY}
@@ -64,7 +64,7 @@ deepseek-v4.1-flash-strata-station-64k:
     -e FAMILY=deepseek41 -e MODEL=IST-DAS-2.00bpw
     -e CONTEXT=65536 -e VISION=on -e KV=int8 -e GPU=0 -e PORT=8080
     -e API_KEY
-    ghcr.io/niko1221/strata:0.2.7-cuda13
+    ghcr.io/niko1221/strata:0.2.9-cuda13
   cmdStop: docker stop -t 120 strata-deepseek-64k
   env: *strata-api-key-env
   apiKey: ${env.STRATA_API_KEY}
@@ -84,7 +84,7 @@ deepseek-v4.1-flash-strata-station-128k:
     -e FAMILY=deepseek41 -e MODEL=IST-DAS-2.00bpw
     -e CONTEXT=131072 -e VISION=on -e KV=int8 -e GPU=0 -e PORT=8080
     -e API_KEY
-    ghcr.io/niko1221/strata:0.2.7-cuda13
+    ghcr.io/niko1221/strata:0.2.9-cuda13
   cmdStop: docker stop -t 120 strata-deepseek-128k
   env: *strata-api-key-env
   apiKey: ${env.STRATA_API_KEY}
@@ -104,7 +104,7 @@ deepseek-v4.1-flash-strata-station-256k:
     -e FAMILY=deepseek41 -e MODEL=IST-DAS-2.00bpw
     -e CONTEXT=262144 -e VISION=on -e KV=int8 -e GPU=0 -e PORT=8080
     -e API_KEY
-    ghcr.io/niko1221/strata:0.2.7-cuda13
+    ghcr.io/niko1221/strata:0.2.9-cuda13
   cmdStop: docker stop -t 120 strata-deepseek-256k
   env: *strata-api-key-env
   apiKey: ${env.STRATA_API_KEY}
