@@ -272,12 +272,17 @@ func classifyType(value string, isEnum bool) string {
 	return "string"
 }
 
+// helpTimeout bounds `llama-server --help`. Recent builds initialise the GPU
+// backends before printing help (to list devices), which can take well over
+// 5s on a busy host or right after a heavy compile.
+const helpTimeout = 60 * time.Second
+
 // RunHelp executes `<binPath> --help` and returns its combined output. Some
 // backend builds print help to stdout, others to stderr, and some exit
 // non-zero after printing it, so both streams are captured and a non-zero
 // exit is only treated as an error when no output was produced at all.
 func RunHelp(binPath string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), helpTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, binPath, "--help").CombinedOutput()
 	if len(out) == 0 && err != nil {
