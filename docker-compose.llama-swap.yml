@@ -29,7 +29,7 @@ services:
       - /home/sross/gguf_models:/models
       - /mnt/w/rbot_images_cli/ComfyUI/models/:/ComfyUI-Models
       - /mnt/f/huggingface:/root/.cache/huggingface
-      - /mnt/f/llm-arena-storage/models:/models2
+      # - /mnt/f/llm-arena-storage/models:/models2
       - /mnt/c/Users/sross/.ollama/models/blobs:/mnt/c/Users/sross/.ollama/models/blobs
       - ./backends/:/backends/
       - ./config.yaml:/etc/llama-swap/config/config.yaml
