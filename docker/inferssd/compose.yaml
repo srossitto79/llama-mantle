@@ -1,0 +1,46 @@
+# Run from this directory, or pass --env-file explicitly.
+# Set INFERSSD_MODEL to a first-shard path relative to INFERSSD_MODELS_DIR.
+services:
+  inferssd:
+    image: llama-mantle/inferssd:93e76a2
+    build:
+      context: .
+      args:
+        CUDA_ARCHITECTURES: ${INFERSSD_CUDA_ARCHITECTURES:-86}
+        BUILD_JOBS: ${INFERSSD_BUILD_JOBS:-4}
+    init: true
+    gpus: all
+    mem_limit: ${INFERSSD_MEMORY:-90g}
+    memswap_limit: ${INFERSSD_MEMORY:-90g}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    # Experimental: Docker's default policy denies io_uring_setup.
+    security_opt:
+      - seccomp=unconfined
+    cap_drop:
+      - ALL
+    shm_size: 2g
+    ports:
+      - "127.0.0.1:18080:8080"
+    volumes:
+      - ${INFERSSD_MODELS_DIR:?set INFERSSD_MODELS_DIR}:/models:ro
+      - inferssd-state:/state
+    command:
+      - --model
+      - /models/${INFERSSD_MODEL:?set INFERSSD_MODEL to the first shard}
+      - --context
+      - ${INFERSSD_CONTEXT:-16384}
+      - --threads
+      - ${INFERSSD_THREADS:-8}
+    stop_grace_period: 120s
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      start_period: 20m
+      retries: 3
+
+volumes:
+  inferssd-state:
