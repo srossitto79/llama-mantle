@@ -132,17 +132,17 @@
   }
 </script>
 
-<div class="flex {role === 'user' ? 'justify-end' : 'justify-start'} mb-4">
+<div class="flex {role === 'user' ? 'justify-end' : 'justify-start'} mb-3">
   <div
-    class="group relative rounded-lg px-4 py-2 {role === 'user'
+    class="group relative rounded-(--panel-radius) px-3.5 py-2.5 text-sm {role === 'user'
       ? 'bg-primary text-primary-foreground max-w-[85%]'
-      : 'bg-card w-full border sm:w-4/5'}"
+      : 'bg-card w-full ring-1 ring-(--panel-ring) sm:w-[85%]'}"
   >
     {#if role === "assistant"}
       {#if reasoning_content || isReasoning}
-        <div class="mb-3 overflow-hidden rounded-md border">
+        <div class="mb-3 overflow-hidden rounded-md border text-xs">
           <button
-            class="bg-muted/50 hover:bg-muted flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors"
+            class="bg-(--panel-header-bg) hover:bg-muted/50 flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors"
             onclick={() => showReasoning = !showReasoning}
           >
             {#if showReasoning}
@@ -152,18 +152,15 @@
             {/if}
             <Brain class="size-4" />
             <span class="font-medium">Reasoning</span>
-            <span class="text-muted-foreground ml-2">
+            <span class="text-muted-foreground ml-1 tabular-nums">
               ({reasoning_content.length} chars{#if !isReasoning && reasoningTimeMs > 0}, {formatDuration(reasoningTimeMs, { precision: 1, subSecondMs: true })}{/if})
             </span>
             {#if isReasoning}
-              <span class="text-muted-foreground ml-auto flex items-center gap-1">
-                <span class="bg-primary h-1.5 w-1.5 animate-pulse rounded-full"></span>
-                reasoning...
-              </span>
+              <span class="bg-primary ml-auto size-2 animate-pulse rounded-full"></span>
             {/if}
           </button>
           {#if showReasoning}
-            <div class="bg-muted/30 text-muted-foreground whitespace-pre-wrap px-3 py-2 font-mono text-sm">
+            <div class="text-muted-foreground max-h-80 overflow-y-auto whitespace-pre-wrap border-t px-3 py-2 font-mono text-[0.8125rem]">
               {reasoning_content}{#if isReasoning}<span class="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-current"></span>{/if}
             </div>
           {/if}
@@ -186,7 +183,7 @@
         </div>
       {/if}
       {#if showRaw}
-        <div class="whitespace-pre-wrap font-mono text-sm">{textContent}</div>
+        <div class="whitespace-pre-wrap font-mono text-[0.8125rem]">{textContent}</div>
       {:else}
         <div class="prose prose-sm dark:prose-invert max-w-none" use:codeBlockCopy>
           {#each renderedParts.blocks as block (block.id)}
@@ -199,14 +196,14 @@
         </div>
       {/if}
       {#if genTokens > 0}
-        <div class="mt-2 text-xs text-muted-foreground tabular-nums">
+        <div class="text-muted-foreground mt-2 font-mono text-xs tabular-nums">
           {genTokens} tok · {formatDuration(genMs)}{#if tokensPerSec > 0} · {tokensPerSec.toFixed(1)} tok/s{/if}
         </div>
       {/if}
       {#if !isStreaming}
         <div class="mt-2 flex gap-1 border-t pt-1">
           {#if onRegenerate}
-            <Button variant="ghost" size="icon-xs" class="text-muted-foreground" onclick={onRegenerate} title="Regenerate response">
+            <Button variant="ghost" size="icon-xs" class="text-muted-foreground" onclick={onRegenerate} title="Regenerate">
               <RefreshCw />
             </Button>
           {/if}
@@ -215,7 +212,7 @@
             size="icon-xs"
             class="text-muted-foreground"
             onclick={copyToClipboard}
-            title={copied ? "Copied!" : "Copy to clipboard"}
+            title={copied ? "Copied" : "Copy"}
           >
             {#if copied}
               <Check class="text-success" />
@@ -267,9 +264,10 @@
         <div class="whitespace-pre-wrap pr-8">{textContent}</div>
         {#if canEdit}
           <button
-            class="absolute right-2 top-2 rounded-lg bg-white/20 p-1.5 opacity-0 shadow-sm transition-opacity hover:bg-white/30 group-hover:opacity-100"
+            class="absolute right-2 top-2 rounded-md bg-white/20 p-1 opacity-0 transition-opacity hover:bg-white/30 focus-visible:opacity-100 group-hover:opacity-100"
             onclick={startEdit}
-            title="Edit message"
+            title="Edit"
+            aria-label="Edit"
           >
             <Pencil class="size-4" />
           </button>
@@ -308,9 +306,10 @@
     position: relative;
     background-color: var(--muted);
     border: 1px solid var(--border);
-    border-radius: 0.375rem;
-    padding: 0.75rem;
+    border-radius: calc(var(--radius) - 2px);
+    padding: 0.625rem 0.75rem;
     padding-right: 2.5rem;
+    font-size: 0.8125rem;
     overflow-x: auto;
     margin: 0.5rem 0;
   }
@@ -396,10 +395,9 @@
   }
 
   .prose :global(blockquote) {
-    border-left: 3px solid var(--primary);
+    border-left: 2px solid var(--border);
     padding-left: 1rem;
     margin: 0.5rem 0;
-    font-style: italic;
   }
 
   .prose :global(a) {

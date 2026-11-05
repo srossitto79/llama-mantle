@@ -1,12 +1,27 @@
 <script lang="ts">
+  import { tokenColor } from "$lib/themeColors";
   import { onMount } from "svelte";
   import { Chart, ScatterController, PointElement, LinearScale, LogarithmicScale, Tooltip } from "chart.js";
-  import { isDarkMode } from "../stores/theme";
-  import { chartChrome, CategoricalAssignment } from "$lib/intelligenceColors";
   import { paretoFrontier } from "$lib/intelligenceMetrics";
   import * as Card from "$lib/components/ui/card/index.js";
+  import SegmentedControl from "./SegmentedControl.svelte";
 
   Chart.register(ScatterController, PointElement, LinearScale, LogarithmicScale, Tooltip);
+
+  // Chart chrome follows the active theme: tokens are read from the document and
+  // resolved to rgba() through a canvas, since chart.js cannot parse oklch() or
+  // color-mix(). `themeTick` bumps whenever <html> changes class or data-theme.
+
+  function chartChrome() {
+    return {
+      surface: tokenColor("--card", "#ffffff"),
+      primary: tokenColor("--foreground", "#111111"),
+      secondary: tokenColor("--muted-foreground", "#666666"),
+      muted: tokenColor("--muted-foreground", "#666666"),
+      grid: tokenColor("--border", "#dddddd"),
+    };
+  }
+  let themeTick = $state(0);
 
   interface Point {
     key: string; label: string; minutes: number; tokens: number; pct: number;
@@ -16,6 +31,7 @@
   let { title, points }: Props = $props();
 
   type XMode = "time" | "tokens";
+  const X_MODES: { label: string; mode: XMode }[] = [{ label: "Time", mode: "time" }, { label: "Tokens", mode: "tokens" }];
   let xMode = $state<XMode>("time");
 
   function xValue(p: Point): number {
@@ -40,11 +56,10 @@
   let canvas: HTMLCanvasElement;
   let chart: Chart;
 
-  function pointColor(dark: boolean, frontier: boolean): string {
-    if (!frontier) return chartChrome(dark).muted;
-    // The same validated blue every other chart's first categorical slot uses --
-    // requesting one fixed key always lands on slot 0.
-    return new CategoricalAssignment().color("frontier", dark);
+  // Frontier points take the first chart token (the theme accent); the rest
+  // stay in the muted foreground.
+  function pointColor(frontier: boolean): string {
+    return frontier ? tokenColor("--chart-1", "#2a78d6") : chartChrome().muted;
   }
 
   function datasetPoints() {
@@ -59,12 +74,11 @@
     id: "frontierLabels",
     afterDatasetsDraw(c: Chart) {
       const meta = c.getDatasetMeta(0);
-      const dark = $isDarkMode;
       const ctx = c.ctx;
       const area = c.chartArea;
       ctx.save();
       ctx.font = "11px sans-serif";
-      ctx.fillStyle = chartChrome(dark).secondary;
+      ctx.fillStyle = chartChrome().secondary;
       meta.data.forEach((el, i) => {
         const p = plotted[i];
         if (!p?.frontier) return;
@@ -80,8 +94,8 @@
     },
   };
 
-  function buildOptions(dark: boolean) {
-    const c = chartChrome(dark);
+  function buildOptions() {
+    const c = chartChrome();
     const xs = plotted.map(p => p.x);
     // A log scale bounds itself tightly to the data by default, pinning the
     // cheapest and priciest point exactly on the plot boundary where their
@@ -125,23 +139,23 @@
           min: xMin, max: xMax,
           title: { display: true, text: xMode === "time" ? "Wall time (minutes, log)" : "Completion tokens (log)", color: c.muted, font: { size: 10 } },
           ticks: { color: c.muted, font: { size: 10 } },
-          grid: { color: c.grid }, border: { color: c.baseline },
+          grid: { color: c.grid }, border: { color: c.grid },
         },
         y: {
           min: 0, max: 100,
           title: { display: true, text: "% attempted", color: c.muted, font: { size: 10 } },
           ticks: { color: c.muted, font: { size: 10 }, callback: (v: string | number) => v + "%" },
-          grid: { color: c.grid }, border: { color: c.baseline },
+          grid: { color: c.grid }, border: { color: c.grid },
         },
       },
     };
   }
 
-  function buildDataset(dark: boolean) {
-    const c = chartChrome(dark);
+  function buildDataset() {
+    const c = chartChrome();
     return {
       data: datasetPoints(),
-      backgroundColor: plotted.map(p => pointColor(dark, p.frontier)),
+      backgroundColor: plotted.map(p => pointColor(p.frontier)),
       borderColor: c.surface,
       borderWidth: 2,
       pointRadius: 5,
@@ -156,42 +170,37 @@
   }
 
   onMount(() => {
-    const dark = $isDarkMode;
     chart = new Chart(canvas, {
       type: "scatter",
-      data: { datasets: [buildDataset(dark) as never] },
-      options: buildOptions(dark),
+      data: { datasets: [buildDataset() as never] },
+      options: buildOptions(),
       plugins: [frontierLabels],
     });
-    return () => chart.destroy();
+    const observer = new MutationObserver(() => themeTick++);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
+    return () => { observer.disconnect(); chart.destroy(); };
   });
 
   $effect(() => {
     if (!chart) return;
-    const dark = $isDarkMode;
-    // Re-read so this effect also reruns when xMode or points change.
-    void xMode; void plotted;
-    chart.options = buildOptions(dark) as never;
-    chart.data.datasets[0] = buildDataset(dark) as never;
+    // Re-read so this effect also reruns when xMode, points or the theme change.
+    void xMode; void plotted; void themeTick;
+    chart.options = buildOptions() as never;
+    chart.data.datasets[0] = buildDataset() as never;
     chart.update("none");
   });
 </script>
 
-<Card.Root class="py-0">
-  <Card.Content class="space-y-3 p-4">
-    <div class="flex flex-wrap items-center justify-between gap-2">
-      <h3 class="text-sm font-medium">{title}</h3>
-      <div class="flex items-center gap-3">
-        <div class="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-xs">
-          <span class="flex items-center gap-1.5"><span class="inline-block h-2.5 w-2.5 rounded-full" style="background:{new CategoricalAssignment().color('frontier', $isDarkMode)}"></span>On the frontier</span>
-          <span class="flex items-center gap-1.5"><span class="inline-block h-2.5 w-2.5 rounded-full" style="background:{chartChrome($isDarkMode).muted}"></span>Dominated</span>
-        </div>
-        <div class="inline-flex overflow-hidden rounded-md border text-xs">
-          <button type="button" class="px-2 py-1" class:bg-muted={xMode === "time"} class:font-medium={xMode === "time"} onclick={() => xMode = "time"}>Time</button>
-          <button type="button" class="px-2 py-1" class:bg-muted={xMode === "tokens"} class:font-medium={xMode === "tokens"} onclick={() => xMode = "tokens"}>Tokens</button>
-        </div>
-      </div>
+<Card.Root class="gap-0 py-0">
+  <div class="bg-(--panel-header-bg) flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-2.5">
+    <h2 class="text-heading">{title}</h2>
+    <div class="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-xs">
+      <span class="flex items-center gap-1.5"><span class="bg-chart-1 inline-block size-2.5 rounded-full"></span>On the frontier</span>
+      <span class="flex items-center gap-1.5"><span class="bg-muted-foreground inline-block size-2.5 rounded-full"></span>Dominated</span>
     </div>
+    <div class="ml-auto"><SegmentedControl items={X_MODES} selected={xMode === "time" ? 0 : 1} onSelect={(i) => (xMode = X_MODES[i].mode)} /></div>
+  </div>
+  <Card.Content class="p-4">
     <div class="h-[320px]"><canvas bind:this={canvas}></canvas></div>
   </Card.Content>
 </Card.Root>

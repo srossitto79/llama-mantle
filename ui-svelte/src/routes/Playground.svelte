@@ -38,19 +38,21 @@
   });
 </script>
 
-<Card.Root class="flex h-full flex-col gap-0 overflow-hidden p-4">
+<Card.Root class="flex h-full flex-col gap-0 overflow-hidden p-0">
   <Tabs
     value={$selectedPlaygroundTab}
     onValueChange={(v: string) => v && selectedPlaygroundTab.set(v as PlaygroundTab)}
-    class="flex flex-1 w-full flex-col gap-2 overflow-hidden"
+    class="flex w-full flex-1 flex-col gap-0 overflow-hidden"
   >
-    <TabsList variant="line">
+    <div class="bg-(--panel-header-bg) shrink-0 overflow-x-auto border-b px-4 py-2">
+    <TabsList variant="line" class="p-0">
       {#each playgroundTabs as tab (tab.id)}
         <TabsTrigger value={tab.id}>{tab.label}</TabsTrigger>
       {/each}
     </TabsList>
+    </div>
 
-    <div class="relative flex-1 overflow-hidden">
+    <div class="relative flex-1 overflow-hidden p-4">
       {#each playgroundTabs as tab (tab.id)}
         {@const TabComponent = tabComponents[tab.id]}
         <div class="h-full" class:hidden={$selectedPlaygroundTab !== tab.id}>

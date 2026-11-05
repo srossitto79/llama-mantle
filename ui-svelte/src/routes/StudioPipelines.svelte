@@ -2,6 +2,8 @@
   import { onMount } from "svelte";
   import { Download, Loader2, Play, Save, Trash2, Upload } from "@lucide/svelte";
   import * as Card from "$lib/components/ui/card/index.js";
+  import * as Alert from "$lib/components/ui/alert/index.js";
+  import { EmptyState } from "$lib/components/ui/empty-state/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Label from "$lib/components/ui/label/index.js";
@@ -95,25 +97,32 @@
   import * as Page from "$lib/components/ui/page/index.js";
 </script>
 
-<Page.Root title="Studio Pipelines" description="One operation is a recipe; add steps to build a pipeline." width="full">
+<Page.Root title="Studio Pipelines" width="full">
   <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
-    <Card.Root>
-      <Card.Header><Card.Title>Custom recipe</Card.Title><Card.Description>Common settings have controls. Advanced request JSON exposes every argument supported by the Studio operation API and is validated by the backend before execution.</Card.Description></Card.Header>
-      <Card.Content class="space-y-4">
+    <Card.Root class="gap-0 py-0">
+      <div class="bg-(--panel-header-bg) flex items-center gap-2 border-b px-4 py-2.5"><h2 class="text-heading">Recipe</h2></div>
+      <div class="space-y-4 p-4">
         <div class="grid gap-3 sm:grid-cols-2">
           <div class="space-y-2"><Label.Root for="pipeline-name">Name</Label.Root><Input id="pipeline-name" bind:value={name} /></div>
           <StudioResourcePicker id="pipeline-input" label="Initial model" bind:value={input} {resources} types={["model", "artifact"]} placeholder="Search models and generated artifacts" />
         </div>
         <PipelineStepEditor bind:steps {resources} idPrefix="recipe" />
-        {#if error}<div class="border-destructive/40 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-sm">{error}</div>{/if}
-        {#if message}<div class="border-primary/30 bg-primary/5 rounded-md border px-3 py-2 text-sm">{message}</div>{/if}
+        {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
+        {#if message}<Alert.Root><Alert.Description>{message}</Alert.Description></Alert.Root>{/if}
         <input class="hidden" type="file" accept="application/json,.json" bind:this={importInput} onchange={importTemplate} />
-        <div class="flex flex-wrap justify-end gap-2"><Button variant="outline" onclick={() => importInput.click()}><Upload class="size-4" />Import</Button><Button variant="outline" onclick={exportTemplate}><Download class="size-4" />Export</Button><Button variant="outline" onclick={save} disabled={busy || !name.trim()}><Save class="size-4" />Save template</Button><Button onclick={run} disabled={busy}>{#if busy}<Loader2 class="size-4 animate-spin" />{:else}<Play class="size-4" />{/if}Run pipeline</Button></div>
-      </Card.Content>
+        <div class="flex flex-wrap justify-end gap-2"><Button size="sm" variant="outline" onclick={() => importInput.click()}><Upload class="size-4" />Import</Button><Button size="sm" variant="outline" onclick={exportTemplate}><Download class="size-4" />Export</Button><Button size="sm" variant="outline" onclick={save} disabled={busy || !name.trim()}><Save class="size-4" />Save template</Button><Button size="sm" onclick={run} disabled={busy}>{#if busy}<Loader2 class="size-4 animate-spin" />{:else}<Play class="size-4" />{/if}Run pipeline</Button></div>
+      </div>
     </Card.Root>
-    <Card.Root class="h-fit"><Card.Header><Card.Title>Saved recipes</Card.Title><Card.Description>{#if $activeStudioProject}Showing the active project only.{:else}Showing all unscoped and project recipes.{/if}</Card.Description></Card.Header><Card.Content class="space-y-2">
-      {#if visibleTemplates.length === 0}<p class="text-muted-foreground text-sm">No saved recipes in this scope.</p>{/if}
-      {#each visibleTemplates as template}<div class="border-border flex items-center gap-2 rounded-md border p-2"><button class="min-w-0 flex-1 truncate text-left text-sm" onclick={() => load(template)}>{template.name}<span class="text-muted-foreground block text-xs">{template.pipeline.steps.length === 1 ? "1 operation" : `${template.pipeline.steps.length} steps`}</span></button><Button variant="ghost" size="icon" onclick={() => remove(template)}><Trash2 class="size-4" /></Button></div>{/each}
-    </Card.Content></Card.Root>
+    <!-- Lists the active project's recipes, or all unscoped and project recipes when none is active. -->
+    <Card.Root class="h-fit gap-0 py-0">
+      <div class="bg-(--panel-header-bg) flex items-center gap-2 border-b px-4 py-2.5"><h2 class="text-heading">Saved recipes</h2></div>
+      {#if visibleTemplates.length === 0}
+        <EmptyState title="No saved recipes" />
+      {:else}
+        <ul class="divide-y">
+          {#each visibleTemplates as template}<li class="hover:bg-muted/50 flex items-center gap-2 px-4 py-2.5"><button class="min-w-0 flex-1 truncate text-left text-sm" onclick={() => load(template)}>{template.name}<span class="text-muted-foreground block text-xs">{template.pipeline.steps.length === 1 ? "1 operation" : `${template.pipeline.steps.length} steps`}</span></button><Button variant="ghost" size="icon-sm" aria-label="Delete recipe" onclick={() => remove(template)}><Trash2 class="size-4" /></Button></li>{/each}
+        </ul>
+      {/if}
+    </Card.Root>
   </div>
 </Page.Root>

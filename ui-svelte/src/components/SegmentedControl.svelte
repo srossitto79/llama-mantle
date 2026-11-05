@@ -12,12 +12,17 @@
   let { items, selected, onSelect, label }: Props = $props();
 </script>
 
-<div class="flex items-center gap-1">
+<div class="flex flex-wrap items-center gap-1" role="group" aria-label={label}>
   {#if label}
     <span class="text-muted-foreground mr-1 text-xs">{label}</span>
   {/if}
   {#each items as item, i (i)}
-    <Button variant={selected === i ? "default" : "outline"} size="sm" onclick={() => onSelect(i)}>
+    <Button
+      variant={selected === i ? "secondary" : "ghost"}
+      size="sm"
+      aria-pressed={selected === i}
+      onclick={() => onSelect(i)}
+    >
       {item.label}
     </Button>
   {/each}

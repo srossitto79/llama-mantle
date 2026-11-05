@@ -2,6 +2,11 @@
   import { onMount } from "svelte";
   import { link } from "svelte-spa-router";
   import { Button } from "$lib/components/ui/button/index.js";
+  import { Input } from "$lib/components/ui/input/index.js";
+  import * as Card from "$lib/components/ui/card/index.js";
+  import * as Alert from "$lib/components/ui/alert/index.js";
+  import * as Field from "$lib/components/ui/field/index.js";
+  import { NativeSelect } from "$lib/components/ui/native-select/index.js";
   import IntelligenceRunHeatmap from "../components/IntelligenceRunHeatmap.svelte";
   import { shouldAutoScroll } from "$lib/scroll";
   import { intelligenceRequest, intelligenceURL, REASONING_EFFORTS, type IntelligenceConfig, type IntelligenceRun, type IntelligenceDownload } from "$lib/intelligenceApi";
@@ -170,88 +175,133 @@ function suiteLabel(kind: string): string {
   import * as Page from "$lib/components/ui/page/index.js";
 </script>
 
-<Page.Root title="Intelligence Run" description="Measure model capabilities with reproducible, automatically graded tasks." width="full">
-  {#if error}<p role="alert" class="text-destructive rounded-lg border p-4">{error}</p>{/if}
-  {#if configError}<p role="alert" class="text-destructive rounded-lg border p-4">{configError} <button class="underline" onclick={() => loadConfig().catch(e => configError = String(e))}>Retry model discovery</button></p>{/if}
+<Page.Root title="Intelligence Run" width="full">
+  {#if error}
+    <Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>
+  {/if}
+  {#if configError}
+    <Alert.Root variant="destructive">
+      <Alert.Description>
+        {configError}
+        <button class="underline" onclick={() => loadConfig().catch(e => configError = String(e))}>Retry model discovery</button>
+      </Alert.Description>
+    </Alert.Root>
+  {/if}
 
-  <section class="space-y-4 rounded-xl border p-5">
-    <h2 class="font-semibold">Models and profile</h2>
-    {#if !config}<p class="text-muted-foreground">Waiting for the Intelligence service…</p>
-    {:else}
-      <fieldset disabled={blocked} class="space-y-3">
-        <legend class="mb-2 text-sm">Models</legend>
-        {#if config.models.length}
-          <input type="text" placeholder="Filter models…" class="bg-background block w-full rounded-md border p-2 text-sm" bind:value={modelFilter} />
-        {/if}
-        <div class="max-h-64 space-y-2 overflow-auto">
-          {#each filteredModels as model (model.id)}
-            <label class="flex items-center gap-2 text-sm"><input type="checkbox" bind:group={selected} value={model.id} />{model.name}</label>
-          {:else}<p class="text-muted-foreground text-sm">{config.models.length ? "No models match the filter." : "No models available. Configure models in Mantle, then refresh this page."}</p>{/each}
-        </div>
-        <label for="intelligence-profile" class="block text-sm">Profile</label><select id="intelligence-profile" class="bg-background block w-full rounded-md border p-2" bind:value={profile}>{#each config.profiles as p}<option value={p.id}>{p.id}</option>{/each}</select>
-        <p class="text-muted-foreground text-sm">{config.profiles.find(p => p.id === profile)?.description}</p>
-        <details open><summary class="cursor-pointer text-sm">Advanced settings</summary>
-          <div class="mt-3 grid grid-cols-2 gap-3">
-            <label class="text-sm">
-              <span class="flex items-center gap-2"><input type="checkbox" bind:checked={useCustomTemperature} />Temperature</span>
-              {#if useCustomTemperature}
-                <input type="number" min="0" max="2" step="0.1" class="mt-1 w-full rounded border p-2" bind:value={temperature} />
-              {:else}
-                <input type="text" value="Default" disabled class="text-muted-foreground mt-1 w-full rounded border p-2" />
-              {/if}
-            </label>
-            <label class="text-sm">Thinking effort
-              <select class="bg-background mt-1 block w-full rounded-md border p-2" bind:value={reasoningEffort}>
-                <option value="">Model default</option>
-                {#each REASONING_EFFORTS as effort}<option value={effort}>{effort}</option>{/each}
-              </select>
-            </label>
-            <label class="text-sm">Timeout (seconds)<input type="number" min="1" class="mt-1 w-full rounded border p-2" bind:value={timeout} /></label>
-            <label class="text-sm">Maximum tokens<input type="number" min="1" class="mt-1 w-full rounded border p-2" bind:value={maxTokens} /></label>
-          </div>
-          <label class="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={resume} />Reuse matching answers from the latest results</label>
-          <label class="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={retryFailed} />Retry failed items</label>
-          {#if retryFailed}
-            <label class="mt-2 ml-6 flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={retryUnsupported} />Also retry unsupported items</label>
-          {/if}
-        </details>
-      </fieldset>
-      <Button disabled={blocked || !selected.length || !(timeout > 0) || !(maxTokens > 0)} onclick={() => action("run", { models: selected, profile, temperature: useCustomTemperature ? temperature : false, reasoning_effort: reasoningEffort, timeout, max_tokens: maxTokens, only_missing: resume, retry_failed: retryFailed, retry_unsupported: retryFailed && retryUnsupported, stream: true })}>Start run</Button>
-    {/if}
-  </section>
-  <details class="space-y-4 rounded-xl border p-5">
-    <summary class="cursor-pointer font-semibold">External datasets</summary>
-    <div class="mt-4 space-y-4">
-      <p class="text-muted-foreground text-sm">Prepare external benchmark suites before using external profiles. Preparation and benchmark runs execute one at a time.</p>
-      <div class="space-y-2">
-        {#each download.suites ?? [] as suite (suite.kind)}
-          <div class="flex flex-wrap items-center gap-2">
-            <Button variant="outline" disabled={blocked || !config} onclick={() => action(`download/${suite.kind}`)}>Download {suiteLabel(suite.kind)}</Button>
-            <span class="text-muted-foreground text-sm">{suite.cached ? "Cached" : "Not downloaded"}</span>
-          </div>
-        {:else}
-          <p class="text-muted-foreground text-sm">No downloadable datasets reported by the Intelligence service.</p>
-        {/each}
-      </div>
-      <p class="text-sm">{download.kind ?? "Preparation"}: {download.state}{download.finished_at ? ` · ${new Date(download.finished_at * 1000).toLocaleString()}` : ""}</p>
-      {#if download.error}<p class="text-destructive text-sm">{download.error}</p>{/if}
-      {#if download.logs.length}<pre class="bg-muted max-h-56 overflow-auto rounded p-3 text-xs whitespace-pre-wrap">{download.logs.join("\n")}</pre>{/if}
+  <Card.Root class="gap-0 py-0">
+    <div class="bg-(--panel-header-bg) flex flex-wrap items-center gap-2 border-b px-4 py-2.5">
+      <h2 class="text-heading">Models and profile</h2>
     </div>
-  </details>
-  <section class="space-y-3 rounded-xl border p-5">
-    <div class="flex items-center justify-between"><h2 class="font-semibold">Live progress · {run?.state ?? "idle"}</h2>{#if active}<Button variant="outline" disabled={busy || stopping} onclick={() => action("run/stop")}>{stopping ? "Stopping…" : "Stop run"}</Button>{/if}</div>
-    {#if run?.totals}<progress class="w-full" max={run.totals.items_total || 1} value={run.totals.items_done}></progress><p class="text-sm">{run.totals.items_done} / {run.totals.items_total} items</p>{/if}
-    {#if run?.models?.length}<IntelligenceRunHeatmap {run} />{/if}
-    {#if stopping}<p class="text-muted-foreground text-sm">Stopping at the next runner checkpoint. An active request or code test may finish first.</p>{/if}
-    {#if run?.error}<p class="text-destructive">{run.error}</p>{/if}
-    {#if run?.current}
-      <p class="text-sm font-medium">{run.current.title}</p>
-      <pre
-        bind:this={previewElement}
-        onscroll={updatePreviewScrollState}
-        class="bg-muted max-h-72 overflow-auto rounded p-3 text-xs whitespace-pre-wrap"
-      >{run.current.content || run.current.reasoning || "Waiting for model response…"}</pre>
-    {/if}
-    <a class="text-primary text-sm underline" href="/studio/intelligence/results" use:link>View results</a>
-  </section>
+    <div class="space-y-4 p-4">
+      {#if !config}<p class="text-muted-foreground text-sm">Waiting for the Intelligence service…</p>
+      {:else}
+        {@const profiles = config.profiles}
+        <fieldset disabled={blocked} class="space-y-4">
+          <div class="space-y-2">
+            <legend class="text-label text-muted-foreground font-semibold uppercase">Models</legend>
+            {#if config.models.length}
+              <Input type="text" placeholder="Filter models…" aria-label="Filter models" class="h-8 max-w-sm" bind:value={modelFilter} />
+            {/if}
+            <div class="max-h-64 divide-y overflow-auto rounded-lg border">
+              {#each filteredModels as model (model.id)}
+                <label class="hover:bg-muted/50 flex items-center gap-2 px-3 py-2 text-sm"><input type="checkbox" class="accent-primary" bind:group={selected} value={model.id} />{model.name}</label>
+              {:else}<p class="text-muted-foreground px-3 py-6 text-center text-sm">{config.models.length ? "No models match the filter." : "No models available. Configure models in Mantle, then refresh this page."}</p>{/each}
+            </div>
+          </div>
+          <Field.Root
+            label="Profile"
+            id="intelligence-profile"
+            description={profiles.find(p => p.id === profile)?.description}
+            class="max-w-md"
+          >
+            {#snippet control({ id, describedBy })}
+              <NativeSelect {id} aria-describedby={describedBy} bind:value={profile}>{#each profiles as p}<option value={p.id}>{p.id}</option>{/each}</NativeSelect>
+            {/snippet}
+          </Field.Root>
+          <details open class="space-y-3">
+            <summary class="text-label text-muted-foreground cursor-pointer font-semibold uppercase">Advanced settings</summary>
+            <div class="mt-3 grid gap-3 sm:grid-cols-2">
+              <div class="grid gap-1.5 text-sm">
+                <label class="flex items-center gap-2 font-medium"><input type="checkbox" class="accent-primary" bind:checked={useCustomTemperature} />Temperature</label>
+                {#if useCustomTemperature}
+                  <Input type="number" min="0" max="2" step="0.1" aria-label="Temperature" class="h-8" bind:value={temperature} />
+                {:else}
+                  <Input type="text" value="Default" disabled aria-label="Temperature" class="h-8" />
+                {/if}
+              </div>
+              <Field.Root label="Thinking effort" id="intelligence-effort">
+                {#snippet control({ id })}
+                  <NativeSelect {id} bind:value={reasoningEffort}>
+                    <option value="">Model default</option>
+                    {#each REASONING_EFFORTS as effort}<option value={effort}>{effort}</option>{/each}
+                  </NativeSelect>
+                {/snippet}
+              </Field.Root>
+              <Field.Root label="Timeout (seconds)" id="intelligence-timeout">
+                {#snippet control({ id })}<Input {id} type="number" min="1" class="h-8" bind:value={timeout} />{/snippet}
+              </Field.Root>
+              <Field.Root label="Maximum tokens" id="intelligence-max-tokens">
+                {#snippet control({ id })}<Input {id} type="number" min="1" class="h-8" bind:value={maxTokens} />{/snippet}
+              </Field.Root>
+            </div>
+            <label class="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" class="accent-primary" bind:checked={resume} />Reuse matching answers from the latest results</label>
+            <label class="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" class="accent-primary" bind:checked={retryFailed} />Retry failed items</label>
+            {#if retryFailed}
+              <label class="mt-2 ml-6 flex items-center gap-2 text-sm"><input type="checkbox" class="accent-primary" bind:checked={retryUnsupported} />Also retry unsupported items</label>
+            {/if}
+          </details>
+        </fieldset>
+        <Button size="sm" disabled={blocked || !selected.length || !(timeout > 0) || !(maxTokens > 0)} onclick={() => action("run", { models: selected, profile, temperature: useCustomTemperature ? temperature : false, reasoning_effort: reasoningEffort, timeout, max_tokens: maxTokens, only_missing: resume, retry_failed: retryFailed, retry_unsupported: retryFailed && retryUnsupported, stream: true })}>Start run</Button>
+      {/if}
+    </div>
+  </Card.Root>
+
+  <Card.Root class="gap-0 py-0">
+    <details>
+      <summary class="bg-(--panel-header-bg) text-heading cursor-pointer px-4 py-2.5">External datasets</summary>
+      <div class="space-y-4 border-t p-4">
+        <div class="divide-y rounded-lg border">
+          {#each download.suites ?? [] as suite (suite.kind)}
+            <div class="flex flex-wrap items-center gap-3 px-3 py-2">
+              <Button variant="outline" size="sm" disabled={blocked || !config} onclick={() => action(`download/${suite.kind}`)}>Download {suiteLabel(suite.kind)}</Button>
+              <span class="text-muted-foreground text-sm">{suite.cached ? "Cached" : "Not downloaded"}</span>
+            </div>
+          {:else}
+            <p class="text-muted-foreground px-3 py-6 text-center text-sm">No downloadable datasets.</p>
+          {/each}
+        </div>
+        <p class="text-sm">{download.kind ?? "Preparation"}: {download.state}{download.finished_at ? ` · ${new Date(download.finished_at * 1000).toLocaleString()}` : ""}</p>
+        {#if download.error}<p class="text-destructive text-sm">{download.error}</p>{/if}
+        {#if download.logs.length}<pre class="bg-muted max-h-56 overflow-auto rounded-lg p-3 font-mono text-xs whitespace-pre-wrap">{download.logs.join("\n")}</pre>{/if}
+      </div>
+    </details>
+  </Card.Root>
+
+  <Card.Root class="gap-0 py-0">
+    <div class="bg-(--panel-header-bg) flex flex-wrap items-center gap-2 border-b px-4 py-2.5">
+      <h2 class="text-heading">Live progress · {run?.state ?? "idle"}</h2>
+      <div class="ml-auto flex items-center gap-2">
+        {#if active}<Button variant="outline" size="sm" disabled={busy || stopping} onclick={() => action("run/stop")}>{stopping ? "Stopping…" : "Stop run"}</Button>{/if}
+        <a class="text-primary text-sm underline" href="/studio/intelligence/results" use:link>View results</a>
+      </div>
+    </div>
+    <div class="space-y-3 p-4">
+      {#if run?.totals}
+        <progress class="accent-primary h-2 w-full" max={run.totals.items_total || 1} value={run.totals.items_done}></progress>
+        <p class="text-sm tabular-nums">{run.totals.items_done} / {run.totals.items_total} items</p>
+      {/if}
+      {#if run?.models?.length}<IntelligenceRunHeatmap {run} />{/if}
+      <!-- Stopping happens at the next runner checkpoint; an active request or code test may finish first. -->
+      {#if stopping}<p class="text-muted-foreground text-sm">Stopping</p>{/if}
+      {#if run?.error}<p class="text-destructive text-sm">{run.error}</p>{/if}
+      {#if run?.current}
+        <p class="text-sm font-medium">{run.current.title}</p>
+        <pre
+          bind:this={previewElement}
+          onscroll={updatePreviewScrollState}
+          class="bg-muted max-h-72 overflow-auto rounded-lg p-3 font-mono text-xs whitespace-pre-wrap"
+        >{run.current.content || run.current.reasoning || "Waiting for model response…"}</pre>
+      {/if}
+    </div>
+  </Card.Root>
 </Page.Root>

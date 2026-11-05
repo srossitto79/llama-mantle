@@ -1,8 +1,7 @@
 <script lang="ts">
+  import { tokenColor } from "$lib/themeColors";
   import { onMount } from "svelte";
   import { Chart, BarController, BarElement, LinearScale, CategoryScale, Tooltip } from "chart.js";
-  import { isDarkMode } from "../stores/theme";
-  import { chartChrome } from "$lib/intelligenceColors";
   import * as Card from "$lib/components/ui/card/index.js";
 
   Chart.register(BarController, BarElement, LinearScale, CategoryScale, Tooltip);
@@ -18,6 +17,22 @@
 
   let canvas: HTMLCanvasElement;
   let chart: Chart;
+
+  // Chart chrome follows the active theme: tokens are read from the document and
+  // resolved to rgba() through a canvas, since chart.js cannot parse oklch() or
+  // color-mix(). `themeTick` bumps whenever <html> changes class or data-theme.
+
+  function chartChrome() {
+    return {
+      surface: tokenColor("--card", "#ffffff"),
+      primary: tokenColor("--foreground", "#111111"),
+      secondary: tokenColor("--muted-foreground", "#666666"),
+      muted: tokenColor("--muted-foreground", "#666666"),
+      grid: tokenColor("--border", "#dddddd"),
+    };
+  }
+  let themeTick = $state(0);
+
   // One legend entry per distinct color, in first-seen order — mirrors whichever
   // models/runs are actually plotted, without chart.js trying to legend per-bar colors.
   // The full label is kept, not just its first segment: a " · " suffix now carries
@@ -28,8 +43,8 @@
     return [...seen.entries()].map(([color, label]) => ({ color, label }));
   });
 
-  function buildOptions(dark: boolean) {
-    const c = chartChrome(dark);
+  function buildOptions() {
+    const c = chartChrome();
     return {
       indexAxis: "y" as const,
       responsive: true,
@@ -58,16 +73,16 @@
         x: percentMode
           ? {
               min: 0, max: 100, ticks: { color: c.muted, font: { size: 10 }, callback: (v: string | number) => v + "%" },
-              grid: { color: c.grid }, border: { color: c.baseline },
+              grid: { color: c.grid }, border: { color: c.grid },
             }
           : {
               beginAtZero: true,
               ticks: { color: c.muted, font: { size: 10 }, callback: (v: string | number) => unit ? `${v} ${unit}` : String(v) },
-              grid: { color: c.grid }, border: { color: c.baseline },
+              grid: { color: c.grid }, border: { color: c.grid },
             },
         y: {
           ticks: { color: c.secondary, font: { size: 11 } },
-          grid: { display: false }, border: { color: c.baseline },
+          grid: { display: false }, border: { color: c.grid },
         },
       },
     };
@@ -94,15 +109,17 @@
           barPercentage: 0.9,
         }],
       },
-      options: buildOptions($isDarkMode),
+      options: buildOptions(),
     });
-    return () => chart.destroy();
+    const observer = new MutationObserver(() => themeTick++);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
+    return () => { observer.disconnect(); chart.destroy(); };
   });
 
   $effect(() => {
     if (!chart) return;
-    const dark = $isDarkMode;
-    chart.options = buildOptions(dark) as never;
+    void themeTick;
+    chart.options = buildOptions() as never;
     chart.data.labels = data.map(d => d.label);
     chart.data.datasets[0].data = data.map(barValue);
     chart.data.datasets[0].backgroundColor = data.map(d => d.color);
@@ -110,18 +127,18 @@
   });
 </script>
 
-<Card.Root class="py-0">
-  <Card.Content class="space-y-3 p-4">
-    <div class="flex flex-wrap items-center justify-between gap-2">
-      <h3 class="text-sm font-medium">{title}</h3>
-      {#if legend.length > 1}
-        <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-          {#each legend as entry}
-            <span class="flex items-center gap-1.5"><span class="inline-block h-2.5 w-2.5 rounded-full" style="background:{entry.color}"></span>{entry.label}</span>
-          {/each}
-        </div>
-      {/if}
-    </div>
+<Card.Root class="gap-0 py-0">
+  <div class="bg-(--panel-header-bg) flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5">
+    <h2 class="text-heading">{title}</h2>
+    {#if legend.length > 1}
+      <div class="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-xs">
+        {#each legend as entry}
+          <span class="flex items-center gap-1.5"><span class="inline-block size-2.5 rounded-full" style="background:{entry.color}"></span>{entry.label}</span>
+        {/each}
+      </div>
+    {/if}
+  </div>
+  <Card.Content class="p-4">
     <div style="height:{Math.max(data.length * 28 + 20, 80)}px">
       <canvas bind:this={canvas}></canvas>
     </div>

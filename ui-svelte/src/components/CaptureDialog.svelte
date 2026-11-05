@@ -184,9 +184,9 @@
   <Dialog.Content class="flex max-h-[90vh] w-[90%] sm:max-w-[90%] flex-col gap-0 p-0">
     {#if capture}
       <Dialog.Header class="border-b border-border px-4 py-3">
-        <Dialog.Title class="text-lg font-bold">
+        <Dialog.Title class="text-heading">
           Capture #{capture.id + 1}{#if capture.req_path}
-            <span class="font-mono text-base font-normal text-muted-foreground">{capture.req_path}</span>{/if}
+            <span class="font-mono text-[0.8125rem] font-normal text-muted-foreground">{capture.req_path}</span>{/if}
         </Dialog.Title>
       </Dialog.Header>
 
@@ -194,7 +194,7 @@
         <!-- Request Headers -->
         <details class="group" open>
           <summary
-            class="cursor-pointer font-semibold text-sm uppercase tracking-wider text-muted-foreground hover:text-foreground"
+            class="text-label text-muted-foreground hover:text-foreground cursor-pointer font-semibold uppercase"
           >
             Request Headers
           </summary>
@@ -219,7 +219,7 @@
         <!-- Request Body -->
         <details class="group" open>
           <summary
-            class="cursor-pointer font-semibold text-sm uppercase tracking-wider text-muted-foreground hover:text-foreground"
+            class="text-label text-muted-foreground hover:text-foreground cursor-pointer font-semibold uppercase"
           >
             Request Body
           </summary>
@@ -255,13 +255,13 @@
               class="mt-1 bg-background rounded-md border border-border overflow-auto max-h-96"
             >
               <pre
-                class="p-3 text-sm font-mono whitespace-pre-wrap break-all">{displayedRequestBody}</pre>
+                class="p-3 text-[0.8125rem] font-mono whitespace-pre-wrap break-all">{displayedRequestBody}</pre>
             </div>
           {:else}
             <div
               class="mt-2 bg-background rounded-md border border-border overflow-auto max-h-96"
             >
-              <pre class="p-3 text-sm font-mono whitespace-pre-wrap break-all"
+              <pre class="p-3 text-[0.8125rem] font-mono whitespace-pre-wrap break-all"
                 >(empty)</pre
               >
             </div>
@@ -271,7 +271,7 @@
         <!-- Response Headers -->
         <details class="group" open>
           <summary
-            class="cursor-pointer font-semibold text-sm uppercase tracking-wider text-muted-foreground hover:text-foreground"
+            class="text-label text-muted-foreground hover:text-foreground cursor-pointer font-semibold uppercase"
           >
             Response Headers
           </summary>
@@ -296,7 +296,7 @@
         <!-- Response Body -->
         <details class="group" open>
           <summary
-            class="cursor-pointer font-semibold text-sm uppercase tracking-wider text-muted-foreground hover:text-foreground"
+            class="text-label text-muted-foreground hover:text-foreground cursor-pointer font-semibold uppercase"
           >
             Response Body
           </summary>
@@ -383,7 +383,7 @@
                 </div>
               {:else}
                 <pre
-                  class="p-3 text-sm font-mono whitespace-pre-wrap break-all">{displayedResponseBody || "(empty)"}</pre>
+                  class="p-3 text-[0.8125rem] font-mono whitespace-pre-wrap break-all">{displayedResponseBody || "(empty)"}</pre>
               {/if}
             </div>
           {:else if responseBodyRaw}
@@ -409,8 +409,7 @@
       </Dialog.Footer>
     {:else}
       <div class="flex flex-col items-center justify-center p-12">
-        <p class="text-lg text-muted-foreground">Capture not found</p>
-        <p class="text-sm text-muted-foreground mt-1">The capture may have expired or was never recorded.</p>
+        <p class="text-sm font-medium">Capture not found</p>
         <div class="mt-4">
           <Button variant="outline" onclick={onclose}>Close</Button>
         </div>

@@ -5,27 +5,18 @@
   import type { SysStat, GpuStat } from "../lib/types";
   import PerformanceChart from "../components/PerformanceChart.svelte";
   import SegmentedControl from "../components/SegmentedControl.svelte";
-  import * as Card from "$lib/components/ui/card/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { RefreshCw } from "@lucide/svelte";
+  import { EmptyState } from "$lib/components/ui/empty-state/index.js";
 
+  // Series colours are theme expressions resolved by PerformanceChart: the five
+  // chart tokens, then darker and lighter mixes of them, so cores and interfaces
+  // stay distinguishable in every theme.
+  const BASE_TOKENS = ["--chart-1", "--chart-2", "--chart-3", "--chart-4", "--chart-5"];
   const COLORS = [
-    "#3b82f6",
-    "#ef4444",
-    "#10b981",
-    "#f59e0b",
-    "#8b5cf6",
-    "#ec4899",
-    "#06b6d4",
-    "#84cc16",
-    "#f97316",
-    "#14b8a6",
-    "#a855f7",
-    "#e11d48",
-    "#0ea5e9",
-    "#eab308",
-    "#d946ef",
-    "#22d3ee",
+    ...BASE_TOKENS.map((t) => `var(${t})`),
+    ...BASE_TOKENS.map((t) => `color-mix(in oklch, var(${t}), var(--foreground) 35%)`),
+    ...BASE_TOKENS.map((t) => `color-mix(in oklch, var(${t}), var(--background) 40%)`),
   ];
 
   const WINDOWS = [
@@ -182,12 +173,12 @@
       {
         label: "Memory Used %",
         data: stats.map((s) => (s.mem_used_mb / s.mem_total_mb) * 100),
-        borderColor: "#3b82f6",
+        borderColor: COLORS[0],
       },
       {
         label: "Swap Used %",
         data: stats.map((s) => (s.swap_total_mb > 0 ? (s.swap_used_mb / s.swap_total_mb) * 100 : 0)),
-        borderColor: "#8b5cf6",
+        borderColor: COLORS[3],
       },
     ];
   });
@@ -213,17 +204,17 @@
       {
         label: "1 min",
         data: stats.map((s) => s.load_avg_1),
-        borderColor: "#10b981",
+        borderColor: COLORS[1],
       },
       {
         label: "5 min",
         data: stats.map((s) => s.load_avg_5),
-        borderColor: "#f59e0b",
+        borderColor: COLORS[4],
       },
       {
         label: "15 min",
         data: stats.map((s) => s.load_avg_15),
-        borderColor: "#ef4444",
+        borderColor: COLORS[2],
       },
     ];
   });
@@ -357,37 +348,34 @@
 
 <Page.Root title="Performance" width="wide">
   {#snippet actions()}
-    <div class="flex items-center gap-4">
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
       <SegmentedControl items={WINDOWS} selected={$selectedWindow} onSelect={(i) => ($selectedWindow = i)} />
       <SegmentedControl
         items={INTERVALS}
         selected={$selectedInterval}
         onSelect={handleIntervalChange}
-        label="Refresh:"
+        label="Refresh"
       />
-      <Button variant="outline" size="icon-sm" title="Refresh" onclick={manualRefresh} disabled={refreshing}>
+      <Button variant="outline" size="icon-sm" title="Refresh" aria-label="Refresh" onclick={manualRefresh} disabled={refreshing}>
         <RefreshCw class={refreshing ? "animate-spin" : ""} />
       </Button>
     </div>
   {/snippet}
-  <p class="text-sm text-muted-foreground">
-    This is an experimental feature. Please use <a
-      class="underline hover:text-foreground"
-      href="https://github.com/mostlygeek/llama-swap/discussions/771">discussion #771</a
-    > for instructions and to share feedback.
+  <p class="text-muted-foreground text-sm">
+    Experimental feature.
+    <a
+      class="text-primary underline"
+      href="https://github.com/mostlygeek/llama-swap/discussions/771">Discussion #771</a
+    >
   </p>
 
   <!-- GPU Section -->
-  <section class="space-y-4">
-    <h3 class="text-lg font-medium text-foreground">GPU</h3>
+  <section class="space-y-(--page-gap)">
+    <h2 class="text-label text-muted-foreground font-semibold uppercase">GPU</h2>
     {#if !hasGpuData}
-      <Card.Root class="py-0">
-        <Card.Content class="p-4">
-          <p class="text-muted-foreground">No GPU data available</p>
-        </Card.Content>
-      </Card.Root>
+      <EmptyState title="No GPU data" />
     {:else}
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 gap-(--page-gap) lg:grid-cols-2">
         <PerformanceChart
           title="GPU Utilization (%)"
           labels={gpuLabels}
@@ -432,9 +420,9 @@
   </section>
 
   <!-- System Section -->
-  <section class="space-y-4">
-    <h3 class="text-lg font-medium text-foreground">System</h3>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  <section class="space-y-(--page-gap)">
+    <h2 class="text-label text-muted-foreground font-semibold uppercase">System</h2>
+    <div class="grid grid-cols-1 gap-(--page-gap) lg:grid-cols-2">
       <PerformanceChart
         title="CPU Utilization (%)"
         labels={sysLabels}
@@ -454,7 +442,7 @@
           yLabel="%"
         />
         {#if latestMemSwap}
-          <div class="flex items-center justify-center gap-4 text-xs text-muted-foreground mt-1 px-4">
+          <div class="text-muted-foreground mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 px-4 text-xs tabular-nums">
             <span
               >Mem: <span class="text-foreground font-medium"
                 >{latestMemSwap.mem_used_mb.toLocaleString()} / {latestMemSwap.mem_total_mb.toLocaleString()} MB ({latestMemSwap.mem_used_pct}%)</span

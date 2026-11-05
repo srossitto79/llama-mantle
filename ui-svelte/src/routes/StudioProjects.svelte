@@ -2,6 +2,8 @@
   import { onMount } from "svelte";
   import { Plus, Save, Trash2 } from "@lucide/svelte";
   import * as Card from "$lib/components/ui/card/index.js";
+  import * as Alert from "$lib/components/ui/alert/index.js";
+  import { EmptyState } from "$lib/components/ui/empty-state/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Label from "$lib/components/ui/label/index.js";
@@ -21,4 +23,48 @@
   onMount(refresh);
   import * as Page from "$lib/components/ui/page/index.js";
 </script>
-<Page.Root title="Studio Projects" width="full">{#snippet actions()}<Button onclick={create}><Plus class="size-4"/>New project</Button>{/snippet}<p class="text-muted-foreground text-sm">An active project groups new jobs, produced artifacts, and saved recipes. Resource references make its models and datasets easy to find without moving or deleting files.</p>{#if error}<p class="text-destructive text-sm">{error}</p>{/if}<div class="grid gap-4 lg:grid-cols-[18rem_1fr]"><Card.Root class="h-fit"><Card.Header><Card.Title>Projects</Card.Title></Card.Header><Card.Content class="space-y-2">{#if !projects.length}<p class="text-muted-foreground text-sm">No projects yet.</p>{/if}{#each projects as project(project.id)}<button type="button" class="hover:bg-muted w-full rounded-md border p-2 text-left" class:border-primary={project.id===selectedID} onclick={()=>load(project)}><span class="block text-sm font-medium">{project.name}{#if $activeStudioProject === project.id} · active{/if}</span><span class="text-muted-foreground text-xs">{project.resources.length} resources</span></button>{/each}</Card.Content></Card.Root><Card.Root><Card.Header><Card.Title>{selectedID?"Edit project":"Create project"}</Card.Title><Card.Description>Deleting a project never deletes its files or jobs.</Card.Description></Card.Header><Card.Content class="space-y-4"><div class="grid gap-3 sm:grid-cols-2"><div class="space-y-1"><Label.Root for="project-name">Name</Label.Root><Input id="project-name" bind:value={name}/></div><div class="space-y-1"><Label.Root for="project-description">Description</Label.Root><Input id="project-description" bind:value={description}/></div></div>{#each grouped as [type,items]}<div><h3 class="mb-2 text-sm font-medium capitalize">{type}s</h3><div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{#each items??[] as resource(resource.path)}<label class="flex min-w-0 items-center gap-2 rounded-md border p-2 text-sm"><input type="checkbox" checked={selectedPaths.includes(resource.path)} onchange={(event)=>toggle(resource.path,event.currentTarget.checked)}/><span class="min-w-0"><span class="block truncate">{resource.path}</span><span class="text-muted-foreground text-xs">{resource.kind}</span></span></label>{/each}</div></div>{/each}<div class="flex flex-wrap justify-end gap-2">{#if selectedID}<Button variant="outline" onclick={() => activeStudioProject.set(selectedID)} disabled={$activeStudioProject === selectedID}>Use as active project</Button><Button variant="destructive" onclick={remove} disabled={busy}><Trash2 class="size-4"/>Delete project</Button>{/if}<Button onclick={save} disabled={busy||!name.trim()}><Save class="size-4"/>Save project</Button></div></Card.Content></Card.Root></div></Page.Root>
+<Page.Root title="Studio Projects" width="full">
+  {#snippet actions()}<Button size="sm" onclick={create}><Plus class="size-4" />New project</Button>{/snippet}
+  {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
+  <!-- An active project groups new jobs, artifacts and saved recipes. Deleting a project never deletes its files or jobs. -->
+  <div class="grid gap-(--page-gap) lg:grid-cols-[18rem_1fr]">
+    <Card.Root class="h-fit gap-0 py-0">
+      <div class="bg-(--panel-header-bg) flex items-center gap-2 border-b px-4 py-2.5"><h2 class="text-heading">Projects</h2></div>
+      {#if !projects.length}
+        <EmptyState title="No projects" />
+      {:else}
+        <ul class="divide-y">
+          {#each projects as project (project.id)}
+            <li><button type="button" class="hover:bg-muted/50 w-full px-4 py-2.5 text-left" class:bg-muted={project.id === selectedID} onclick={() => load(project)}><span class="block text-sm font-medium">{project.name}{#if $activeStudioProject === project.id} · active{/if}</span><span class="text-muted-foreground text-xs">{project.resources.length} resources</span></button></li>
+          {/each}
+        </ul>
+      {/if}
+    </Card.Root>
+    <Card.Root class="gap-0 py-0">
+      <div class="bg-(--panel-header-bg) flex items-center gap-2 border-b px-4 py-2.5"><h2 class="text-heading">{selectedID ? "Edit project" : "New project"}</h2></div>
+      <div class="space-y-4 p-4">
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div class="space-y-1"><Label.Root for="project-name">Name</Label.Root><Input id="project-name" bind:value={name} /></div>
+          <div class="space-y-1"><Label.Root for="project-description">Description</Label.Root><Input id="project-description" bind:value={description} /></div>
+        </div>
+        {#each grouped as [type, items]}
+          <div>
+            <h3 class="text-label text-muted-foreground mb-2 font-semibold uppercase">{type}s</h3>
+            <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {#each items ?? [] as resource (resource.path)}
+                <label class="hover:bg-muted/50 flex min-w-0 items-center gap-2 rounded-md border p-2 text-sm"><input type="checkbox" checked={selectedPaths.includes(resource.path)} onchange={(event) => toggle(resource.path, event.currentTarget.checked)} /><span class="min-w-0"><span class="block truncate font-mono text-[0.8125rem]">{resource.path}</span><span class="text-muted-foreground text-xs">{resource.kind}</span></span></label>
+              {/each}
+            </div>
+          </div>
+        {/each}
+        <div class="flex flex-wrap justify-end gap-2">
+          {#if selectedID}
+            <Button size="sm" variant="outline" onclick={() => activeStudioProject.set(selectedID)} disabled={$activeStudioProject === selectedID}>Use as active project</Button>
+            <Button size="sm" variant="destructive" onclick={remove} disabled={busy}><Trash2 class="size-4" />Delete project</Button>
+          {/if}
+          <Button size="sm" onclick={save} disabled={busy || !name.trim()}><Save class="size-4" />Save project</Button>
+        </div>
+      </div>
+    </Card.Root>
+  </div>
+</Page.Root>

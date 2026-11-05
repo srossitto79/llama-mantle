@@ -20,7 +20,7 @@
         <tbody>
           {#each entries as [key, value]}
             <tr class="border-b border-white/10 last:border-0">
-              <td class="py-1 pr-3 font-medium whitespace-nowrap text-primary">{key}</td>
+              <td class="py-1 pr-3 font-mono text-xs whitespace-nowrap text-primary">{key}</td>
               <td class="py-1 break-all">{value}</td>
             </tr>
           {/each}

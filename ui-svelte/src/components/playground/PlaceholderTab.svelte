@@ -6,9 +6,9 @@
   let { featureName }: Props = $props();
 </script>
 
-<div class="flex items-center justify-center h-full">
+<div class="flex h-full items-center justify-center">
   <div class="text-muted-foreground text-center">
-    <p class="text-lg">{featureName}</p>
-    <p class="text-sm mt-2">To be implemented</p>
+    <p class="text-sm font-medium">{featureName}</p>
+    <p class="mt-2 text-sm">Not implemented</p>
   </div>
 </div>

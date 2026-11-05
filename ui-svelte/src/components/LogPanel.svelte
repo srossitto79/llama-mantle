@@ -85,32 +85,32 @@
   });
 </script>
 
-<Card.Root class="bg-muted/30 h-full w-full gap-0 overflow-hidden py-0">
-  <Card.Header class="border-b px-4 py-2">
-    <Card.Title class="text-sm font-semibold">{title}</Card.Title>
-    <Card.Action>
-      <div class="flex items-center gap-1">
-        <Button variant="ghost" size="icon-sm" onclick={toggleFontSize} title="Change font size">
+<Card.Root class="h-full w-full gap-0 overflow-hidden py-0">
+  <div class="bg-(--panel-header-bg) flex flex-col gap-2 border-b px-4 py-2.5">
+    <div class="flex items-center gap-2">
+      <h2 class="text-heading">{title}</h2>
+      <div class="ml-auto flex items-center gap-1">
+        <Button variant="ghost" size="icon-sm" onclick={toggleFontSize} title="Change font size" aria-label="Change font size">
           <Type />
         </Button>
-        <Button variant="ghost" size="icon-sm" onclick={toggleWrapText} title="Toggle text wrap">
+        <Button variant="ghost" size="icon-sm" onclick={toggleWrapText} title="Toggle text wrap" aria-label="Toggle text wrap">
           <WrapText class={$wrapTextStore ? "text-primary" : ""} />
         </Button>
-        <Button variant="ghost" size="icon-sm" onclick={toggleFilter} title="Toggle filter">
+        <Button variant="ghost" size="icon-sm" onclick={toggleFilter} title="Toggle filter" aria-label="Toggle filter">
           {#if $showFilterStore}<SearchX />{:else}<Search />{/if}
         </Button>
       </div>
-    </Card.Action>
+    </div>
     {#if $showFilterStore}
-      <div class="flex w-full items-center gap-2 pt-2">
-        <Input type="text" class="h-8" placeholder="Filter logs (regex)..." bind:value={filterRegex} />
+      <div class="flex w-full items-center gap-2">
+        <Input type="text" class="h-8 font-mono" placeholder="Filter (regex)" bind:value={filterRegex} />
         <Button variant="ghost" size="icon-sm" onclick={() => (filterRegex = "")} aria-label="Clear filter">
           <CircleX />
         </Button>
       </div>
     {/if}
-  </Card.Header>
-  <Card.Content class="bg-background min-h-0 flex-1 p-0 font-mono text-sm">
+  </div>
+  <Card.Content class="bg-background min-h-0 flex-1 p-0 font-mono">
     <pre bind:this={preElement} onscroll={handleScroll} class="{textWrapClass} {fontSizeClass} h-full overflow-auto p-4">{filteredLogs}</pre>
   </Card.Content>
 </Card.Root>

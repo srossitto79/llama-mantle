@@ -4,6 +4,10 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
   import { Badge, type BadgeVariant } from "$lib/components/ui/badge/index.js";
+  import * as Alert from "$lib/components/ui/alert/index.js";
+  import { Input } from "$lib/components/ui/input/index.js";
+  import { EmptyState } from "$lib/components/ui/empty-state/index.js";
+  import SegmentedControl from "../components/SegmentedControl.svelte";
   import IntelligenceScoreBar from "../components/IntelligenceScoreBar.svelte";
   import IntelligenceQualityCost from "../components/IntelligenceQualityCost.svelte";
   import IntelligenceCategoryRadar from "../components/IntelligenceCategoryRadar.svelte";
@@ -143,7 +147,6 @@
     }).filter((c): c is NonNullable<typeof c> => c !== null);
     return scored.sort((a, b) => b.spread - a.spread);
   });
-  let saturatedCount = $derived(bestAt.filter(c => c.spread === 0).length);
 
   type SortKey = "model" | "run" | "score" | "attemptedPct" | "coverage" | "time" | "tokens" | "tokensPerPoint" | "tokensPerSecond";
   const COLUMNS: [SortKey, string][] = [
@@ -214,6 +217,10 @@
     if (item.score >= item.max_score) return OUTCOME.pass.color;
     return item.score > 0 ? OUTCOME.part.color : OUTCOME.fail.color;
   }
+
+  const DUPLICATE_MODES: { label: string; mode: DuplicateMode }[] = [
+    { label: "Latest", mode: "latest" }, { label: "Average", mode: "average" }, { label: "Show all", mode: "all" },
+  ];
 
   function scoreFor(modelID: string, item: IntelligenceItem): number | undefined {
     return humanScores[item.item_id]?.[modelID];
@@ -309,91 +316,111 @@
   import * as Page from "$lib/components/ui/page/index.js";
 </script>
 
-<Page.Root title="Intelligence Results" description="Compare saved runs and inspect the answers behind each score." width="full">
-  {#snippet actions()}<Button variant="outline" disabled={busy} onclick={refresh}>Refresh</Button>{/snippet}
-  {#if error}<p role="alert" class="text-destructive rounded-lg border p-4">{error}</p>{/if}
+<Page.Root title="Intelligence Results" width="full">
+  {#snippet actions()}<Button variant="outline" size="sm" disabled={busy} onclick={refresh}>Refresh</Button>{/snippet}
+  {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
 
   {#if kpis.runs}
-    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-      <Card.Root class="py-0"><Card.Content class="space-y-1 p-4">
-        <p class="text-muted-foreground text-xs">Runs compared</p><p class="text-2xl font-semibold">{kpis.runs}</p>
-      </Card.Content></Card.Root>
-      <Card.Root class="py-0"><Card.Content class="space-y-1 p-4">
-        <p class="text-muted-foreground text-xs">Models compared</p><p class="text-2xl font-semibold">{kpis.models}</p>
-      </Card.Content></Card.Root>
-      <Card.Root class="py-0"><Card.Content class="space-y-1 p-4">
-        <p class="text-muted-foreground text-xs">Items covered</p><p class="text-2xl font-semibold">{kpis.items}</p>
-        {#if kpis.awaiting}<p class="text-muted-foreground text-xs">{kpis.awaiting} awaiting a score</p>{/if}
-      </Card.Content></Card.Root>
-      <Card.Root class="py-0"><Card.Content class="space-y-1 p-4">
-        <p class="text-muted-foreground text-xs">Best attempted score</p>
-        <p class="text-2xl font-semibold">{kpis.best?.pct ?? 0}%</p>
-        {#if kpis.best}<p class="text-muted-foreground truncate text-xs" title={kpis.best.label}>{kpis.best.label} · {formatDuration(kpis.best.wallMs)}</p>{/if}
-      </Card.Content></Card.Root>
-      <Card.Root class="py-0"><Card.Content class="space-y-1 p-4">
-        <p class="text-muted-foreground text-xs">Total time</p>
-        <p class="text-2xl font-semibold">{formatDuration(kpis.totalWallMs)}</p>
-      </Card.Content></Card.Root>
-      <Card.Root class="py-0"><Card.Content class="space-y-1 p-4">
-        <p class="text-muted-foreground text-xs">Best value (tok/pt)</p>
-        <p class="text-2xl font-semibold">{kpis.cheapest?.tokensPerPoint ?? "—"}</p>
-        {#if kpis.cheapest}<p class="text-muted-foreground truncate text-xs" title={kpis.cheapest.label}>{kpis.cheapest.label}</p>{/if}
-      </Card.Content></Card.Root>
-    </div>
+    <Card.Root class="gap-0 py-0">
+      <div class="grid grid-cols-2 gap-px bg-border sm:grid-cols-3 lg:grid-cols-6 [&>div]:bg-card [&>div]:px-4 [&>div]:py-3">
+        <div>
+          <p class="text-label text-muted-foreground uppercase">Runs compared</p>
+          <p class="text-xl font-semibold tabular-nums">{kpis.runs}</p>
+        </div>
+        <div>
+          <p class="text-label text-muted-foreground uppercase">Models compared</p>
+          <p class="text-xl font-semibold tabular-nums">{kpis.models}</p>
+        </div>
+        <div>
+          <p class="text-label text-muted-foreground uppercase">Items covered</p>
+          <p class="text-xl font-semibold tabular-nums">{kpis.items}</p>
+          {#if kpis.awaiting}<p class="text-muted-foreground text-xs">{kpis.awaiting} awaiting a score</p>{/if}
+        </div>
+        <div>
+          <p class="text-label text-muted-foreground uppercase">Best attempted score</p>
+          <p class="text-xl font-semibold tabular-nums">{kpis.best?.pct ?? 0}%</p>
+          {#if kpis.best}<p class="text-muted-foreground truncate text-xs" title={kpis.best.label}>{kpis.best.label} · {formatDuration(kpis.best.wallMs)}</p>{/if}
+        </div>
+        <div>
+          <p class="text-label text-muted-foreground uppercase">Total time</p>
+          <p class="text-xl font-semibold tabular-nums">{formatDuration(kpis.totalWallMs)}</p>
+        </div>
+        <div>
+          <p class="text-label text-muted-foreground uppercase">Best value (tok/pt)</p>
+          <p class="text-xl font-semibold tabular-nums">{kpis.cheapest?.tokensPerPoint ?? "—"}</p>
+          {#if kpis.cheapest}<p class="text-muted-foreground truncate text-xs" title={kpis.cheapest.label}>{kpis.cheapest.label}</p>{/if}
+        </div>
+      </div>
+    </Card.Root>
   {/if}
 
-  <section class="space-y-3 rounded-xl border p-5">
-    <label class="block text-sm">Filter runs<input class="bg-background mt-1 block w-full rounded-md border p-2" placeholder="Profile, date or status" bind:value={filter} /></label>
-    <div class="max-h-56 space-y-2 overflow-auto">
-      {#each visible as run (run.run_id)}
-        <label class="flex flex-wrap items-center gap-3 rounded border p-3 text-sm">
-          <input type="checkbox" bind:group={selected} value={run.run_id} onchange={() => void compare()} />
-          <span>{new Date(run.started_at * 1000).toLocaleString()}</span>
-          <span class="font-medium">{run.params.profile}</span>
-          <Badge variant={STATE_VARIANT[run.state] ?? "outline"}>{run.state}</Badge>
-          <span class="text-muted-foreground">{run.params.models.length} models</span>
-          <span class="grow"></span>
-          <Button size="icon-sm" variant="ghost" title="Delete run" disabled={deletingID === run.run_id || run.state === "starting" || run.state === "running"} onclick={() => removeRun(run.run_id)}><Trash2 class="text-destructive size-4" /></Button>
-        </label>
-      {:else}<p class="text-muted-foreground text-sm">No runs found. Start a suite from the Run Suite page.</p>{/each}
+  <Card.Root class="gap-0 py-0">
+    <div class="bg-(--panel-header-bg) flex flex-wrap items-center gap-3 border-b px-4 py-2.5">
+      <h2 class="text-heading">Runs</h2>
+      <Input class="ml-auto h-8 max-w-xs" aria-label="Filter runs" placeholder="Profile, date or status" bind:value={filter} />
     </div>
-  </section>
+    <div class="max-h-56 overflow-auto">
+      <ul class="divide-y">
+        {#each visible as run (run.run_id)}
+          <li>
+            <label class="hover:bg-muted/50 flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
+              <input type="checkbox" class="accent-primary" bind:group={selected} value={run.run_id} onchange={() => void compare()} />
+              <span class="tabular-nums">{new Date(run.started_at * 1000).toLocaleString()}</span>
+              <span class="font-medium">{run.params.profile}</span>
+              <Badge variant={STATE_VARIANT[run.state] ?? "outline"}>{run.state}</Badge>
+              <span class="text-muted-foreground">{run.params.models.length} models</span>
+              <span class="grow"></span>
+              <Button size="icon-sm" variant="ghost" title="Delete run" aria-label="Delete run" disabled={deletingID === run.run_id || run.state === "starting" || run.state === "running"} onclick={() => removeRun(run.run_id)}><Trash2 class="text-destructive size-4" /></Button>
+            </label>
+          </li>
+        {:else}
+          <li><EmptyState title="No runs" /></li>
+        {/each}
+      </ul>
+    </div>
+  </Card.Root>
 
-  {#if differentSuites}<p class="rounded-lg border p-4 text-sm">These runs cover different items. Check coverage before comparing scores.</p>{/if}
+  <!-- Attempted totals exclude unsupported, diagnostic and unscored rubric items; profiles or coverage that differ are not directly comparable. -->
+  {#if differentSuites}<Alert.Root><Alert.Description>These runs cover different items. Check coverage before comparing scores.</Alert.Description></Alert.Root>{/if}
 
   {#if hasDuplicates}
-    <div class="flex flex-wrap items-center gap-2 text-sm">
-      <span class="text-muted-foreground">Duplicates</span>
-      <div class="inline-flex overflow-hidden rounded-md border">
-        {#each [["latest", "Latest"], ["average", "Average"], ["all", "Show all"]] as [mode, label] (mode)}
-          <button type="button" class="px-3 py-1.5" class:bg-muted={duplicateMode === mode} class:font-medium={duplicateMode === mode} onclick={() => duplicateMode = mode as DuplicateMode}>{label}</button>
-        {/each}
-      </div>
-    </div>
+    <SegmentedControl
+      label="Duplicates"
+      items={DUPLICATE_MODES}
+      selected={DUPLICATE_MODES.findIndex(d => d.mode === duplicateMode)}
+      onSelect={(i) => duplicateMode = DUPLICATE_MODES[i].mode}
+    />
   {/if}
 
   {#if leaderboard.length}
     <IntelligenceScoreBar title="Attempted score, best to worst" data={leaderboard} />
-    <div class="overflow-x-auto rounded-xl border"><table class="w-full text-left text-sm"><thead class="bg-muted"><tr>
-      {#each COLUMNS as [key, label] (key)}
-        <th class="p-3"><button type="button" class="flex items-center gap-1 font-medium" onclick={() => toggleSort(key)}>{label}{#if sortKey === key}<span class="text-muted-foreground">{sortDir === "asc" ? "▲" : "▼"}</span>{/if}</button></th>
-      {/each}
-    </tr></thead><tbody>
-      {#each sortedRows as row (row.key)}
-        <tr class="border-t">
-          <td class="p-3 font-medium">{row.label}</td>
-          <td class="p-3">{runLabel(row)}</td>
-          <td class="p-3">{round1(row.attempted.score)} / {round1(row.attempted.max)}</td>
-          <td class="p-3 tabular-nums">{pct(row.attempted.score, row.attempted.max)}%</td>
-          <td class="p-3 tabular-nums" title={coverageTooltip(row.coverage)}>{Math.round(row.coverage.attempted)} / {row.coverage.totalUncertain ? "≥" : ""}{Math.round(row.coverage.total)}</td>
-          <td class="p-3 tabular-nums">{formatDuration(row.cost.wallMs)}</td>
-          <td class="p-3 tabular-nums">{formatTokens(row.cost.completionTokens)}</td>
-          <td class="p-3 tabular-nums">{row.cost.tokensPerPoint != null ? Math.round(row.cost.tokensPerPoint) : "—"}</td>
-          <td class="p-3 tabular-nums">{row.speed.tokensPerSecond != null ? round1(row.speed.tokensPerSecond) : "—"}{#if row.speed.basis === "endToEnd" && row.speed.tokensPerSecond != null}<span class="text-muted-foreground" title="End-to-end throughput where time to first token was not recorded.">†</span>{/if}</td>
-        </tr>
-      {/each}
-    </tbody></table></div>
-    <p class="text-muted-foreground text-sm">Attempted totals exclude unsupported, diagnostic and unscored rubric items. Different profiles or coverage are not directly comparable. † End-to-end throughput where time to first token was not recorded.</p>
+    <Card.Root class="gap-0 py-0">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-(--panel-header-bg) text-muted-foreground border-b text-xs"><tr>
+            {#each COLUMNS as [key, label] (key)}
+              <th class="px-4 py-2.5 font-medium"><button type="button" class="flex items-center gap-1 whitespace-nowrap font-medium" onclick={() => toggleSort(key)}>{label}{#if sortKey === key}<span>{sortDir === "asc" ? "▲" : "▼"}</span>{/if}</button></th>
+            {/each}
+          </tr></thead>
+          <tbody class="divide-y">
+            {#each sortedRows as row (row.key)}
+              <tr class="hover:bg-muted/50">
+                <td class="px-4 py-2.5 font-medium whitespace-nowrap">{row.label}</td>
+                <td class="px-4 py-2.5 whitespace-nowrap">{runLabel(row)}</td>
+                <td class="px-4 py-2.5 font-mono text-[0.8125rem] whitespace-nowrap">{round1(row.attempted.score)} / {round1(row.attempted.max)}</td>
+                <td class="px-4 py-2.5 tabular-nums">{pct(row.attempted.score, row.attempted.max)}%</td>
+                <td class="px-4 py-2.5 whitespace-nowrap tabular-nums" title={coverageTooltip(row.coverage)}>{Math.round(row.coverage.attempted)} / {row.coverage.totalUncertain ? "≥" : ""}{Math.round(row.coverage.total)}</td>
+                <td class="px-4 py-2.5 whitespace-nowrap tabular-nums">{formatDuration(row.cost.wallMs)}</td>
+                <td class="px-4 py-2.5 tabular-nums">{formatTokens(row.cost.completionTokens)}</td>
+                <td class="px-4 py-2.5 tabular-nums">{row.cost.tokensPerPoint != null ? Math.round(row.cost.tokensPerPoint) : "—"}</td>
+                <td class="px-4 py-2.5 tabular-nums">{row.speed.tokensPerSecond != null ? round1(row.speed.tokensPerSecond) : "—"}{#if row.speed.basis === "endToEnd" && row.speed.tokensPerSecond != null}<span class="text-muted-foreground" title="End-to-end throughput where time to first token was not recorded.">†</span>{/if}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+      <p class="text-muted-foreground border-t px-4 py-2 text-xs">† End-to-end throughput where time to first token was not recorded.</p>
+    </Card.Root>
   {/if}
 
   {#if qualityCostPoints.length}<IntelligenceQualityCost title="Quality vs cost" points={qualityCostPoints} />{/if}
@@ -401,55 +428,67 @@
 
   {#if bestAt.length}
     <IntelligenceBestAt categories={bestAt} />
-    {#if resolvedModels.length > 1 && saturatedCount}<p class="text-muted-foreground text-sm">{saturatedCount} of {bestAt.length} categories are saturated across the compared models.</p>{/if}
   {/if}
 
   {#if resolvedModels.length}
-    <section class="space-y-4 rounded-xl border p-5">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <h2 class="font-semibold">Model results</h2>
-        <div class="flex flex-wrap gap-3 text-sm">
-          {#each results as result (result.run.run_id)}
-            <a class="text-primary underline" href={`${intelligenceURL}/runs/${result.run.run_id}`} download={`intelligence-${result.run.run_id}.json`}>{new Date(result.run.started_at * 1000).toLocaleDateString()} raw JSON</a>
-          {/each}
-        </div>
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <h2 class="text-heading">Model results</h2>
+      <div class="flex flex-wrap gap-3 text-sm">
+        {#each results as result (result.run.run_id)}
+          <a class="text-primary underline" href={`${intelligenceURL}/runs/${result.run.run_id}`} download={`intelligence-${result.run.run_id}.json`}>{new Date(result.run.started_at * 1000).toLocaleDateString()} raw JSON</a>
+        {/each}
       </div>
+    </div>
 
-      {#if allCategories.length >= 3}
-        <IntelligenceCategoryRadar title="Category coverage" categories={allCategories.map(c => c.name)}
-          series={resolvedModels.map(rm => ({
-            label: rm.label, color: modelColors.get(rm.configKey) ?? "#898781",
-            values: allCategories.map(c => {
-              const max = rm.byCategoryMax[c.id] ?? 0;
-              return max > 0 ? Math.round(((rm.byCategory[c.id] ?? 0) / max) * 100) : 0;
-            }),
-            times: allCategories.map(c => { const ms = rm.byCategoryTimeMs[c.id]; return ms ? formatDuration(ms) : ""; }),
-          }))} />
-      {/if}
+    {#if allCategories.length >= 3}
+      <IntelligenceCategoryRadar title="Category coverage" categories={allCategories.map(c => c.name)}
+        series={resolvedModels.map(rm => ({
+          label: rm.label, color: modelColors.get(rm.configKey) ?? "#898781",
+          values: allCategories.map(c => {
+            const max = rm.byCategoryMax[c.id] ?? 0;
+            return max > 0 ? Math.round(((rm.byCategory[c.id] ?? 0) / max) * 100) : 0;
+          }),
+          times: allCategories.map(c => { const ms = rm.byCategoryTimeMs[c.id]; return ms ? formatDuration(ms) : ""; }),
+        }))} />
+    {/if}
 
-      {#each sortedResolvedModels as rm (rm.key)}
-        <details class="rounded-lg border p-4"><summary class="cursor-pointer font-medium">{rm.label} · {round1(rm.attempted.score)} / {round1(rm.attempted.max)} points ({pct(rm.attempted.score, rm.attempted.max)}% attempted) · {formatDuration(rm.cost.wallMs)} · {formatTokens(rm.cost.completionTokens)} tok{#if rm.speed.tokensPerSecond != null} · {round1(rm.speed.tokensPerSecond)} tok/s{/if}</summary>
-          <div class="my-3"><IntelligenceMeter value={rm.attempted.score} max={rm.attempted.max} color={modelColors.get(rm.configKey) ?? "#898781"} /></div>
-          <div class="my-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{#each Object.entries(rm.byCategory) as [category, score]}<div class="bg-muted rounded p-3 text-sm"><IntelligenceMeter label={allCategories.find(c => c.id === category)?.name ?? category} value={score} max={rm.byCategoryMax[category] ?? 0} color={modelColors.get(rm.configKey) ?? "#898781"} /></div>{/each}</div>
-          <div class="space-y-2">{#each rm.items as item, index (item.item_id + "-" + index)}<details class="rounded border p-3"><summary class="flex cursor-pointer items-center gap-2 text-sm"><span class="size-2.5 shrink-0 rounded-[3px]" style="background:{outcomeColor(rm.modelID, item)}"></span><span class="truncate">{item.title ?? item.item_id}</span><span class="text-muted-foreground shrink-0 tabular-nums">{needsHumanScore(item) ? scoreFor(rm.modelID, item) ?? "—" : round1(item.score ?? 0)} / {item.max_score}</span>{#if itemCost(item)}<span class="text-muted-foreground shrink-0 text-xs tabular-nums">{itemCost(item)}</span>{/if}{#if item.role === "diagnostic"}<span class="text-muted-foreground shrink-0 text-xs">diagnostic</span>{/if}{#if item.unsupported || item.grade?.unsupported}<span class="text-muted-foreground shrink-0 text-xs">unsupported</span>{/if}</summary><div class="mt-3 space-y-3">
-            {#if needsHumanScore(item)}
-              <label class="flex flex-wrap items-center gap-2 text-sm">Rubric score
-                <input type="number" min="0" max={item.max_score} step="1" class="bg-background w-24 rounded-md border p-2"
-                  disabled={savingScore === `${item.item_id}:${rm.modelID}`}
-                  value={scoreFor(rm.modelID, item) ?? ""}
-                  onchange={(e) => void setHumanScore(rm.modelID, item, e.currentTarget.value)} />
-                <span class="text-muted-foreground">of {item.max_score}</span>
-              </label>
-            {/if}
-            {#if item.raw?.error || item.error}<p class="text-destructive text-sm">{item.raw?.error || item.error}</p>{/if}
-            {#if item.grade?.note}<p class="text-muted-foreground text-sm">{item.grade.note}</p>{/if}
-            <h3 class="text-sm font-medium">Model answer</h3><pre class="bg-muted max-h-72 overflow-auto rounded p-3 text-xs whitespace-pre-wrap">{item.answer || "No answer returned."}</pre>
-            <details><summary class="cursor-pointer text-sm">Full diagnostics</summary><pre class="bg-muted mt-3 max-h-96 overflow-auto rounded p-3 text-xs whitespace-pre-wrap">{JSON.stringify(item, null, 2)}</pre></details>
-          </div></details>{/each}</div>
-        </details>
-      {/each}
-    </section>
+    <Card.Root class="gap-0 py-0">
+      <div class="divide-y">
+        {#each sortedResolvedModels as rm (rm.key)}
+          <details>
+            <summary class="hover:bg-muted/50 cursor-pointer px-4 py-2.5 text-sm font-medium">{rm.label} · {round1(rm.attempted.score)} / {round1(rm.attempted.max)} points ({pct(rm.attempted.score, rm.attempted.max)}% attempted) · {formatDuration(rm.cost.wallMs)} · {formatTokens(rm.cost.completionTokens)} tok{#if rm.speed.tokensPerSecond != null} · {round1(rm.speed.tokensPerSecond)} tok/s{/if}</summary>
+            <div class="space-y-4 border-t p-4">
+              <IntelligenceMeter value={rm.attempted.score} max={rm.attempted.max} color={modelColors.get(rm.configKey) ?? "#898781"} />
+              <div class="grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">{#each Object.entries(rm.byCategory) as [category, score]}<IntelligenceMeter label={allCategories.find(c => c.id === category)?.name ?? category} value={score} max={rm.byCategoryMax[category] ?? 0} color={modelColors.get(rm.configKey) ?? "#898781"} />{/each}</div>
+              <div class="divide-y rounded-lg border">
+                {#each rm.items as item, index (item.item_id + "-" + index)}
+                  <details>
+                    <summary class="hover:bg-muted/50 flex cursor-pointer items-center gap-2 px-3 py-2 text-sm"><span class="size-2.5 shrink-0 rounded-[3px]" style="background:{outcomeColor(rm.modelID, item)}"></span><span class="truncate">{item.title ?? item.item_id}</span><span class="text-muted-foreground shrink-0 tabular-nums">{needsHumanScore(item) ? scoreFor(rm.modelID, item) ?? "—" : round1(item.score ?? 0)} / {item.max_score}</span>{#if itemCost(item)}<span class="text-muted-foreground shrink-0 text-xs tabular-nums">{itemCost(item)}</span>{/if}{#if item.role === "diagnostic"}<span class="text-muted-foreground shrink-0 text-xs">diagnostic</span>{/if}{#if item.unsupported || item.grade?.unsupported}<span class="text-muted-foreground shrink-0 text-xs">unsupported</span>{/if}</summary>
+                    <div class="space-y-3 border-t p-3">
+                      {#if needsHumanScore(item)}
+                        <label class="flex flex-wrap items-center gap-2 text-sm">Rubric score
+                          <Input type="number" min="0" max={item.max_score} step="1" class="h-8 w-24"
+                            disabled={savingScore === `${item.item_id}:${rm.modelID}`}
+                            value={scoreFor(rm.modelID, item) ?? ""}
+                            onchange={(e) => void setHumanScore(rm.modelID, item, e.currentTarget.value)} />
+                          <span class="text-muted-foreground">of {item.max_score}</span>
+                        </label>
+                      {/if}
+                      {#if item.raw?.error || item.error}<p class="text-destructive text-sm">{item.raw?.error || item.error}</p>{/if}
+                      {#if item.grade?.note}<p class="text-muted-foreground text-sm">{item.grade.note}</p>{/if}
+                      <h3 class="text-label text-muted-foreground font-semibold uppercase">Model answer</h3>
+                      <pre class="bg-muted max-h-72 overflow-auto rounded-lg p-3 font-mono text-xs whitespace-pre-wrap">{item.answer || "No answer returned."}</pre>
+                      <details><summary class="text-muted-foreground cursor-pointer text-sm">Full diagnostics</summary><pre class="bg-muted mt-3 max-h-96 overflow-auto rounded-lg p-3 font-mono text-xs whitespace-pre-wrap">{JSON.stringify(item, null, 2)}</pre></details>
+                    </div>
+                  </details>
+                {/each}
+              </div>
+            </div>
+          </details>
+        {/each}
+      </div>
+    </Card.Root>
   {:else if results.length}
-    <p class="text-muted-foreground text-sm">No item results saved yet for the selected runs.</p>
+    <EmptyState title="No item results" />
   {/if}
 </Page.Root>

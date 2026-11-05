@@ -26,7 +26,7 @@
   }
 </script>
 
-<div class="mt-2 w-full">
+<div class="mt-3 w-full">
   <svg viewBox="0 0 {viewBoxWidth} {height}" class="w-full h-auto" preserveAspectRatio="xMidYMid meet">
     <!-- Y-axis -->
     <line

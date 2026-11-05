@@ -7,7 +7,7 @@
   import ChatMessageComponent from "./ChatMessage.svelte";
   import ModelSelector from "./ModelSelector.svelte";
   import ExpandableTextarea from "./ExpandableTextarea.svelte";
-  import EmptyState from "../EmptyState.svelte";
+  import { EmptyState } from "$lib/components/ui/empty-state/index.js";
   import { Settings, Paperclip } from "@lucide/svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
@@ -340,14 +340,14 @@
 
 <div class="flex flex-col h-full">
   <!-- Model selector and controls -->
-  <div class="shrink-0 flex flex-wrap gap-2 mb-4">
-    <ModelSelector bind:value={$selectedModelStore} placeholder="Select a model..." disabled={isStreaming} />
+  <div class="mb-3 flex shrink-0 flex-wrap gap-2">
+    <ModelSelector bind:value={$selectedModelStore} placeholder="Select a model" disabled={isStreaming} />
     <div class="flex gap-2">
-      <Button variant="outline" size="icon" onclick={() => (showSettings = true)} title="Settings">
+      <Button variant="outline" size="icon" onclick={() => (showSettings = true)} title="Settings" aria-label="Settings">
         <Settings />
       </Button>
       <Button variant="outline" onclick={newChat} disabled={messages.length === 0 && !isStreaming}>
-        New Chat
+        New chat
       </Button>
     </div>
   </div>
@@ -356,7 +356,7 @@
   <Dialog.Root bind:open={showSettings}>
     <Dialog.Content class="max-w-xl">
       <Dialog.Header>
-        <Dialog.Title>Chat Settings</Dialog.Title>
+        <Dialog.Title>Chat settings</Dialog.Title>
       </Dialog.Header>
 
       <div class="space-y-4">
@@ -376,11 +376,11 @@
           </Select.Root>
         </div>
         <div>
-          <Label class="mb-1" for="system-prompt">System Prompt</Label>
+          <Label class="mb-1" for="system-prompt">System prompt</Label>
           <Textarea
             id="system-prompt"
             class="resize-none"
-            placeholder="You are a helpful assistant..."
+            placeholder="System prompt"
             rows={3}
             bind:value={$systemPromptStore}
             disabled={isStreaming}
@@ -406,7 +406,7 @@
           </div>
         </div>
         <div>
-          <Label class="mb-1" for="max-tokens">Max Tokens</Label>
+          <Label class="mb-1" for="max-tokens">Max tokens</Label>
           <Input id="max-tokens" type="number" min="1" bind:value={$maxTokensStore} disabled={isStreaming} />
           <p class="text-muted-foreground mt-1 text-xs">Required for /v1/messages.</p>
         </div>
@@ -420,16 +420,16 @@
 
   <!-- Empty state for no models configured -->
   {#if !$hasListedModels}
-    <EmptyState message="No models configured. Add models to your configuration to start chatting." />
+    <EmptyState title="No models configured" />
   {:else}
     <!-- Messages area -->
     <div
-      class="mb-4 flex-1 overflow-y-auto px-2"
+      class="mb-3 flex-1 overflow-y-auto"
       bind:this={messagesContainer}
       onscroll={handleMessagesScroll}
     >
       {#if messages.length === 0}
-        <EmptyState full message="Start a conversation by typing a message below." />
+        <EmptyState full title="No messages" />
       {:else}
         {#each messages as message, idx (idx)}
           <ChatMessageComponent
@@ -451,7 +451,7 @@
     </div>
 
     <!-- Input area -->
-    <div class="shrink-0">
+    <div class="shrink-0 border-t pt-3">
       <!-- Image preview strip -->
       {#if attachedImages.length > 0}
         <div class="mb-2 flex flex-wrap gap-2">
@@ -460,7 +460,7 @@
               <img
                 src={imageUrl}
                 alt="Attached image {idx + 1}"
-                class="h-20 w-20 rounded-md border object-cover"
+                class="size-20 rounded-md border object-cover"
               />
               <Button
                 variant="destructive"
@@ -478,7 +478,7 @@
 
       <!-- Error message -->
       {#if imageError}
-        <div class="bg-destructive/10 text-destructive mb-2 rounded-md p-2 text-sm">
+        <div class="bg-destructive/10 text-destructive mb-2 rounded-md px-3 py-2 text-sm">
           {imageError}
         </div>
       {/if}
@@ -497,7 +497,7 @@
         <ExpandableTextarea
           bind:ref={inputRef}
           bind:value={userInput}
-          placeholder="Type a message..."
+          placeholder="Message"
           rows={3}
           onkeydown={handleKeyDown}
           disabled={isStreaming || !$selectedModelStore}
@@ -512,6 +512,7 @@
               onclick={() => fileInput?.click()}
               disabled={isStreaming || !$selectedModelStore}
               title="Attach image"
+              aria-label="Attach image"
             >
               <Paperclip />
             </Button>

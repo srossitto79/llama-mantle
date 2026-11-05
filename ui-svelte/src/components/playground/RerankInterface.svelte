@@ -4,11 +4,12 @@
   import { rerank } from "../../lib/rerankApi";
   import { playgroundStores } from "../../stores/playgroundActivity";
   import ModelSelector from "./ModelSelector.svelte";
-  import EmptyState from "../EmptyState.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Textarea } from "$lib/components/ui/textarea/index.js";
   import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
+  import { EmptyState } from "$lib/components/ui/empty-state/index.js";
+  import { LoaderCircle, X } from "@lucide/svelte";
 
   type RerankRow = { doc: string; score: number | null };
   type SortOrder = "none" | "asc" | "desc";
@@ -223,7 +224,7 @@
   function scoreColor(score: number | null): string {
     if (score === null) return "text-muted-foreground";
     if (score > 0) return "text-success";
-    return "text-destructive";
+    return "text-muted-foreground";
   }
 
   function formatScore(score: number | null): string {
@@ -248,21 +249,23 @@
   );
 </script>
 
-<div class="flex flex-col h-full">
-  <!-- Top bar: model selector + query input (table mode) + mode toggle -->
-  <div class="shrink-0 flex flex-wrap gap-2 mb-4">
+<div class="flex h-full min-h-0 flex-col gap-3">
+  <!-- Toolbar: model, query (table mode), editor mode -->
+  <div class="bg-(--panel-header-bg) flex shrink-0 flex-wrap items-center gap-2 rounded-lg border px-3 py-2">
     <ModelSelector bind:value={$selectedModelStore} placeholder="Select a rerank model..." disabled={isLoading} capabilities={["reranker"]} />
     {#if editorMode === "table"}
       <Input
         type="text"
         class="min-w-0 flex-1 basis-48"
         placeholder="Query..."
+        aria-label="Query"
         bind:value={query}
         disabled={isLoading}
         onkeydown={handleKeyDown}
       />
+    {:else}
+      <div class="flex-1"></div>
     {/if}
-    <!-- Table / JSON toggle -->
     <ToggleGroup.Root
       type="single"
       variant="outline"
@@ -276,35 +279,35 @@
   </div>
 
   {#if !$hasListedModels}
-    <EmptyState message="No models configured. Add models to your configuration to use reranking." />
+    <EmptyState title="No models configured" class="rounded-lg border" />
   {:else if editorMode === "json"}
     <!-- JSON editor -->
-    <div class="mb-4 flex min-h-0 flex-1 flex-col">
+    <div class="flex min-h-0 flex-1 flex-col gap-1.5">
       <Textarea
-        class="w-full flex-1 resize-none font-mono text-sm"
+        class="w-full flex-1 resize-none font-mono text-[0.8125rem]"
         bind:value={jsonText}
         disabled={isLoading}
         placeholder={'{\n  "query": "your search query",\n  "documents": [\n    "document one",\n    "document two"\n  ]\n}'}
         spellcheck={false}
       />
       {#if jsonError}
-        <p class="text-destructive mt-1 text-sm">{jsonError}</p>
+        <p class="text-destructive text-xs">{jsonError}</p>
       {/if}
     </div>
   {:else}
-    <!-- Document table -->
-    <div class="mb-4 flex-1 overflow-y-auto rounded-lg border">
-      <table class="w-full table-fixed border-collapse">
+    <!-- Documents -->
+    <div class="bg-background min-h-0 flex-1 overflow-y-auto rounded-lg border">
+      <table class="w-full table-fixed border-collapse text-sm">
         <colgroup>
           <col class="w-auto" />
-          <col style="width: 120px" />
-          <col style="width: 40px" />
+          <col style="width: 7.5rem" />
+          <col style="width: 2.5rem" />
         </colgroup>
-        <thead class="bg-card sticky top-0 border-b">
+        <thead class="bg-(--panel-header-bg) sticky top-0 z-10 border-b">
           <tr>
-            <th class="text-muted-foreground px-3 py-2 text-left text-sm font-medium">Document</th>
+            <th class="text-muted-foreground px-4 py-2 text-left text-xs font-medium">Document</th>
             <th
-              class="text-muted-foreground hover:text-foreground cursor-pointer select-none px-3 py-2 text-right text-sm font-medium transition-colors"
+              class="text-muted-foreground hover:text-foreground cursor-pointer px-3 py-2 text-right text-xs font-medium transition-colors select-none"
               onclick={cycleSortOrder}
             >
               Score{sortIndicator()}
@@ -314,21 +317,22 @@
         </thead>
         <tbody>
           {#each displayRows as { row, i } (i)}
-            <tr class="border-b last:border-0">
+            <tr class="hover:bg-muted/50 border-b last:border-0">
               <td class="px-3 py-1.5">
                 <Input
                   type="text"
-                  class="border-0 focus-visible:ring-1 h-7 px-1 py-0.5 bg-transparent"
+                  class="h-7 border-0 bg-transparent px-1 py-0.5 focus-visible:ring-1"
                   placeholder={i === rows.length - 1 ? "Add document..." : "Document text..."}
+                  aria-label="Document"
                   value={row.doc}
                   oninput={(e) => updateDoc(i, (e.target as HTMLInputElement).value)}
                   disabled={isLoading}
                   onkeydown={handleKeyDown}
                 />
               </td>
-              <td class="px-3 py-1.5 text-right font-mono text-sm {scoreColor(row.score)}">
+              <td class="px-3 py-1.5 text-right font-mono text-[0.8125rem] tabular-nums {scoreColor(row.score)}">
                 {#if isLoading && row.score === null && row.doc.trim() !== ""}
-                  <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent align-middle"></span>
+                  <LoaderCircle class="inline-block size-4 animate-spin align-middle" />
                 {:else}
                   {formatScore(row.score)}
                 {/if}
@@ -337,13 +341,13 @@
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  class="h-7 w-7 text-muted-foreground hover:text-destructive"
+                  class="text-muted-foreground hover:text-destructive"
                   onclick={() => deleteRow(i)}
                   disabled={rows.length <= 1}
                   tabindex={-1}
                   aria-label="Remove row"
                 >
-                  ×
+                  <X />
                 </Button>
               </td>
             </tr>
@@ -353,7 +357,7 @@
     </div>
   {/if}
 
-  <!-- Bottom toolbar -->
+  <!-- Actions -->
   {#if $hasListedModels}
     <div class="flex shrink-0 flex-wrap items-center gap-2">
       {#if isLoading}
@@ -366,7 +370,7 @@
       {#if $error}
         <span class="text-destructive ml-2 text-sm">{$error}</span>
       {:else if usage}
-        <span class="text-muted-foreground ml-2 text-sm">{usage.total_tokens} tokens</span>
+        <span class="text-muted-foreground ml-2 text-sm tabular-nums">{usage.total_tokens} tokens</span>
       {/if}
     </div>
   {/if}

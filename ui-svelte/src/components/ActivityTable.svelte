@@ -455,10 +455,14 @@
     getSortedRowModel: getSortedRowModel(),
   });
 
-  let thClass = $derived(compact ? "px-2 py-2 h-9" : "px-3 py-3 h-12");
-  let tdClass = $derived(compact ? "px-2 py-2" : "px-3 py-4");
-  let inflightThClass = $derived(compact ? "h-7 px-2 py-1" : "h-8 px-3 py-1.5");
-  let inflightTdClass = $derived(compact ? "px-2 py-1" : "px-3 py-1.5");
+  let thClass = $derived(
+    `text-muted-foreground text-xs ${compact ? "h-9 px-3" : "h-10 px-4"}`,
+  );
+  let tdClass = $derived(
+    `text-[0.8125rem] tabular-nums ${compact ? "px-3 py-1.5" : "px-4 py-2.5"}`,
+  );
+  let inflightThClass = $derived("text-muted-foreground h-8 px-4 text-xs");
+  let inflightTdClass = $derived("px-4 py-1.5 text-[0.8125rem]");
   let visibleColumnCount = $derived(table.getVisibleLeafColumns().length);
   let pageCount = $derived(Math.max(totalPages, 1));
   let visiblePages = $derived.by(() => {
@@ -575,19 +579,17 @@
   }
 </script>
 
-<Card.Root class="relative p-3">
-  <div class="flex items-center gap-2 pr-16 text-sm">
-    <span class="text-muted-foreground text-xs uppercase tracking-wider">In-flight Requests</span>
-    <span>
-      <span class="font-semibold">{inflightRequests.length}</span> active
-    </span>
-  </div>
+<Card.Root class="shrink-0 gap-0 overflow-hidden py-0">
+  <div class="bg-(--panel-header-bg) flex items-center gap-2 px-4 py-2.5 {inflightOpen ? 'border-b' : ''}">
+    <h2 class="text-heading">In-flight requests</h2>
+    <span class="text-muted-foreground text-sm tabular-nums">{inflightRequests.length} active</span>
 
-  <div class="absolute right-2 top-2 flex items-center gap-1">
+  <div class="ml-auto flex items-center gap-1">
     <DropdownMenu.Root>
       <DropdownMenu.Trigger
-        class="text-muted-foreground hover:bg-muted inline-flex size-6 items-center justify-center rounded-full"
+        class="text-muted-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md"
         title="Select in-flight columns"
+        aria-label="Select in-flight columns"
       >
         <Columns3 class="size-4" />
       </DropdownMenu.Trigger>
@@ -617,8 +619,8 @@
 
     <Button
       variant="ghost"
-      size="icon-xs"
-      class="text-muted-foreground rounded-full"
+      size="icon-sm"
+      class="text-muted-foreground"
       onclick={() => setInflightOpen(!inflightOpen)}
       title={inflightOpen ? "Hide in-flight requests" : "Show in-flight requests"}
     >
@@ -629,9 +631,10 @@
       {/if}
     </Button>
   </div>
+  </div>
 
   {#if inflightOpen}
-    <div class="mt-2 overflow-x-auto">
+    <div class="overflow-x-auto">
       <Table.Root class="min-w-full">
         <Table.Header>
           <Table.Row>
@@ -693,17 +696,17 @@
   {/if}
 </Card.Root>
 
-<Card.Root class="mt-3 shrink-0 gap-0 overflow-hidden py-0 {cardClass}">
-  <Card.Header class="flex items-center justify-between border-b px-4 py-2">
+<Card.Root class="shrink-0 gap-0 overflow-hidden py-0 {cardClass}">
+  <div class="bg-(--panel-header-bg) flex flex-wrap items-center gap-2 border-b px-4 py-2.5">
     <div class="flex items-center gap-2">
       {#if title}
-        <Card.Title class="text-sm font-semibold">
+        <h2 class="text-heading">
           {title}
-          <span class="text-muted-foreground text-xs font-normal">({total})</span>
-        </Card.Title>
+          <span class="text-muted-foreground text-sm font-normal tabular-nums">({total})</span>
+        </h2>
       {/if}
     </div>
-    <div class="flex items-center gap-2">
+    <div class="ml-auto flex items-center gap-2">
       {#if showPagination}
         <span class="text-muted-foreground text-xs">Rows</span>
         <Select.Root
@@ -723,8 +726,9 @@
       {/if}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger
-          class="hover:bg-muted inline-flex size-7 items-center justify-center rounded-[min(var(--radius-md),12px)]"
+          class="text-muted-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md"
           title="Select columns"
+          aria-label="Select columns"
         >
           <Columns3 class="size-4" />
         </DropdownMenu.Trigger>
@@ -754,7 +758,7 @@
         </DropdownMenu.Content>
       </DropdownMenu.Root>
     </div>
-  </Card.Header>
+  </div>
   <Card.Content class="overflow-x-auto p-0">
     <Table.Root class="min-w-full">
       <Table.Header>
@@ -768,7 +772,7 @@
                     {@const Icon = sortIcon(sorted)}
                     <button
                       type="button"
-                      class="text-muted-foreground hover:text-foreground -mx-1 inline-flex items-center gap-1 text-left"
+                      class="text-muted-foreground hover:text-foreground -mx-1 inline-flex items-center gap-1 text-left font-medium"
                       onclick={() => header.column.toggleSorting(sorted === "asc")}
                     >
                       <FlexRender content={header.column.columnDef.header} context={header.getContext()} />
@@ -795,7 +799,7 @@
         {/each}
         {#if table.getRowModel().rows.length === 0}
           <Table.Row>
-            <Table.Cell colspan={visibleColumnCount} class="text-muted-foreground py-6 text-center text-sm">
+            <Table.Cell colspan={visibleColumnCount} class="text-muted-foreground py-10 text-center text-sm">
               {emptyMessage}
             </Table.Cell>
           </Table.Row>
@@ -804,9 +808,9 @@
     </Table.Root>
 
     {#if showPagination && total > 0}
-      <div class="flex items-center justify-between gap-2 border-t px-4 py-2 text-sm">
+      <div class="bg-(--panel-header-bg) flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-sm">
         <span class="text-muted-foreground text-xs">
-          Page {page} of {pageCount} · {total} total
+          Page {page} of {pageCount} · {total}
         </span>
         <div class="flex items-center gap-1">
           <Button

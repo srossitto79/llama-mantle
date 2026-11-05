@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolveColor } from "$lib/themeColors";
   import { onMount } from "svelte";
   import {
     Chart,
@@ -8,10 +9,8 @@
     LinearScale,
     CategoryScale,
     Legend,
-    Title,
     Tooltip,
   } from "chart.js";
-  import { isDarkMode } from "../stores/theme";
   import * as Card from "$lib/components/ui/card/index.js";
 
   // Only the line-chart pieces this component actually uses, instead of
@@ -23,7 +22,6 @@
     LinearScale,
     CategoryScale,
     Legend,
-    Title,
     Tooltip,
   );
 
@@ -48,19 +46,42 @@
   let canvas: HTMLCanvasElement;
   let chart: Chart;
 
-  function getChartColors(dark: boolean) {
+  // Colours come from the active theme. Any CSS colour expression (a token, a
+  // var() reference, color-mix()) is resolved by the browser and then read back as
+  // rgba() through a canvas, since chart.js cannot parse oklch() or color-mix().
+  // `themeTick` bumps whenever <html> changes class or data-theme.
+
+  let themeTick = $state(0);
+
+  function getChartColors() {
     return {
-      grid: dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
-      tick: dark ? "#9ca3af" : "#6b7280",
-      legend: dark ? "#d1d5db" : "#374151",
-      tooltipBg: dark ? "#1f2937" : "#ffffff",
-      tooltipText: dark ? "#f3f4f6" : "#111827",
-      tooltipBorder: dark ? "#374151" : "#e5e7eb",
+      grid: resolveColor("var(--border)", "#dddddd"),
+      tick: resolveColor("var(--muted-foreground)", "#666666"),
+      legend: resolveColor("var(--foreground)", "#111111"),
+      tooltipBg: resolveColor("var(--card)", "#ffffff"),
+      tooltipText: resolveColor("var(--foreground)", "#111111"),
+      tooltipBorder: resolveColor("var(--border)", "#dddddd"),
     };
   }
 
-  function buildOptions(dark: boolean) {
-    const colors = getChartColors(dark);
+  function chartDatasets() {
+    return datasets.map((ds) => {
+      const color = resolveColor(ds.borderColor, "#888888");
+      return {
+        label: ds.label,
+        data: [...ds.data],
+        borderColor: color,
+        backgroundColor: color,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.4,
+        fill: false,
+      };
+    });
+  }
+
+  function buildOptions() {
+    const colors = getChartColors();
     return {
       responsive: true,
       maintainAspectRatio: false,
@@ -80,12 +101,6 @@
             padding: 12,
             font: { size: 11 },
           },
-        },
-        title: {
-          display: true,
-          text: title,
-          color: colors.legend,
-          font: { size: 14, weight: "bold" as const },
         },
         tooltip: {
           backgroundColor: colors.tooltipBg,
@@ -118,55 +133,40 @@
   onMount(() => {
     chart = new Chart(canvas, {
       type: "line",
-      data: {
-        labels: [...labels],
-        datasets: datasets.map((ds) => ({
-          label: ds.label,
-          data: [...ds.data],
-          borderColor: ds.borderColor,
-          backgroundColor: ds.borderColor + "20",
-          borderWidth: 1.5,
-          pointRadius: 0,
-          tension: 0.4,
-          fill: false,
-        })),
-      },
-      options: buildOptions($isDarkMode),
+      data: { labels: [...labels], datasets: chartDatasets() },
+      options: buildOptions(),
     });
+    const observer = new MutationObserver(() => themeTick++);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
 
     return () => {
+      observer.disconnect();
       chart.destroy();
     };
   });
 
   $effect(() => {
     if (!chart) return;
-    const _dark = $isDarkMode;
-    chart.options = buildOptions(_dark);
+    void themeTick;
+    chart.options = buildOptions();
     chart.update("none");
   });
 
   $effect(() => {
     if (!chart) return;
+    void themeTick;
     const _l = labels;
-    const _d = datasets;
     chart.data.labels = [..._l];
-    chart.data.datasets = _d.map((ds) => ({
-      label: ds.label,
-      data: [...ds.data],
-      borderColor: ds.borderColor,
-      backgroundColor: ds.borderColor + "20",
-      borderWidth: 1.5,
-      pointRadius: 0,
-      tension: 0.4,
-      fill: false,
-    }));
+    chart.data.datasets = chartDatasets();
     chart.update("none");
   });
 </script>
 
-<Card.Root class="h-[300px] py-0">
-  <Card.Content class="h-full p-4">
+<Card.Root class="h-[300px] gap-0 py-0">
+  <div class="bg-(--panel-header-bg) border-b px-4 py-2.5">
+    <h2 class="text-heading">{title}</h2>
+  </div>
+  <Card.Content class="min-h-0 flex-1 p-4">
     <canvas bind:this={canvas}></canvas>
   </Card.Content>
 </Card.Root>

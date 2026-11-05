@@ -16,9 +16,9 @@
   }
 </script>
 
-<div class="space-y-2">
+<div class="space-y-1.5">
   <Label.Root for={id}>{label}</Label.Root>
   <Input {id} list={`${id}-resources`} bind:value {placeholder} {disabled} autocomplete="off" onchange={() => onValueChange?.(value)} />
   <datalist id={`${id}-resources`}>{#each options as resource (resource.path)}<option value={resource.path}>{resource.type} · {resource.kind} · {formatSize(resource.size)}</option>{/each}</datalist>
-  {#if selected}<p class="text-muted-foreground text-xs">{selected.type} · {selected.kind} · {formatSize(selected.size)}{selected.operation ? ` · from ${selected.operation}` : ""}</p>{/if}
+  {#if selected}<p class="text-muted-foreground font-mono text-xs">{selected.type} · {selected.kind} · {formatSize(selected.size)}{selected.operation ? ` · from ${selected.operation}` : ""}</p>{/if}
 </div>

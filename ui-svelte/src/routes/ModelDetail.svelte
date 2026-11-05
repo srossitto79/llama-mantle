@@ -19,38 +19,44 @@
 
 <Page.Root title={model ? model.name || model.id : modelId} width="full" fill>
   {#if !model}
-    <Card.Root class="shrink-0 p-6">
-      <p class="text-muted-foreground">Model “{modelId}” not found.</p>
-      <a href="/models" use:link class="text-primary hover:underline">Back to Models</a>
+    <Card.Root class="shrink-0 gap-1 px-4 py-4">
+      <p class="text-sm">Model “{modelId}” not found.</p>
+      <a href="/models" use:link class="text-primary text-sm hover:underline">Back to Models</a>
     </Card.Root>
   {:else}
     <Card.Root class="shrink-0 gap-0 overflow-hidden py-0">
-      <Card.Header class="shrink-0 gap-2 border-b px-4 py-3">
-        <div class="flex items-center gap-2">
-          <span class={`size-2.5 shrink-0 rounded-full ${statusDotColor(model)}`}></span>
-          {#if model.name && model.name !== model.id}<span class="text-muted-foreground text-sm">{model.id}</span>{/if}
-          <span class="text-muted-foreground text-xs uppercase tracking-wide">{model.state}</span>
-          <div class="ml-auto flex items-center gap-2">
-            <a
-              href={`/upstream/${encodeURIComponent(modelId)}/`}
-              target="_blank"
-              rel="noopener noreferrer"
-              class="text-muted-foreground hover:text-foreground"
-              title="Open model server"
-              aria-label="Open model server"
-            >
-              <ExternalLink class="size-4" />
-            </a>
-            <ModelLoadButton {model} size="sm" />
-          </div>
+      <div class="bg-(--panel-header-bg) flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
+        <span class="size-2 shrink-0 rounded-full {statusDotColor(model)}" aria-hidden="true"></span>
+        <span class="text-sm capitalize">{model.state}</span>
+        {#if model.name && model.name !== model.id}
+          <span class="text-muted-foreground font-mono text-[0.8125rem]">{model.id}</span>
+        {/if}
+        <div class="ml-auto flex items-center gap-2">
+          <a
+            href={`/upstream/${encodeURIComponent(modelId)}/`}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-muted-foreground hover:text-foreground"
+            title="Open model server"
+            aria-label="Open model server"
+          >
+            <ExternalLink class="size-4" />
+          </a>
+          <ModelLoadButton {model} size="sm" />
         </div>
-        {#if model.description}
-          <p class="text-muted-foreground text-sm"><em>{model.description}</em></p>
-        {/if}
-        {#if model.aliases && model.aliases.length > 0}
-          <p class="text-muted-foreground text-xs">Aliases: {model.aliases.join(", ")}</p>
-        {/if}
-      </Card.Header>
+      </div>
+      {#if model.description || (model.aliases && model.aliases.length > 0)}
+        <div class="flex flex-col gap-1 border-t px-4 py-2.5">
+          {#if model.description}
+            <p class="text-sm">{model.description}</p>
+          {/if}
+          {#if model.aliases && model.aliases.length > 0}
+            <p class="text-muted-foreground text-xs">
+              Aliases: <span class="font-mono">{model.aliases.join(", ")}</span>
+            </p>
+          {/if}
+        </div>
+      {/if}
     </Card.Root>
 
     <Tabs value="activity" class="min-h-0 flex-1">

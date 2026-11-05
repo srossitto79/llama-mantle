@@ -1,7 +1,10 @@
 <script lang="ts">
-  import { connectionState, themeName, themeMode, themes, type ThemeMode } from "../stores/theme";
+  import { connectionState, themeName, themeMode, themes, type ThemeMode, type ThemeName } from "../stores/theme";
   import { versionInfo } from "../stores/api";
-  import * as Select from "$lib/components/ui/select/index.js";
+  import * as Page from "$lib/components/ui/page/index.js";
+  import * as Card from "$lib/components/ui/card/index.js";
+  import * as Field from "$lib/components/ui/field/index.js";
+  import { NativeSelect } from "$lib/components/ui/native-select/index.js";
 
   const modes: { value: ThemeMode; label: string }[] = [
     { value: "light", label: "Light" },
@@ -9,65 +12,52 @@
     { value: "system", label: "System" },
   ];
 
-  let themeLabel = $derived(themes.find((t) => t.value === $themeName)?.label ?? "Default");
-  let modeLabel = $derived(modes.find((m) => m.value === $themeMode)?.label ?? "System");
-  import * as Page from "$lib/components/ui/page/index.js";
+  const buildInfo = $derived([
+    { label: "Event stream", value: $connectionState ?? "unknown" },
+    { label: "Version", value: $versionInfo?.version ?? "unknown" },
+    { label: "Commit", value: $versionInfo?.commit?.substring(0, 7) ?? "unknown" },
+    { label: "Build date", value: $versionInfo?.build_date ?? "unknown" },
+  ]);
 </script>
 
 <Page.Root title="Settings" width="narrow">
-  <div class="rounded-lg border p-4 space-y-3 max-w-md">
-    <h4 class="text-sm font-semibold text-muted-foreground">Appearance</h4>
-    <div class="flex items-center justify-between gap-4">
-      <span class="text-sm">Theme</span>
-      <Select.Root
-        type="single"
-        value={$themeName}
-        onValueChange={(v) => v && themeName.set(v as typeof $themeName)}
-      >
-        <Select.Trigger class="w-40">{themeLabel}</Select.Trigger>
-        <Select.Content>
-          {#each themes as theme (theme.value)}
-            <Select.Item value={theme.value}>{theme.label}</Select.Item>
-          {/each}
-        </Select.Content>
-      </Select.Root>
+  <Card.Root class="gap-0 py-0">
+    <div class="bg-(--panel-header-bg) border-b px-4 py-2.5">
+      <h2 class="text-heading">Appearance</h2>
     </div>
-    <div class="flex items-center justify-between gap-4">
-      <span class="text-sm">Mode</span>
-      <Select.Root
-        type="single"
-        value={$themeMode}
-        onValueChange={(v) => v && themeMode.set(v as ThemeMode)}
-      >
-        <Select.Trigger class="w-40">{modeLabel}</Select.Trigger>
-        <Select.Content>
-          {#each modes as mode (mode.value)}
-            <Select.Item value={mode.value}>{mode.label}</Select.Item>
-          {/each}
-        </Select.Content>
-      </Select.Root>
+    <div class="space-y-4 p-4">
+      <Field.Root label="Theme" id="settings-theme" layout="inline">
+        {#snippet control({ id })}
+          <NativeSelect {id} value={$themeName} onchange={(e) => themeName.set(e.currentTarget.value as ThemeName)}>
+            {#each themes as theme (theme.value)}
+              <option value={theme.value}>{theme.label}</option>
+            {/each}
+          </NativeSelect>
+        {/snippet}
+      </Field.Root>
+      <Field.Root label="Mode" id="settings-mode" layout="inline">
+        {#snippet control({ id })}
+          <NativeSelect {id} value={$themeMode} onchange={(e) => themeMode.set(e.currentTarget.value as ThemeMode)}>
+            {#each modes as mode (mode.value)}
+              <option value={mode.value}>{mode.label}</option>
+            {/each}
+          </NativeSelect>
+        {/snippet}
+      </Field.Root>
     </div>
-  </div>
+  </Card.Root>
 
-  <div class="rounded-lg border p-4 space-y-2 max-w-md">
-    <h4 class="text-sm font-semibold text-muted-foreground">Build Information</h4>
-    <dl class="text-sm space-y-1">
-      <div class="flex justify-between gap-4">
-        <dt class="text-muted-foreground">Event Stream</dt>
-        <dd class="font-medium">{$connectionState ?? "unknown"}</dd>
-      </div>
-      <div class="flex justify-between gap-4">
-        <dt class="text-muted-foreground">Version</dt>
-        <dd class="font-medium">{$versionInfo?.version ?? "unknown"}</dd>
-      </div>
-      <div class="flex justify-between gap-4">
-        <dt class="text-muted-foreground">Commit Hash</dt>
-        <dd class="font-medium">{$versionInfo?.commit?.substring(0, 7) ?? "unknown"}</dd>
-      </div>
-      <div class="flex justify-between gap-4">
-        <dt class="text-muted-foreground">Build Date</dt>
-        <dd class="font-medium">{$versionInfo?.build_date ?? "unknown"}</dd>
-      </div>
+  <Card.Root class="gap-0 py-0">
+    <div class="bg-(--panel-header-bg) border-b px-4 py-2.5">
+      <h2 class="text-heading">Build</h2>
+    </div>
+    <dl class="divide-y text-sm">
+      {#each buildInfo as row (row.label)}
+        <div class="flex justify-between gap-4 px-4 py-2.5">
+          <dt class="text-muted-foreground">{row.label}</dt>
+          <dd class="font-mono text-[0.8125rem]">{row.value}</dd>
+        </div>
+      {/each}
     </dl>
-  </div>
+  </Card.Root>
 </Page.Root>

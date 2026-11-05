@@ -26,12 +26,12 @@
 </script>
 
 <Card.Root class="shrink-0 gap-0 overflow-hidden py-0">
-  <Card.Header class="border-b px-4 py-2">
-    <Card.Title class="text-sm font-semibold">Capabilities</Card.Title>
-  </Card.Header>
-  <Card.Content class="p-3">
+  <div class="bg-(--panel-header-bg) border-b px-4 py-2.5">
+    <h2 class="text-heading">Capabilities</h2>
+  </div>
+  <Card.Content class="px-4 py-3">
     {#if capabilities.length === 0}
-      <span class="text-muted-foreground text-sm">No capabilities reported.</span>
+      <span class="text-muted-foreground text-sm">None</span>
     {:else}
       <div class="flex flex-wrap gap-1.5">
         {#each capabilities as [key] (key)}

@@ -71,7 +71,7 @@
     size="icon-sm"
     class="absolute right-2 top-2 opacity-60 transition-opacity group-hover:opacity-100 md:opacity-0"
     onclick={openExpanded}
-    title="Expand to edit"
+    title="Expand" aria-label="Expand"
     type="button"
     {disabled}
   >
@@ -81,11 +81,11 @@
 
 {#if isExpanded}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-    <div class="bg-card flex h-[80vh] w-full max-w-4xl flex-col rounded-lg border shadow-xl">
+    <div class="bg-card flex h-[80vh] w-full max-w-4xl flex-col rounded-(--panel-radius) ring-1 ring-(--panel-ring)">
       <!-- Header -->
-      <div class="flex items-center justify-between border-b p-4">
-        <h3 class="font-medium">Edit Text</h3>
-        <Button variant="ghost" size="icon-sm" onclick={closeExpanded} title="Close" type="button">
+      <div class="bg-(--panel-header-bg) flex items-center justify-between border-b px-4 py-2.5">
+        <h2 class="text-heading">Edit text</h2>
+        <Button variant="ghost" size="icon-sm" onclick={closeExpanded} title="Close" aria-label="Close" type="button">
           <X />
         </Button>
       </div>
@@ -102,7 +102,7 @@
       </div>
 
       <!-- Footer -->
-      <div class="flex justify-end gap-2 border-t p-4">
+      <div class="flex justify-end gap-2 border-t px-4 py-3">
         <Button variant="outline" onclick={closeExpanded} type="button">Cancel</Button>
         <Button onclick={saveExpanded} type="button">Done</Button>
       </div>

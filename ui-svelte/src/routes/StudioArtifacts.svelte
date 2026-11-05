@@ -1,8 +1,13 @@
 <script lang="ts">
+  import * as NativeSelect from "$lib/components/ui/native-select/index.js";
   import { onMount } from "svelte";
   import { push } from "svelte-spa-router";
-  import { BarChart3, GitBranch, RefreshCw, Save, ShieldCheck, Trash2 } from "@lucide/svelte";
+  import { RefreshCw, Save, ShieldCheck, Trash2 } from "@lucide/svelte";
   import * as Card from "$lib/components/ui/card/index.js";
+  import * as Alert from "$lib/components/ui/alert/index.js";
+  import { EmptyState } from "$lib/components/ui/empty-state/index.js";
+  import { Textarea } from "$lib/components/ui/textarea/index.js";
+  import { Checkbox } from "$lib/components/ui/checkbox/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Label from "$lib/components/ui/label/index.js";
@@ -127,17 +132,77 @@
 
 <Page.Root title="Studio Artifacts" width="full">
   {#snippet actions()}<Button variant="outline" size="sm" onclick={verifyVisible} disabled={busy || visible.every((artifact) => !artifact.exists)}><ShieldCheck class="size-4" />Verify visible</Button><Button variant="outline" size="sm" onclick={refresh}><RefreshCw class="size-4" />Refresh</Button>{/snippet}
-  {#if error}<div class="border-destructive/40 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-sm">{error}</div>{/if}
-  <div class="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
+  {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
+  <div class="grid min-h-0 gap-(--page-gap) xl:grid-cols-[minmax(0,1fr)_24rem]">
     <Card.Root class="min-h-0 gap-0 overflow-hidden py-0">
-      <div class="border-b p-3"><select class="border-input bg-background h-9 rounded-md border px-3 text-sm" bind:value={filter}><option value="">All artifact types</option>{#each kinds as kind}<option value={kind}>{kind}</option>{/each}</select></div>
-      <div class="overflow-auto">{#if loading}<div class="text-muted-foreground p-8 text-center">Loading artifacts…</div>{:else if visible.length === 0}<div class="text-muted-foreground p-8 text-center">No generated artifacts yet.</div>{:else}<table class="w-full text-left text-sm"><thead class="bg-muted/60 sticky top-0"><tr><th class="px-3 py-2">Artifact</th><th class="px-3 py-2">Type</th><th class="px-3 py-2">Producer</th><th class="px-3 py-2">Size</th><th class="px-3 py-2">Status</th><th></th></tr></thead><tbody>{#each visible as artifact (artifact.path)}<tr class:bg-accent={selected === artifact.path} class="border-t"><td class="max-w-72 px-3 py-2"><button class="w-full truncate text-left font-medium" title={artifact.path} onclick={() => select(artifact.path)}>{artifact.path}</button></td><td class="px-3 py-2 text-xs">{artifact.kind}</td><td class="px-3 py-2 text-xs">{artifact.operation}</td><td class="px-3 py-2">{formatSize(artifact.size)}</td><td class="px-3 py-2"><span class:text-destructive={!artifact.exists}>{artifact.exists ? "Available" : "Missing"}</span></td><td class="px-3 py-2"><div class="flex gap-1"><Button size="sm" variant="outline" title={isGGUFArtifact(artifact.path) ? "" : "Only GGUF files (models, adapters, checkpoints) can be opened in Studio"} disabled={!artifact.exists || !isGGUFArtifact(artifact.path)} onclick={() => openStudio(artifact.path)}>Use</Button><Button size="sm" variant="outline" disabled={!artifact.exists} onclick={() => openPipeline(artifact.path)}>Pipeline</Button><Button size="icon-sm" variant="ghost" title="Delete artifact" disabled={busy || !artifact.exists} onclick={() => removeArtifact(artifact.path)}><Trash2 class="text-destructive size-4" /></Button></div></td></tr>{/each}</tbody></table>{/if}</div>
+      <div class="bg-(--panel-header-bg) flex flex-wrap items-center gap-2 border-b px-4 py-2.5"><NativeSelect.Root class="max-w-56" aria-label="Artifact type" bind:value={filter}><option value="">All types</option>{#each kinds as kind}<option value={kind}>{kind}</option>{/each}</NativeSelect.Root></div>
+      <div class="overflow-x-auto">
+        {#if loading}
+          <div class="text-muted-foreground px-4 py-10 text-center text-sm">Loading…</div>
+        {:else if visible.length === 0}
+          <EmptyState title="No artifacts" />
+        {:else}
+          <table class="w-full text-left text-sm">
+            <thead class="text-muted-foreground border-b text-xs"><tr><th class="px-4 py-2 font-medium">Artifact</th><th class="px-3 py-2 font-medium">Type</th><th class="px-3 py-2 font-medium">Producer</th><th class="px-3 py-2 font-medium">Size</th><th class="px-3 py-2 font-medium">Status</th><th></th></tr></thead>
+            <tbody class="divide-y">
+              {#each visible as artifact (artifact.path)}
+                <tr class="hover:bg-muted/50" class:bg-muted={selected === artifact.path}>
+                  <td class="max-w-72 px-4 py-2.5"><button class="w-full truncate text-left font-mono text-[0.8125rem]" title={artifact.path} onclick={() => select(artifact.path)}>{artifact.path}</button></td>
+                  <td class="px-3 py-2.5 text-xs">{artifact.kind}</td>
+                  <td class="px-3 py-2.5 text-xs">{artifact.operation}</td>
+                  <td class="px-3 py-2.5 tabular-nums">{formatSize(artifact.size)}</td>
+                  <td class="px-3 py-2.5"><span class="inline-flex items-center gap-2"><span class="size-2 rounded-full {artifact.exists ? 'bg-success' : 'bg-muted-foreground/40'}" aria-hidden="true"></span>{artifact.exists ? "Available" : "Missing"}</span></td>
+                  <td class="px-3 py-2.5"><div class="flex gap-1"><Button size="sm" variant="outline" title={isGGUFArtifact(artifact.path) ? "" : "Only GGUF files (models, adapters, checkpoints) can be opened in Studio"} disabled={!artifact.exists || !isGGUFArtifact(artifact.path)} onclick={() => openStudio(artifact.path)}>Use</Button><Button size="sm" variant="outline" disabled={!artifact.exists} onclick={() => openPipeline(artifact.path)}>Pipeline</Button><Button size="icon-sm" variant="ghost" title="Delete artifact" aria-label="Delete artifact" disabled={busy || !artifact.exists} onclick={() => removeArtifact(artifact.path)}><Trash2 class="text-destructive size-4" /></Button></div></td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        {/if}
+      </div>
     </Card.Root>
-    <div class="space-y-4">
-      <Card.Root class="h-fit"><Card.Header><Card.Title class="flex items-center gap-2"><ShieldCheck class="size-4" />Verification</Card.Title></Card.Header><Card.Content class="space-y-3">{#if !selectedArtifact}<p class="text-muted-foreground text-sm">Select an artifact to inspect it.</p>{:else}<div class="text-xs"><div class="text-muted-foreground">SHA-256</div><div class="mt-1 break-all font-mono">{selectedArtifact.sha256 || "Not verified"}</div></div>{#if selectedArtifact.ggufValid !== undefined}<div class:text-destructive={!selectedArtifact.ggufValid} class="text-sm">GGUF: {selectedArtifact.ggufValid ? "Valid" : `Invalid — ${selectedArtifact.verificationError ?? "parse failed"}`}</div>{/if}<div class="space-y-1"><Label.Root for="artifact-tags">Tags</Label.Root><Input id="artifact-tags" bind:value={tags} placeholder="release, favorite" /></div><div class="space-y-1"><Label.Root for="artifact-notes">Notes</Label.Root><textarea id="artifact-notes" class="border-input bg-background min-h-24 w-full rounded-md border p-2 text-sm" bind:value={notes}></textarea></div><div class="flex flex-wrap gap-2"><Button size="sm" variant="outline" onclick={saveAnnotation} disabled={busy}><Save class="size-4" />Save</Button><Button size="sm" variant="outline" onclick={verify} disabled={busy || !selectedArtifact.exists}><ShieldCheck class="size-4" />Verify</Button><Button size="sm" variant="destructive" onclick={cleanup} disabled={busy || !selectedArtifact.exists}><Trash2 class="size-4" />Delete file</Button></div>{/if}</Card.Content></Card.Root>
-      <Card.Root class="h-fit"><Card.Header><Card.Title class="flex items-center gap-2"><GitBranch class="size-4" />Lineage</Card.Title></Card.Header><Card.Content class="space-y-2">{#if !selected}<p class="text-muted-foreground text-sm">Select an artifact to inspect its connected history.</p>{:else if lineage.length === 0}<p class="text-muted-foreground text-sm">No recorded parents or descendants.</p>{:else}{#each lineage as edge}<div class="border-border rounded-md border p-2 text-xs"><div class="font-medium">{edge.relation}</div><div class="text-muted-foreground mt-1 break-all">{edge.input}</div><div class="my-1">↓</div><div class="break-all">{edge.output}</div></div>{/each}{/if}</Card.Content></Card.Root>
-      <Card.Root class="h-fit"><Card.Header><Card.Title class="flex items-center gap-2"><BarChart3 class="size-4" />Evaluations</Card.Title></Card.Header><Card.Content class="space-y-2">{#if !selected}<p class="text-muted-foreground text-sm">Select an artifact to compare evaluations.</p>{:else if evaluations.length === 0}<p class="text-muted-foreground text-sm">No evaluations recorded for this artifact.</p>{:else}{#each evaluations as evaluation}<div class="border-border rounded-md border p-2 text-sm"><div class="flex justify-between gap-2"><span class="font-medium capitalize">{evaluation.mode}</span><span class="text-muted-foreground text-xs">{new Date(evaluation.createdAt).toLocaleString()}</span></div><div class="mt-1">{evaluationSummary(evaluation)}</div><div class="text-muted-foreground mt-1 text-xs">Job {evaluation.jobID}</div></div>{/each}{/if}</Card.Content></Card.Root>
-      <Card.Root class="h-fit"><Card.Header><Card.Title>Retention preview</Card.Title></Card.Header><Card.Content class="space-y-3"><div class="space-y-1"><Label.Root for="retention-days">Remove artifacts older than days</Label.Root><Input id="retention-days" type="number" min="1" bind:value={retentionDays} /></div><label class="flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={includeTagged} />Include tagged artifacts</label><p class="text-muted-foreground text-xs">The current type filter is applied. Serving registrations are always excluded.</p><Button size="sm" variant="outline" onclick={previewRetention} disabled={busy}>Preview</Button>{#if retentionPreview}<div class="border-border rounded-md border p-2 text-sm"><div>{retentionPreview.candidates.length} files · {formatSize(retentionPreview.totalBytes)}</div><div class="text-muted-foreground mt-1 max-h-28 whitespace-pre-wrap overflow-auto text-xs">{retentionPreview.candidates.map((artifact) => artifact.path).join("\n")}</div><Button class="mt-2" size="sm" variant="destructive" onclick={applyRetention} disabled={busy || retentionPreview.candidates.length === 0}>Apply exact preview</Button></div>{/if}</Card.Content></Card.Root>
+    <div class="flex flex-col gap-(--page-gap)">
+      <Card.Root class="h-fit gap-0 py-0">
+        <div class="bg-(--panel-header-bg) border-b px-4 py-2.5"><h2 class="text-heading">Verification</h2></div>
+        <div class="space-y-3 p-4">
+          {#if !selectedArtifact}
+            <p class="text-muted-foreground text-sm">No artifact selected</p>
+          {:else}
+            <div class="text-xs"><div class="text-muted-foreground">SHA-256</div><div class="mt-1 font-mono break-all">{selectedArtifact.sha256 || "Not verified"}</div></div>
+            {#if selectedArtifact.ggufValid !== undefined}<div class:text-destructive={!selectedArtifact.ggufValid} class="text-sm">GGUF: {selectedArtifact.ggufValid ? "Valid" : `Invalid — ${selectedArtifact.verificationError ?? "parse failed"}`}</div>{/if}
+            <div class="space-y-1"><Label.Root for="artifact-tags">Tags</Label.Root><Input id="artifact-tags" bind:value={tags} placeholder="release, favorite" /></div>
+            <div class="space-y-1"><Label.Root for="artifact-notes">Notes</Label.Root><Textarea id="artifact-notes" class="min-h-24" bind:value={notes} /></div>
+            <div class="flex flex-wrap gap-2"><Button size="sm" variant="outline" onclick={saveAnnotation} disabled={busy}><Save class="size-4" />Save</Button><Button size="sm" variant="outline" onclick={verify} disabled={busy || !selectedArtifact.exists}><ShieldCheck class="size-4" />Verify</Button><Button size="sm" variant="destructive" onclick={cleanup} disabled={busy || !selectedArtifact.exists}><Trash2 class="size-4" />Delete file</Button></div>
+          {/if}
+        </div>
+      </Card.Root>
+      <Card.Root class="h-fit gap-0 py-0">
+        <div class="bg-(--panel-header-bg) border-b px-4 py-2.5"><h2 class="text-heading">Lineage</h2></div>
+        <div class="space-y-2 p-4">
+          {#if !selected}<p class="text-muted-foreground text-sm">No artifact selected</p>
+          {:else if lineage.length === 0}<p class="text-muted-foreground text-sm">No lineage recorded</p>
+          {:else}{#each lineage as edge}<div class="border-b pb-2 text-xs last:border-b-0 last:pb-0"><div class="font-medium">{edge.relation}</div><div class="text-muted-foreground mt-1 font-mono break-all">{edge.input}</div><div class="my-1">↓</div><div class="font-mono break-all">{edge.output}</div></div>{/each}{/if}
+        </div>
+      </Card.Root>
+      <Card.Root class="h-fit gap-0 py-0">
+        <div class="bg-(--panel-header-bg) border-b px-4 py-2.5"><h2 class="text-heading">Evaluations</h2></div>
+        <div class="space-y-2 p-4">
+          {#if !selected}<p class="text-muted-foreground text-sm">No artifact selected</p>
+          {:else if evaluations.length === 0}<p class="text-muted-foreground text-sm">No evaluations</p>
+          {:else}{#each evaluations as evaluation}<div class="border-b pb-2 text-sm last:border-b-0 last:pb-0"><div class="flex justify-between gap-2"><span class="font-medium capitalize">{evaluation.mode}</span><span class="text-muted-foreground text-xs">{new Date(evaluation.createdAt).toLocaleString()}</span></div><div class="mt-1">{evaluationSummary(evaluation)}</div><div class="text-muted-foreground mt-1 font-mono text-xs">Job {evaluation.jobID}</div></div>{/each}{/if}
+        </div>
+      </Card.Root>
+      <Card.Root class="h-fit gap-0 py-0">
+        <div class="bg-(--panel-header-bg) border-b px-4 py-2.5"><h2 class="text-heading">Retention</h2></div>
+        <div class="space-y-3 p-4">
+          <!-- The type filter applies to the preview; serving registrations are always excluded. -->
+          <div class="space-y-1"><Label.Root for="retention-days">Older than (days)</Label.Root><Input id="retention-days" type="number" min="1" bind:value={retentionDays} /></div>
+          <label class="flex items-center gap-2 text-sm"><Checkbox bind:checked={includeTagged} />Include tagged artifacts</label>
+          <Button size="sm" variant="outline" onclick={previewRetention} disabled={busy}>Preview</Button>
+          {#if retentionPreview}
+            <div class="space-y-2 border-t pt-3 text-sm"><div class="tabular-nums">{retentionPreview.candidates.length} files · {formatSize(retentionPreview.totalBytes)}</div><div class="text-muted-foreground max-h-28 overflow-auto font-mono text-xs whitespace-pre-wrap">{retentionPreview.candidates.map((artifact) => artifact.path).join("\n")}</div><Button size="sm" variant="destructive" onclick={applyRetention} disabled={busy || retentionPreview.candidates.length === 0}>Apply exact preview</Button></div>
+          {/if}
+        </div>
+      </Card.Root>
     </div>
   </div>
 </Page.Root>

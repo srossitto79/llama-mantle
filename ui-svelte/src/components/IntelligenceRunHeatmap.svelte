@@ -70,7 +70,7 @@
     {@const row = rowFor(model)}
     <div class="space-y-2">
       <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
-        <span class="font-medium">{model.name}</span>
+        <span class="font-mono text-[0.8125rem] font-medium">{model.name}</span>
         {#if model.retry}<span class="bg-muted rounded px-1.5 py-0.5 text-xs">{model.resume ? "resume" : "retry"}</span>{/if}
         <span class="text-muted-foreground ml-auto tabular-nums">{row.items.length} / {row.planned || "?"}</span>
         <span class="text-muted-foreground text-xs capitalize">{model.state}</span>
@@ -89,7 +89,7 @@
       {#if row.notes.length}<p class="text-muted-foreground text-xs">{row.notes.join(" · ")}</p>{/if}
     </div>
   {:else}
-    <p class="text-muted-foreground text-sm">No run yet.</p>
+    <p class="text-muted-foreground text-sm">No run</p>
   {/each}
 
   {#if legend.length}

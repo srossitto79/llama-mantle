@@ -7,19 +7,25 @@
   import { playgroundStores } from "../../stores/playgroundActivity";
   import ModelSelector from "./ModelSelector.svelte";
   import ExpandableTextarea from "./ExpandableTextarea.svelte";
-  import EmptyState from "../EmptyState.svelte";
   import type { ImageApiMode, SdApiLora, SdApiLoraRef } from "../../lib/types";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Textarea } from "$lib/components/ui/textarea/index.js";
-  import * as Select from "$lib/components/ui/select/index.js";
-  import { Download, X } from "@lucide/svelte";
+  import { NativeSelect } from "$lib/components/ui/native-select/index.js";
+  import * as Field from "$lib/components/ui/field/index.js";
+  import * as Alert from "$lib/components/ui/alert/index.js";
+  import { EmptyState } from "$lib/components/ui/empty-state/index.js";
+  import { CircleAlert, Download, LoaderCircle, X } from "@lucide/svelte";
 
   const iface = createPlaygroundInterface("playground-image-model", playgroundStores.imageGenerating);
   const selectedModelStore = iface.selectedModel;
   const busyStore = iface.busy;
   const error = iface.error;
   const selectedSizeStore = persistentStore<string>("playground-image-size", "1024x1024");
+  const SAMPLERS = [
+    "euler_a", "euler", "heun", "dpm2", "dpmpp2s_a", "dpmpp2m", "dpmpp2mv2", "ipndm", "ipndm_v", "lcm", "ddim_trailing", "tcd",
+  ];
+  const SCHEDULERS = ["discrete", "karras", "exponential", "ays", "gits"];
   const apiModeStore = persistentStore<ImageApiMode>("playground-image-api-mode", "openai");
 
   // SDAPI persistent settings
@@ -168,303 +174,244 @@
   }
 </script>
 
-<div class="flex flex-col h-full">
-  <!-- Model selector and mode toggle -->
-  <div class="shrink-0 flex flex-wrap gap-2 mb-4">
+<div class="flex h-full min-h-0 flex-col gap-3">
+  <!-- Toolbar -->
+  <div class="bg-(--panel-header-bg) flex shrink-0 flex-wrap items-center gap-2 rounded-lg border px-3 py-2">
     <ModelSelector bind:value={$selectedModelStore} placeholder="Select an image model..." disabled={isGenerating} capabilities={["image_generation", "image_to_image"]} matchAny={true} />
 
-    <Select.Root
-      type="single"
-      value={$apiModeStore}
-      onValueChange={(v) => v && apiModeStore.set(v as ImageApiMode)}
-    >
-      <Select.Trigger class="h-9 w-32">{$apiModeStore}</Select.Trigger>
-      <Select.Content>
-        <Select.Item value="openai">OpenAI</Select.Item>
-        <Select.Item value="sdapi">SDAPI</Select.Item>
-      </Select.Content>
-    </Select.Root>
+    <NativeSelect class="w-28" aria-label="API" bind:value={$apiModeStore}>
+      <option value="openai">OpenAI</option>
+      <option value="sdapi">SDAPI</option>
+    </NativeSelect>
 
-    <Select.Root
-      type="single"
-      value={$selectedSizeStore}
-      onValueChange={(v) => v && selectedSizeStore.set(v)}
-    >
-      <Select.Trigger class="h-9 w-40">{$selectedSizeStore}</Select.Trigger>
-      <Select.Content>
-        <Select.Group>
-          <Select.Label>Square</Select.Label>
-          <Select.Item value="512x512">512x512</Select.Item>
-          <Select.Item value="1024x1024">1024x1024</Select.Item>
-        </Select.Group>
-        <Select.Separator />
-        <Select.Group>
-          <Select.Label>Landscape</Select.Label>
-          <Select.Item value="1024x768">1024x768 (4:3)</Select.Item>
-          <Select.Item value="1280x720">1280x720 (16:9)</Select.Item>
-          <Select.Item value="1792x1024">1792x1024 (SDXL)</Select.Item>
-        </Select.Group>
-        <Select.Separator />
-        <Select.Group>
-          <Select.Label>Portrait</Select.Label>
-          <Select.Item value="768x1024">768x1024 (3:4)</Select.Item>
-          <Select.Item value="720x1280">720x1280 (9:16)</Select.Item>
-          <Select.Item value="1024x1792">1024x1792 (SDXL)</Select.Item>
-        </Select.Group>
-      </Select.Content>
-    </Select.Root>
+    <NativeSelect class="w-44" aria-label="Size" bind:value={$selectedSizeStore}>
+      <optgroup label="Square">
+        <option value="512x512">512x512</option>
+        <option value="1024x1024">1024x1024</option>
+      </optgroup>
+      <optgroup label="Landscape">
+        <option value="1024x768">1024x768 (4:3)</option>
+        <option value="1280x720">1280x720 (16:9)</option>
+        <option value="1792x1024">1792x1024 (SDXL)</option>
+      </optgroup>
+      <optgroup label="Portrait">
+        <option value="768x1024">768x1024 (3:4)</option>
+        <option value="720x1280">720x1280 (9:16)</option>
+        <option value="1024x1792">1024x1792 (SDXL)</option>
+      </optgroup>
+    </NativeSelect>
 
     {#if isSdapi}
-      <Button variant="outline" onclick={() => showSettings = !showSettings}>
-        {showSettings ? "Hide Settings" : "Settings"}
+      <Button
+        variant={showSettings ? "secondary" : "outline"}
+        size="sm"
+        class="ml-auto"
+        aria-pressed={showSettings}
+        onclick={() => (showSettings = !showSettings)}
+      >
+        Settings
       </Button>
     {/if}
   </div>
 
-  <!-- SDAPI Settings Panel -->
+  <!-- SDAPI settings -->
   {#if isSdapi && showSettings}
-    <div class="shrink-0 mb-4 p-4 rounded-md border border-border bg-background">
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-        <label class="flex flex-col gap-1">
-          <span class="text-xs text-muted-foreground">Steps</span>
-          <Input
-            type="number"
-            class="h-8"
-            bind:value={$sdStepsStore}
-            min="1"
-            max="150"
-          />
-        </label>
-        <label class="flex flex-col gap-1">
-          <span class="text-xs text-muted-foreground">CFG Scale</span>
-          <Input
-            type="number"
-            class="h-8"
-            bind:value={$sdCfgScaleStore}
-            min="1"
-            max="30"
-            step="0.5"
-          />
-        </label>
-        <label class="flex flex-col gap-1">
-          <span class="text-xs text-muted-foreground">Seed (-1 = random)</span>
-          <Input
-            type="number"
-            class="h-8"
-            bind:value={$sdSeedStore}
-            min="-1"
-          />
-        </label>
-        <label class="flex flex-col gap-1">
-          <span class="text-xs text-muted-foreground">Batch Size</span>
-          <Input
-            type="number"
-            class="h-8"
-            bind:value={$sdBatchSizeStore}
-            min="1"
-            max="8"
-          />
-        </label>
-        <label class="flex flex-col gap-1">
-          <span class="text-xs text-muted-foreground">Sampler</span>
-          <Select.Root
-            type="single"
-            value={$sdSamplerStore}
-            onValueChange={(v) => sdSamplerStore.set(v ?? "")}
-          >
-            <Select.Trigger class="h-8">{$sdSamplerStore || "Default"}</Select.Trigger>
-            <Select.Content>
-              <Select.Item value="">Default</Select.Item>
-              <Select.Item value="euler_a">euler_a</Select.Item>
-              <Select.Item value="euler">euler</Select.Item>
-              <Select.Item value="heun">heun</Select.Item>
-              <Select.Item value="dpm2">dpm2</Select.Item>
-              <Select.Item value="dpmpp2s_a">dpmpp2s_a</Select.Item>
-              <Select.Item value="dpmpp2m">dpmpp2m</Select.Item>
-              <Select.Item value="dpmpp2mv2">dpmpp2mv2</Select.Item>
-              <Select.Item value="ipndm">ipndm</Select.Item>
-              <Select.Item value="ipndm_v">ipndm_v</Select.Item>
-              <Select.Item value="lcm">lcm</Select.Item>
-              <Select.Item value="ddim_trailing">ddim_trailing</Select.Item>
-              <Select.Item value="tcd">tcd</Select.Item>
-            </Select.Content>
-          </Select.Root>
-        </label>
-        <label class="flex flex-col gap-1">
-          <span class="text-xs text-muted-foreground">Scheduler</span>
-          <Select.Root
-            type="single"
-            value={$sdSchedulerStore}
-            onValueChange={(v) => sdSchedulerStore.set(v ?? "")}
-          >
-            <Select.Trigger class="h-8">{$sdSchedulerStore || "Auto for model"}</Select.Trigger>
-            <Select.Content>
-              <Select.Item value="">Auto for model</Select.Item>
-              <Select.Item value="discrete">discrete</Select.Item>
-              <Select.Item value="karras">karras</Select.Item>
-              <Select.Item value="exponential">exponential</Select.Item>
-              <Select.Item value="ays">ays</Select.Item>
-              <Select.Item value="gits">gits</Select.Item>
-            </Select.Content>
-          </Select.Root>
-        </label>
+    <div class="max-h-[50%] shrink-0 overflow-y-auto rounded-lg border p-4">
+      <div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Field.Root label="Steps">
+          {#snippet control({ id })}
+            <Input {id} type="number" bind:value={$sdStepsStore} min="1" max="150" />
+          {/snippet}
+        </Field.Root>
+        <Field.Root label="CFG Scale">
+          {#snippet control({ id })}
+            <Input {id} type="number" bind:value={$sdCfgScaleStore} min="1" max="30" step="0.5" />
+          {/snippet}
+        </Field.Root>
+        <Field.Root label="Seed (-1 = random)">
+          {#snippet control({ id })}
+            <Input {id} type="number" bind:value={$sdSeedStore} min="-1" />
+          {/snippet}
+        </Field.Root>
+        <Field.Root label="Batch Size">
+          {#snippet control({ id })}
+            <Input {id} type="number" bind:value={$sdBatchSizeStore} min="1" max="8" />
+          {/snippet}
+        </Field.Root>
+        <Field.Root label="Sampler">
+          {#snippet control({ id })}
+            <NativeSelect {id} bind:value={$sdSamplerStore}>
+              <option value="">Default</option>
+              {#each SAMPLERS as sampler (sampler)}
+                <option value={sampler}>{sampler}</option>
+              {/each}
+            </NativeSelect>
+          {/snippet}
+        </Field.Root>
+        <Field.Root label="Scheduler">
+          {#snippet control({ id })}
+            <NativeSelect {id} bind:value={$sdSchedulerStore}>
+              <option value="">Auto for model</option>
+              {#each SCHEDULERS as scheduler (scheduler)}
+                <option value={scheduler}>{scheduler}</option>
+              {/each}
+            </NativeSelect>
+          {/snippet}
+        </Field.Root>
       </div>
 
-      <label class="flex flex-col gap-1 mb-3">
-        <span class="text-xs text-muted-foreground">Negative Prompt</span>
-        <Textarea
-          bind:value={$sdNegativePromptStore}
-          rows={2}
-          placeholder="Elements to avoid..."
-        ></Textarea>
-      </label>
+      <Field.Root label="Negative Prompt" class="mb-4">
+        {#snippet control({ id })}
+          <Textarea {id} bind:value={$sdNegativePromptStore} rows={2} placeholder="Elements to avoid..." />
+        {/snippet}
+      </Field.Root>
 
-      <!-- LoRA Selection -->
-      <div>
-        <span class="text-xs text-muted-foreground block mb-1">LoRAs</span>
-        <div class="flex items-center gap-2 mb-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onclick={loadLoras}
-            disabled={!$selectedModelStore || isLoadingLoras}
-          >
-            {isLoadingLoras ? "Loading..." : lorasLoaded ? "Reload LoRAs" : "Load LoRAs"}
-          </Button>
-          {#if lorasLoaded && availableLoras.length > 0}
-            <Select.Root
-              type="single"
-              value=""
-              onValueChange={(v) => {
-                if (v) {
-                  const lora = availableLoras.find((l) => l.path === v);
-                  if (lora && !selectedLoras.some((s) => s.path === v)) {
-                    selectedLoras = [...selectedLoras, { path: lora.path, multiplier: 1.0 }];
-                  }
+      <!-- LoRA selection -->
+      <h3 class="text-label text-muted-foreground mb-2 font-semibold uppercase">LoRAs</h3>
+      <div class="mb-2 flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onclick={loadLoras}
+          disabled={!$selectedModelStore || isLoadingLoras}
+        >
+          {isLoadingLoras ? "Loading..." : lorasLoaded ? "Reload LoRAs" : "Load LoRAs"}
+        </Button>
+        {#if lorasLoaded && availableLoras.length > 0}
+          <!-- Always shows the placeholder; picking an entry adds it to the list. -->
+          <NativeSelect
+            class="min-w-0 flex-1 basis-48"
+            aria-label="Add a LoRA"
+            value=""
+            onchange={(e) => {
+              const v = e.currentTarget.value;
+              if (v) {
+                const lora = availableLoras.find((l) => l.path === v);
+                if (lora && !selectedLoras.some((s) => s.path === v)) {
+                  selectedLoras = [...selectedLoras, { path: lora.path, multiplier: 1.0 }];
                 }
-              }}
-            >
-              <Select.Trigger class="h-8 flex-1">Add a LoRA...</Select.Trigger>
-              <Select.Content>
-                {#each availableLoras.filter((l) => !selectedLoras.some((s) => s.path === l.path)) as lora (lora.path)}
-                  <Select.Item value={lora.path}>{lora.name}</Select.Item>
-                {/each}
-              </Select.Content>
-            </Select.Root>
-          {/if}
-        </div>
-        {#if loraError}
-          <p class="text-xs text-destructive mb-1">{loraError}</p>
-        {/if}
-        {#if lorasLoaded && availableLoras.length === 0}
-          <p class="text-xs text-muted-foreground">No LoRAs available</p>
-        {/if}
-        {#if selectedLoras.length > 0}
-          <div class="flex flex-col gap-1.5">
-            {#each selectedLoras as lora}
-              <div class="flex items-center gap-2 text-sm">
-                <span class="flex-1 truncate">{getLoraName(lora.path)}</span>
-                <Input
-                  type="number"
-                  class="h-7 w-20 text-xs"
-                  value={lora.multiplier}
-                  oninput={(e) => updateLoraMultiplier(lora.path, parseFloat((e.target as HTMLInputElement).value) || 1)}
-                  min="0"
-                  max="2"
-                  step="0.1"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="h-7 px-1.5 text-xs hover:bg-destructive hover:text-destructive-foreground"
-                  onclick={() => removeLora(lora.path)}
-                  aria-label="Remove LoRA"
-                >
-                  <X class="size-3" />
-                </Button>
-              </div>
+              }
+              e.currentTarget.value = "";
+            }}
+          >
+            <option value="">Add a LoRA...</option>
+            {#each availableLoras.filter((l) => !selectedLoras.some((s) => s.path === l.path)) as lora (lora.path)}
+              <option value={lora.path}>{lora.name}</option>
             {/each}
-          </div>
+          </NativeSelect>
         {/if}
       </div>
+      {#if loraError}
+        <p class="text-destructive mb-1 text-xs">{loraError}</p>
+      {/if}
+      {#if lorasLoaded && availableLoras.length === 0}
+        <p class="text-muted-foreground text-xs">No LoRAs available</p>
+      {/if}
+      {#if selectedLoras.length > 0}
+        <div class="divide-y rounded-lg border">
+          {#each selectedLoras as lora}
+            <div class="flex items-center gap-2 px-3 py-2 text-sm">
+              <span class="flex-1 truncate font-mono text-[0.8125rem]">{getLoraName(lora.path)}</span>
+              <Input
+                type="number"
+                class="w-20"
+                aria-label="Multiplier"
+                value={lora.multiplier}
+                oninput={(e) => updateLoraMultiplier(lora.path, parseFloat((e.target as HTMLInputElement).value) || 1)}
+                min="0"
+                max="2"
+                step="0.1"
+              />
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                class="text-muted-foreground hover:text-destructive"
+                onclick={() => removeLora(lora.path)}
+                aria-label="Remove LoRA"
+              >
+                <X />
+              </Button>
+            </div>
+          {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 
-  <!-- Empty state for no models configured -->
   {#if !$hasListedModels}
-    <EmptyState message="No models configured. Add models to your configuration to generate images." />
+    <EmptyState title="No models configured" class="rounded-lg border" />
   {:else}
-    <!-- Image display area -->
-    <div class="flex-1 overflow-auto mb-4 flex items-center justify-center bg-background border border-border rounded-md">
+    <!-- Results -->
+    <div class="bg-background flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-lg border">
       {#if isGenerating}
-        <div class="text-center text-muted-foreground">
-          <div class="inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mb-2"></div>
+        <div class="text-muted-foreground flex flex-col items-center gap-2 text-sm">
+          <LoaderCircle class="size-6 animate-spin" />
           <p>Generating image...</p>
         </div>
       {:else if $error}
-        <div class="text-center text-destructive p-4">
-          <p class="font-medium">Error</p>
-          <p class="text-sm mt-1">{$error}</p>
+        <div class="w-full p-4">
+          <Alert.Root variant="destructive">
+            <CircleAlert />
+            <Alert.Title>{$error}</Alert.Title>
+          </Alert.Root>
         </div>
       {:else if generatedImages.length > 1}
-        <div class="grid grid-cols-2 gap-2 p-2 w-full h-full overflow-auto">
+        <div class="grid h-full w-full grid-cols-2 gap-2 overflow-auto p-2">
           {#each generatedImages as img, i}
             <div class="relative flex items-center justify-center">
               <button
-                class="p-0 border-0 bg-transparent cursor-pointer"
+                class="cursor-pointer border-0 bg-transparent p-0"
                 onclick={() => openFullscreen(i)}
                 aria-label="View fullscreen"
               >
                 <img
                   src={img}
                   alt="AI generated content {i + 1}"
-                  class="max-w-full max-h-full object-contain hover:opacity-90 transition-opacity"
+                  class="max-h-full max-w-full object-contain transition-opacity hover:opacity-90"
                 />
               </button>
               <Button
                 variant="secondary"
-                size="icon"
-                class="absolute bottom-2 right-2 h-8 w-8 bg-black/60 hover:bg-black/80 text-white"
+                size="icon-sm"
+                class="absolute right-2 bottom-2 bg-black/60 text-white hover:bg-black/80"
                 onclick={(e) => { e.stopPropagation(); downloadImage(i); }}
                 aria-label="Download image"
               >
-                <Download class="size-4" />
+                <Download />
               </Button>
             </div>
           {/each}
         </div>
       {:else if generatedImages.length === 1}
-        <div class="relative max-w-full max-h-full flex items-center justify-center">
+        <div class="relative flex max-h-full max-w-full items-center justify-center">
           <button
-            class="p-0 border-0 bg-transparent cursor-pointer"
+            class="cursor-pointer border-0 bg-transparent p-0"
             onclick={() => openFullscreen(0)}
             aria-label="View fullscreen"
           >
             <img
               src={generatedImages[0]}
               alt="AI generated content"
-              class="max-w-full max-h-full object-contain hover:opacity-90 transition-opacity"
+              class="max-h-full max-w-full object-contain transition-opacity hover:opacity-90"
             />
           </button>
           <Button
             variant="secondary"
-            size="icon"
-            class="absolute bottom-2 right-2 bg-black/60 hover:bg-black/80 text-white"
+            size="icon-sm"
+            class="absolute right-2 bottom-2 bg-black/60 text-white hover:bg-black/80"
             onclick={(e) => { e.stopPropagation(); downloadImage(0); }}
             aria-label="Download image"
           >
-            <Download class="size-5" />
+            <Download />
           </Button>
         </div>
       {:else}
-        <div class="text-center text-muted-foreground">
-          <p>Enter a prompt below to generate an image</p>
-        </div>
+        <EmptyState title="No image" full />
       {/if}
     </div>
 
-    <!-- Prompt input area -->
-    <div class="shrink-0 flex flex-col md:flex-row gap-2">
+    <!-- Prompt -->
+    <div class="flex shrink-0 flex-col gap-2 md:flex-row">
       <ExpandableTextarea
         bind:value={prompt}
         placeholder="Describe the image you want to generate..."
@@ -472,7 +419,7 @@
         onkeydown={handleKeyDown}
         disabled={isGenerating || !$selectedModelStore}
       />
-      <div class="flex flex-row md:flex-col gap-2">
+      <div class="flex flex-row gap-2 md:flex-col">
         {#if isGenerating}
           <Button variant="destructive" class="flex-1 md:flex-none" onclick={cancelGeneration}>
             Cancel
@@ -502,7 +449,7 @@
 <!-- Fullscreen dialog -->
 {#if showFullscreen && generatedImages[fullscreenIndex]}
   <div
-    class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
     onclick={(e) => closeFullscreen(e)}
     onkeydown={(e) => e.key === 'Escape' && closeFullscreen()}
     role="dialog"
@@ -512,16 +459,16 @@
     <Button
       variant="secondary"
       size="icon"
-      class="absolute top-4 right-4 bg-black/60 hover:bg-black/80 text-white"
+      class="absolute top-4 right-4 bg-black/60 text-white hover:bg-black/80"
       onclick={() => closeFullscreen()}
       aria-label="Close fullscreen"
     >
-      <X class="size-6" />
+      <X />
     </Button>
     <img
       src={generatedImages[fullscreenIndex]}
       alt="AI generated content"
-      class="max-w-full max-h-full object-contain pointer-events-none"
+      class="pointer-events-none max-h-full max-w-full object-contain"
     />
   </div>
 {/if}

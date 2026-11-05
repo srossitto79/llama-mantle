@@ -11,7 +11,7 @@
     matchAny?: boolean;
   }
 
-  let { value = $bindable(), placeholder = "Select a model...", disabled = false, capabilities, matchAny = false }: Props = $props();
+  let { value = $bindable(), placeholder = "Select a model", disabled = false, capabilities, matchAny = false }: Props = $props();
 
   let grouped = $derived(groupModels(
     $playgroundModels.filter((model) => model.playgroundType === "model" || model.playgroundType === "peer"),

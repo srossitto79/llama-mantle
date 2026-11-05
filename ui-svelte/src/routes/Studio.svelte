@@ -1,7 +1,10 @@
 <script lang="ts">
+  import * as NativeSelect from "$lib/components/ui/native-select/index.js";
   import { onMount } from "svelte";
-  import { Boxes, FileSearch, Loader2, Play, Square, Workflow } from "@lucide/svelte";
+  import { Loader2, Play, Square } from "@lucide/svelte";
   import * as Card from "$lib/components/ui/card/index.js";
+  import * as Alert from "$lib/components/ui/alert/index.js";
+  import { EmptyState } from "$lib/components/ui/empty-state/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Label from "$lib/components/ui/label/index.js";
@@ -17,12 +20,15 @@
     "Q4_K_M", "Q5_K_M", "Q6_K", "Q8_0", "Q4_0", "Q5_0",
     "IQ4_XS", "IQ4_NL", "IQ3_M", "IQ2_M", "TQ1_0", "TQ2_0", "F16", "BF16",
   ];
+  // Recipes: quantize = inspect, recommend a quantization, benchmark; train = validate dataset, train adapter,
+  // keep checkpoints; merge = TIES or evolutionary; prune = analyze importance, profiles, perplexity bound;
+  // evaluate = throughput or dataset perplexity against a baseline. Applying one only presets defaults.
   const recipes = [
-    { id: "quantize", title: "Fit a model to my hardware", description: "Inspect, recommend a quantization, then benchmark the result.", operation: "pipeline" as const },
-    { id: "train", title: "Fine-tune with QLoRA", description: "Validate a dataset, train an adapter, and retain checkpoints.", operation: "train" as const },
-    { id: "merge", title: "Merge model variants", description: "Combine compatible variants with TIES or evolutionary merging.", operation: "merge" as const },
-    { id: "prune", title: "Prune with a quality gate", description: "Analyze importance, create profiles, and bound perplexity loss.", operation: "prune" as const },
-    { id: "evaluate", title: "Compare a model", description: "Benchmark throughput or measure dataset perplexity against a baseline.", operation: "evaluate" as const },
+    { id: "quantize", title: "Fit a model to my hardware", operation: "pipeline" as const },
+    { id: "train", title: "Fine-tune with QLoRA", operation: "train" as const },
+    { id: "merge", title: "Merge model variants", operation: "merge" as const },
+    { id: "prune", title: "Prune with a quality gate", operation: "prune" as const },
+    { id: "evaluate", title: "Compare a model", operation: "evaluate" as const },
   ];
 
   let resources = $state<StudioResource[]>([]);
@@ -106,7 +112,6 @@
   let stopStream: (() => void) | null = null;
   let preflight = $state<StudioPreflightReport | null>(null);
   let preflightBusy = $state(false);
-  let showWelcome = $state(false);
   let activeRecipe = $state("");
 
   let jobLogs = $derived(job?.logs?.join("\n") ?? "");
@@ -214,8 +219,6 @@
     if (recipe.id === "prune") { prunePhase = "analyze"; pruneEvaluate = true; pruneValidate = true; }
     if (recipe.id === "evaluate") { evaluateMode = "benchmark"; repetitions = 5; }
   }
-
-  function dismissWelcome() { showWelcome = false; localStorage.setItem("llama-studio-welcome", "dismissed"); }
 
   async function selectModel(name: string) {
     preflight = null;
@@ -403,7 +406,6 @@
   }
 
   onMount(() => {
-	showWelcome = localStorage.getItem("llama-studio-welcome") !== "dismissed";
 	const preselectedModel = new URLSearchParams(window.location.search).get("model") ?? "";
     void listStudioResources().then((items) => {
       resources = items;
@@ -423,25 +425,21 @@
 </script>
 
 <Page.Root title="Llama Studio" width="full">
-  {#if showWelcome}
-    <Card.Root class="border-primary/40 bg-primary/5 shrink-0"><Card.Header><div class="flex gap-3"><div class="min-w-0 flex-1"><Card.Title>Welcome to Runner</Card.Title><Card.Description>Choose an outcome below. Runner will help select resources, check hardware fit, run the job, compare the result, and prepare it for serving.</Card.Description></div><Button size="sm" variant="ghost" onclick={dismissWelcome}>Dismiss</Button></div></Card.Header><Card.Content><ol class="grid gap-2 text-sm md:grid-cols-4"><li>1. Select or download a model</li><li>2. Choose a guided recipe</li><li>3. Check hardware fit</li><li>4. Run and review the artifacts</li></ol></Card.Content></Card.Root>
-  {/if}
-  <Card.Root class="shrink-0"><Card.Header><Card.Title>Start with an outcome</Card.Title><Card.Description>Recipes fill in safe defaults; every setting remains editable.</Card.Description></Card.Header><Card.Content class="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-    {#each recipes as recipe (recipe.id)}<button type="button" class="hover:bg-muted rounded-md border p-3 text-left" class:border-primary={activeRecipe === recipe.id} onclick={() => applyRecipe(recipe)}><span class="block text-sm font-medium">{recipe.title}</span><span class="text-muted-foreground mt-1 block text-xs">{recipe.description}</span></button>{/each}
-  </Card.Content></Card.Root>
   <Card.Root class="shrink-0 gap-0 py-0">
-    <Card.Header class="border-b px-4 py-3">
-      <div class="flex items-center gap-2">
-        <Workflow class="size-5" />
-        <Card.Title class="text-lg">Runner</Card.Title>
-        <span class="text-muted-foreground text-sm">GGUF model pipelines</span>
-      </div>
-    </Card.Header>
+    <div class="bg-(--panel-header-bg) flex items-center gap-2 border-b px-4 py-2.5"><h2 class="text-heading">Recipes</h2></div>
+    <div class="grid gap-px sm:grid-cols-2 xl:grid-cols-5">
+      {#each recipes as recipe (recipe.id)}
+        <button type="button" class="hover:bg-muted/50 px-4 py-3 text-left text-sm font-medium" class:bg-muted={activeRecipe === recipe.id} aria-pressed={activeRecipe === recipe.id} onclick={() => applyRecipe(recipe)}>{recipe.title}</button>
+      {/each}
+    </div>
+  </Card.Root>
+  <Card.Root class="shrink-0 gap-0 py-0">
+    <div class="bg-(--panel-header-bg) flex items-center gap-2 border-b px-4 py-2.5"><h2 class="text-heading">Runner</h2></div>
     <Card.Content class="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.7fr)]">
       <div class="space-y-4">
         <div class="space-y-2">
-          <Label.Root for="studio-operation">Tool/Recipe</Label.Root>
-          <select id="studio-operation" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+          <Label.Root for="studio-operation">Operation</Label.Root>
+          <NativeSelect.Root id="studio-operation"
             value={operation} onchange={(event) => selectOperation(event.currentTarget.value as typeof operation)} disabled={jobActive}>
             <option value="quantize">Quantize / requantize</option>
             <option value="pipeline">Pipeline: quantize and evaluate</option>
@@ -457,15 +455,15 @@
                 {#each pipelines as pipeline (pipeline.id)}<option value={`template:${pipeline.id}`}>{pipeline.name}</option>{/each}
               </optgroup>
             {/if}
-          </select>
+          </NativeSelect.Root>
         </div>
         <StudioResourcePicker id="studio-model" label="Input model" bind:value={input} {resources} types={["model"]} placeholder={loadingModels ? "Loading models…" : "Search models and generated artifacts"} disabled={loadingModels || jobActive} onValueChange={(value) => void selectModel(value)} />
 
         {#if input && ["quantize", "pipeline", "merge", "prune", "train", "export-lora", "evaluate"].includes(operation)}
-          <div class="border-border space-y-2 rounded-md border p-3">
-            <div class="flex items-center gap-2"><span class="text-sm font-medium">Hardware advisor</span><Button class="ml-auto" size="sm" variant="outline" onclick={runPreflight} disabled={preflightBusy}>{preflightBusy ? "Checking…" : "Check fit"}</Button></div>
+          <div class="space-y-2 border-y py-3">
+            <div class="flex items-center gap-2"><h3 class="text-label text-muted-foreground font-semibold uppercase">Hardware</h3><Button class="ml-auto" size="sm" variant="outline" onclick={runPreflight} disabled={preflightBusy}>{preflightBusy ? "Checking…" : "Check fit"}</Button></div>
             {#if preflight}
-              <div class="grid gap-2 text-xs sm:grid-cols-3">
+              <div class="grid gap-2 font-mono text-xs sm:grid-cols-3">
                 <span>RAM free: {preflight.hardware.ramKnown ? formatSize(preflight.hardware.freeRamBytes ?? 0) : "unknown"}</span>
                 <span>VRAM free: {preflight.hardware.vramKnown ? formatSize(preflight.hardware.freeVramBytes ?? 0) : "unknown"}</span>
                 <span>Disk free: {formatSize(preflight.hardware.diskFreeBytes ?? 0)}</span>
@@ -473,7 +471,7 @@
                 {#if preflight.estimatedRamBytes}<span>Peak RAM: ~{formatSize(preflight.estimatedRamBytes)}</span>{/if}
                 {#if preflight.estimatedVramBytes}<span>VRAM target: ~{formatSize(preflight.estimatedVramBytes)}</span>{/if}
               </div>
-              <p class={preflight.fits ? "text-success text-sm" : "text-destructive text-sm"}>{preflight.fits ? "This operation is expected to fit." : "This operation is not expected to fit with the current resources."}</p>
+              <p class={preflight.fits ? "text-success text-sm" : "text-destructive text-sm"}>{preflight.fits ? "Fits available resources" : "Exceeds available resources"}</p>
               {#each preflight.warnings ?? [] as warning}<p class="text-warning text-xs">{warning}</p>{/each}
               {#if Object.keys(preflight.recommendations).length}<div class="flex items-center gap-2"><span class="text-muted-foreground text-xs">Recommended: {Object.entries(preflight.recommendations).map(([key, value]) => `${key}=${value}`).join(" · ")}</span><Button class="ml-auto" size="sm" variant="secondary" onclick={applyPreflight}>Apply</Button></div>{/if}
             {/if}
@@ -490,15 +488,14 @@
         <div class="grid gap-3 sm:grid-cols-2">
           <div class="space-y-2">
             <Label.Root for="quant-type">Output type</Label.Root>
-            <select
+            <NativeSelect.Root
               id="quant-type"
-              class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
               value={quantType}
               onchange={(event) => selectQuantType(event.currentTarget.value)}
               disabled={jobActive}
             >
               {#each quantTypes as type}<option value={type}>{type}</option>{/each}
-            </select>
+            </NativeSelect.Root>
           </div>
           <div class="space-y-2">
             <Label.Root for="quant-threads">Threads</Label.Root>
@@ -509,7 +506,6 @@
         <div class="space-y-2">
           <Label.Root for="studio-output">Output model</Label.Root>
           <Input id="studio-output" bind:value={output} disabled={dryRun || jobActive} />
-          <p class="text-muted-foreground text-xs">Relative to the configured models directory. Existing files are never overwritten.</p>
         </div>
 
         <div class="space-y-2">
@@ -525,15 +521,13 @@
         </div>
 
         {#if allowRequantize}
-          <div class="border-warning/50 bg-warning/10 rounded-md border px-3 py-2 text-sm">
-            Requantizing an already quantized model can significantly reduce quality. Prefer an F16, BF16, or F32 source when available.
-          </div>
+          <Alert.Root variant="warning"><Alert.Description>Requantizing reduces quality. Prefer an F16, BF16 or F32 source.</Alert.Description></Alert.Root>
         {/if}
         {#if operation === "pipeline"}
-          <div class="border-border space-y-3 rounded-md border p-3">
+          <div class="space-y-3 border-t pt-4">
             <label class="flex items-center gap-2 text-sm font-medium"><Switch.Root checked={pipelineEvaluate} onCheckedChange={(value) => pipelineEvaluate = value} />Evaluate the generated model</label>
             {#if pipelineEvaluate}
-              <div class="space-y-2"><Label.Root for="pipeline-evaluate-mode">Evaluation</Label.Root><select id="pipeline-evaluate-mode" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={evaluateMode}><option value="benchmark">Performance benchmark</option><option value="perplexity">Dataset perplexity</option></select></div>
+              <div class="space-y-2"><Label.Root for="pipeline-evaluate-mode">Evaluation</Label.Root><NativeSelect.Root id="pipeline-evaluate-mode" bind:value={evaluateMode}><option value="benchmark">Performance benchmark</option><option value="perplexity">Dataset perplexity</option></NativeSelect.Root></div>
               {#if evaluateMode === "perplexity"}<StudioResourcePicker id="pipeline-dataset" label="Evaluation dataset" bind:value={evaluateDataset} {resources} types={["dataset"]} placeholder="Search datasets" />{/if}
             {/if}
           </div>
@@ -542,9 +536,9 @@
           <div class="grid gap-3 sm:grid-cols-2">
             <div class="space-y-2">
               <Label.Root for="hash-algorithm">Algorithm</Label.Root>
-              <select id="hash-algorithm" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={hashAlgorithm}>
+              <NativeSelect.Root id="hash-algorithm" bind:value={hashAlgorithm}>
                 <option value="sha256">SHA-256</option><option value="sha1">SHA-1</option><option value="xxh64">XXH64</option><option value="all">All</option>
-              </select>
+              </NativeSelect.Root>
             </div>
             <div class="space-y-3 pt-1">
               <label class="flex items-center gap-2 text-sm"><Switch.Root checked={hashNoLayer} onCheckedChange={(value) => hashNoLayer = value} />Skip per-layer hashes</label>
@@ -555,7 +549,6 @@
           <div class="space-y-2">
             <Label.Root for="studio-output">Output shard prefix</Label.Root>
             <Input id="studio-output" bind:value={output} disabled={jobActive} />
-            <p class="text-muted-foreground text-xs">All matching output shards must be new; Studio never overwrites an existing shard.</p>
           </div>
           <div class="grid gap-3 sm:grid-cols-2">
             <div class="space-y-2"><Label.Root for="split-tensors">Maximum tensors per shard</Label.Root><Input id="split-tensors" type="number" min="1" bind:value={splitMaxTensors} /></div>
@@ -568,16 +561,15 @@
         {:else if operation === "merge"}
           <div class="space-y-2">
             <Label.Root for="merge-models">Models to merge</Label.Root>
-            <select id="merge-models" multiple class="border-input bg-background min-h-28 w-full rounded-md border px-3 py-2 text-sm" bind:value={mergeModels} disabled={jobActive}>
+            <select id="merge-models" multiple class="border-input dark:bg-input/30 min-h-28 w-full rounded-lg border bg-transparent px-2.5 py-2 text-sm" bind:value={mergeModels} disabled={jobActive}>
               {#each resources.filter((resource) => resource.type === "model" && resource.exists && resource.path !== input) as model (model.path)}
                 <option value={model.path}>{model.path} · {formatSize(model.size)}</option>
               {/each}
             </select>
-            <p class="text-muted-foreground text-xs">Use Ctrl/Cmd to select multiple compatible model variants.</p>
           </div>
           <div class="space-y-2"><Label.Root for="merge-output">Output model</Label.Root><Input id="merge-output" bind:value={output} /></div>
           <div class="grid gap-3 sm:grid-cols-2">
-            <div class="space-y-2"><Label.Root for="merge-method">Method</Label.Root><select id="merge-method" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={mergeMethod}><option value="ties">TIES</option><option value="evo">Evolutionary</option></select></div>
+            <div class="space-y-2"><Label.Root for="merge-method">Method</Label.Root><NativeSelect.Root id="merge-method" bind:value={mergeMethod}><option value="ties">TIES</option><option value="evo">Evolutionary</option></NativeSelect.Root></div>
             <div class="space-y-2"><Label.Root for="merge-density">TIES density</Label.Root><Input id="merge-density" type="number" min="0.01" max="1" step="0.05" bind:value={mergeDensity} /></div>
             <div class="space-y-2"><Label.Root for="merge-memory">Worker memory budget</Label.Root><Input id="merge-memory" bind:value={mergeMemoryBudget} placeholder="2G" /></div>
             <div class="space-y-2"><Label.Root for="merge-threads">Threads</Label.Root><Input id="merge-threads" type="number" min="0" bind:value={threads} placeholder="Auto" /></div>
@@ -585,18 +577,18 @@
           {#if mergeMethod === "evo"}
             <div class="grid gap-3 sm:grid-cols-2">
               <StudioResourcePicker id="merge-calibration" label="Calibration dataset" bind:value={mergeCalibration} {resources} types={["dataset"]} placeholder="Search datasets" />
-              <div class="space-y-2"><Label.Root for="merge-target">Target type</Label.Root><select id="merge-target" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={mergeTargetType}><option value="q4_k">Q4_K</option><option value="q4_0">Q4_0</option><option value="q3_k">Q3_K</option><option value="mxfp4">MXFP4</option></select></div>
+              <div class="space-y-2"><Label.Root for="merge-target">Target type</Label.Root><NativeSelect.Root id="merge-target" bind:value={mergeTargetType}><option value="q4_k">Q4_K</option><option value="q4_0">Q4_0</option><option value="q3_k">Q3_K</option><option value="mxfp4">MXFP4</option></NativeSelect.Root></div>
             </div>
           {/if}
         {:else if operation === "prune"}
           <div class="space-y-2">
             <Label.Root for="prune-phase">Pruning phase</Label.Root>
-            <select id="prune-phase" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={prunePhase}>
+            <NativeSelect.Root id="prune-phase" bind:value={prunePhase}>
               <option value="analyze">1. Analyze model and dataset</option>
               <option value="profiles">2. Generate ratio profiles</option>
               <option value="inspect">3. Inspect a profile</option>
               <option value="hard">4. Create hard-pruned model</option>
-            </select>
+            </NativeSelect.Root>
           </div>
           {#if prunePhase === "analyze"}
             <StudioResourcePicker id="prune-dataset" label="Training / calibration dataset" bind:value={pruneDataset} {resources} types={["dataset"]} placeholder="Search datasets" />
@@ -645,14 +637,14 @@
             <div class="space-y-2"><Label.Root for="train-rank">LoRA rank</Label.Root><Input id="train-rank" type="number" min="1" bind:value={trainRank} /></div>
             <div class="space-y-2"><Label.Root for="train-alpha">LoRA alpha</Label.Root><Input id="train-alpha" type="number" min="0" bind:value={trainAlpha} placeholder="Use rank" /></div>
             <div class="space-y-2"><Label.Root for="train-save">Checkpoint every N windows</Label.Root><Input id="train-save" type="number" min="0" bind:value={trainSaveEvery} /></div>
-            <div class="space-y-2"><Label.Root for="train-optimizer">Optimizer</Label.Root><select id="train-optimizer" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={trainOptimizer}><option value="adamw">AdamW</option><option value="adamw_f16">AdamW F16</option><option value="adamw_q8_0">AdamW Q8_0</option><option value="adamw_q6_k">AdamW Q6_K</option><option value="adamw_iq4_nl">AdamW IQ4_NL</option><option value="sgd">SGD</option></select></div>
-            <div class="space-y-2"><Label.Root for="train-qat">LoRA fake quantization</Label.Root><select id="train-qat" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={trainQAT}><option value="none">None</option><option value="q4_k">Q4_K</option><option value="q4_0">Q4_0</option><option value="q3_k">Q3_K</option><option value="mxfp4">MXFP4</option><option value="q6_k">Q6_K</option><option value="q8_0">Q8_0</option></select></div>
-            <div class="space-y-2"><Label.Root for="train-scheduler">LR scheduler</Label.Root><select id="train-scheduler" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={trainScheduler}><option value="constant">Constant</option><option value="cosine">Cosine</option></select></div>
+            <div class="space-y-2"><Label.Root for="train-optimizer">Optimizer</Label.Root><NativeSelect.Root id="train-optimizer" bind:value={trainOptimizer}><option value="adamw">AdamW</option><option value="adamw_f16">AdamW F16</option><option value="adamw_q8_0">AdamW Q8_0</option><option value="adamw_q6_k">AdamW Q6_K</option><option value="adamw_iq4_nl">AdamW IQ4_NL</option><option value="sgd">SGD</option></NativeSelect.Root></div>
+            <div class="space-y-2"><Label.Root for="train-qat">LoRA fake quantization</Label.Root><NativeSelect.Root id="train-qat" bind:value={trainQAT}><option value="none">None</option><option value="q4_k">Q4_K</option><option value="q4_0">Q4_0</option><option value="q3_k">Q3_K</option><option value="mxfp4">MXFP4</option><option value="q6_k">Q6_K</option><option value="q8_0">Q8_0</option></NativeSelect.Root></div>
+            <div class="space-y-2"><Label.Root for="train-scheduler">LR scheduler</Label.Root><NativeSelect.Root id="train-scheduler" bind:value={trainScheduler}><option value="constant">Constant</option><option value="cosine">Cosine</option></NativeSelect.Root></div>
           </div>
           <div class="grid gap-3 sm:grid-cols-3">
-            <div class="space-y-2"><Label.Root for="train-context">Context size</Label.Root><Input id="train-context" type="number" min="0" bind:value={trainContextSize} /><p class="text-muted-foreground text-xs">0 uses the model training context.</p></div>
-            <div class="space-y-2"><Label.Root for="train-batch">Logical batch</Label.Root><Input id="train-batch" type="number" min="1" bind:value={trainBatchSize} /><p class="text-muted-foreground text-xs">Must divide the model training context exactly.</p></div>
-            <div class="space-y-2"><Label.Root for="train-ubatch">Physical micro-batch</Label.Root><Input id="train-ubatch" type="number" min="1" max={trainBatchSize} bind:value={trainUBatchSize} /><p class="text-muted-foreground text-xs">Lower this to reduce peak VRAM.</p></div>
+            <div class="space-y-2"><Label.Root for="train-context">Context size</Label.Root><Input id="train-context" type="number" min="0" bind:value={trainContextSize} /></div>
+            <div class="space-y-2"><Label.Root for="train-batch">Logical batch</Label.Root><Input id="train-batch" type="number" min="1" bind:value={trainBatchSize} /></div>
+            <div class="space-y-2"><Label.Root for="train-ubatch">Physical micro-batch</Label.Root><Input id="train-ubatch" type="number" min="1" max={trainBatchSize} bind:value={trainUBatchSize} /></div>
           </div>
           <div class="grid gap-3 sm:grid-cols-2">
             <label class="flex items-center gap-2 text-sm"><Switch.Root checked={trainShuffle} onCheckedChange={(value) => trainShuffle = value} />Shuffle dataset each epoch</label>
@@ -667,16 +659,16 @@
         {:else if operation === "export-lora"}
           <div class="space-y-2">
             <Label.Root for="export-adapters">LoRA adapters</Label.Root>
-            <select id="export-adapters" multiple class="border-input bg-background min-h-28 w-full rounded-md border px-3 py-2 text-sm" bind:value={exportAdapters}>
+            <select id="export-adapters" multiple class="border-input dark:bg-input/30 min-h-28 w-full rounded-lg border bg-transparent px-2.5 py-2 text-sm" bind:value={exportAdapters}>
               {#each resources.filter((resource) => ["adapter", "checkpoint"].includes(resource.type) && resource.exists) as model (model.path)}
                 <option value={model.path}>{model.path} · {model.kind} · {formatSize(model.size)}</option>
               {/each}
             </select>
           </div>
           <div class="space-y-2"><Label.Root for="export-output">Standalone GGUF output</Label.Root><Input id="export-output" bind:value={output} /></div>
-          <div class="space-y-2"><Label.Root for="export-type">Output tensor type</Label.Root><select id="export-type" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={exportType}><option value="F16">F16</option><option value="BF16">BF16</option><option value="F32">F32</option><option value="Q8_0">Q8_0</option><option value="Q6_K">Q6_K</option><option value="Q5_K">Q5_K</option><option value="Q4_K">Q4_K</option><option value="Q4_0">Q4_0</option><option value="Q3_K">Q3_K</option><option value="IQ4_NL">IQ4_NL</option><option value="MXFP4">MXFP4</option></select></div>
+          <div class="space-y-2"><Label.Root for="export-type">Output tensor type</Label.Root><NativeSelect.Root id="export-type" bind:value={exportType}><option value="F16">F16</option><option value="BF16">BF16</option><option value="F32">F32</option><option value="Q8_0">Q8_0</option><option value="Q6_K">Q6_K</option><option value="Q5_K">Q5_K</option><option value="Q4_K">Q4_K</option><option value="Q4_0">Q4_0</option><option value="Q3_K">Q3_K</option><option value="IQ4_NL">IQ4_NL</option><option value="MXFP4">MXFP4</option></NativeSelect.Root></div>
         {:else}
-          <div class="space-y-2"><Label.Root for="evaluate-mode">Evaluation</Label.Root><select id="evaluate-mode" class="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" bind:value={evaluateMode}><option value="benchmark">Performance benchmark</option><option value="perplexity">Dataset perplexity</option></select></div>
+          <div class="space-y-2"><Label.Root for="evaluate-mode">Evaluation</Label.Root><NativeSelect.Root id="evaluate-mode" bind:value={evaluateMode}><option value="benchmark">Performance benchmark</option><option value="perplexity">Dataset perplexity</option></NativeSelect.Root></div>
           {#if evaluateMode === "perplexity"}
             <StudioResourcePicker id="evaluate-dataset" label="Evaluation dataset" bind:value={evaluateDataset} {resources} types={["dataset"]} placeholder="Search datasets" />
             <div class="grid gap-3 sm:grid-cols-2">
@@ -702,7 +694,7 @@
           </div>
         {/if}
 
-        {#if error}<div class="border-destructive/40 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-sm">{error}</div>{/if}
+        {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
 
         <div class="flex justify-end gap-2">
           {#if jobActive}
@@ -715,10 +707,10 @@
         </div>
       </div>
 
-      <div class="min-h-56">
-        <div class="mb-2 flex items-center gap-2 text-sm font-medium"><FileSearch class="size-4" />Model inspection</div>
+      <div class="min-h-56 lg:border-l lg:pl-4">
+        <h3 class="text-label text-muted-foreground mb-3 font-semibold uppercase">Model inspection</h3>
         {#if inspecting}
-          <div class="text-muted-foreground flex items-center gap-2 text-sm"><Loader2 class="size-4 animate-spin" />Reading GGUF metadata…</div>
+          <div class="text-muted-foreground flex items-center gap-2 text-sm"><Loader2 class="size-4 animate-spin" />Reading metadata…</div>
         {:else if inspection}
           <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
             <dt class="text-muted-foreground">Name</dt><dd class="truncate" title={inspection.name}>{inspection.name}</dd>
@@ -730,7 +722,7 @@
             <dt class="text-muted-foreground">Modified</dt><dd>{new Date(inspection.modifiedAt).toLocaleString()}</dd>
           </dl>
         {:else}
-          <div class="text-muted-foreground flex h-40 flex-col items-center justify-center gap-2 text-sm"><Boxes class="size-8" />Select a GGUF model to inspect it.</div>
+          <EmptyState title="No model selected" class="h-40 flex-none" />
         {/if}
       </div>
     </Card.Content>
@@ -738,9 +730,9 @@
 
   {#if job}
     <Card.Root class="h-[min(40rem,70vh)] min-h-72 shrink-0 gap-0 py-0">
-      <Card.Header class="border-b px-4 py-3">
+      <Card.Header class="bg-(--panel-header-bg) border-b px-4 py-2.5">
         <div class="flex items-center gap-3">
-          <Card.Title class="text-sm capitalize">{job.operation ?? "Studio job"}</Card.Title>
+          <Card.Title class="text-heading capitalize">{job.operation ?? "Studio job"}</Card.Title>
           <span class="text-muted-foreground text-xs uppercase">{job.state}</span>
           <span class="text-muted-foreground ml-auto text-xs">{job.pct >= 0 ? `${job.pct}%` : ""}</span>
         </div>
@@ -751,12 +743,12 @@
         {#if job.artifacts?.length}
           <div class="flex flex-wrap gap-2">
             {#each job.artifacts as artifact (artifact.path)}
-              <span class="bg-muted rounded px-2 py-1 text-xs">{artifact.name} · {formatSize(artifact.size)}</span>
+              <span class="bg-muted rounded px-2 py-1 font-mono text-xs">{artifact.name} · {formatSize(artifact.size)}</span>
             {/each}
           </div>
         {/if}
         {#if job.operation === "train-qlora" && trainingMetrics.length}
-          <div class="border-border rounded-md border p-2"><div class="mb-1 flex text-xs"><span>Training loss</span><span class="text-muted-foreground ml-auto">latest {trainingMetrics.at(-1)?.loss.toPrecision(4)}{trainingMetrics.at(-1)?.learningRate ? ` · lr ${trainingMetrics.at(-1)?.learningRate}` : ""}</span></div><svg viewBox="0 0 300 84" class="h-20 w-full" role="img" aria-label="Training loss over time"><polyline points={lossPoints} fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" /></svg></div>
+          <div class="border-t pt-2"><div class="mb-1 flex text-xs"><span>Training loss</span><span class="text-muted-foreground ml-auto">latest {trainingMetrics.at(-1)?.loss.toPrecision(4)}{trainingMetrics.at(-1)?.learningRate ? ` · lr ${trainingMetrics.at(-1)?.learningRate}` : ""}</span></div><svg viewBox="0 0 300 84" class="h-20 w-full" role="img" aria-label="Training loss over time"><polyline points={lossPoints} fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" /></svg></div>
         {/if}
       </Card.Header>
       <Card.Content class="min-h-0 flex-1 p-0">

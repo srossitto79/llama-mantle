@@ -1,6 +1,5 @@
 <script lang="ts">
   import * as Card from "$lib/components/ui/card/index.js";
-  import { RANK_TIERS } from "$lib/intelligenceColors";
 
   interface Ranked { label: string; pct: number; color: string; time?: string }
   // spread is the gap (percentage points) between the best and worst compared
@@ -18,24 +17,25 @@
   let saturated = $derived(categories.filter(c => c.spread === 0));
 </script>
 
-<Card.Root class="py-0">
-  <Card.Content class="space-y-3 p-4">
-    <h3 class="text-sm font-medium">Best at</h3>
-    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+<Card.Root class="gap-0 py-0">
+  <div class="bg-(--panel-header-bg) flex items-center gap-2 border-b px-4 py-2.5">
+    <h2 class="text-heading">Best at</h2>
+  </div>
+  <Card.Content class="space-y-4 p-4">
+    <div class="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
       {#each discriminating as category (category.name)}
-        <div class="rounded-lg border p-3">
+        <div>
           <div class="mb-2 flex items-center justify-between gap-2">
-            <p class="truncate text-xs font-medium" title={category.name}>{category.name}</p>
-            <span class="text-muted-foreground shrink-0 text-[10px] tabular-nums" title="Gap between the best and worst compared model">spread {category.spread}</span>
+            <h3 class="text-label text-muted-foreground truncate font-semibold uppercase" title={category.name}>{category.name}</h3>
+            <span class="text-muted-foreground shrink-0 text-xs tabular-nums" title="Gap between the best and worst compared model">spread {category.spread}</span>
           </div>
           {#if category.tiedAtTop >= 3}
             <p class="text-muted-foreground text-xs">{category.tiedAtTop} tied at {category.ranked[0].pct}%</p>
           {:else}
             <div class="space-y-1.5">
               {#each category.ranked as entry, i (entry.label)}
-                {@const tier = RANK_TIERS[i]}
                 <div class="flex items-center gap-2 text-xs">
-                  <span class="flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white" style="background:{tier.color}" title={tier.label}>{i + 1}</span>
+                  <span class="flex size-4 shrink-0 items-center justify-center rounded-full text-[0.625rem] font-semibold tabular-nums {i === 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}">{i + 1}</span>
                   <span class="size-2 shrink-0 rounded-full" style="background:{entry.color}"></span>
                   <span class="truncate" title={entry.label}>{entry.label}</span>
                   <span class="text-muted-foreground ml-auto shrink-0 tabular-nums">{entry.pct}%{#if entry.time} · {entry.time}{/if}</span>

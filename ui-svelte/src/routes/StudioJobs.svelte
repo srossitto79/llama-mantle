@@ -4,6 +4,8 @@
   import { Loader2, RefreshCw, Square, Timer } from "@lucide/svelte";
   import * as Page from "$lib/components/ui/page/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
+  import * as Alert from "$lib/components/ui/alert/index.js";
+  import { EmptyState } from "$lib/components/ui/empty-state/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { cancelStudioJob, getStudioScheduler, listTasks, retryStudioPipeline } from "../lib/mantleApi";
   import type { MantleTask, StudioSchedulerStatus } from "../lib/types";
@@ -81,36 +83,35 @@
   {/snippet}
 
   {#if scheduler}
-    <div class="grid gap-3 sm:grid-cols-4">
-      <Card.Root class="gap-1 px-4 py-3"><span class="text-muted-foreground text-xs">Running</span><span class="text-xl font-semibold">{scheduler.running} / {scheduler.maxRunning}</span></Card.Root>
-      <Card.Root class="gap-1 px-4 py-3"><span class="text-muted-foreground text-xs">Heavy jobs</span><span class="text-xl font-semibold">{scheduler.heavyRunning} / {scheduler.maxHeavy}</span></Card.Root>
-      <Card.Root class="gap-1 px-4 py-3"><span class="text-muted-foreground text-xs">Queued</span><span class="text-xl font-semibold">{scheduler.queued}</span></Card.Root>
-      <Card.Root class="gap-1 px-4 py-3"><span class="text-muted-foreground text-xs">Resource blocked</span><span class="text-xl font-semibold">{scheduler.blocked}</span></Card.Root>
+    <div class="grid gap-(--page-gap) sm:grid-cols-4">
+      {#each [["Running", `${scheduler.running} / ${scheduler.maxRunning}`], ["Heavy", `${scheduler.heavyRunning} / ${scheduler.maxHeavy}`], ["Queued", `${scheduler.queued}`], ["Blocked", `${scheduler.blocked}`]] as [label, value]}
+        <Card.Root class="gap-1 px-4 py-3"><span class="text-label text-muted-foreground uppercase">{label}</span><span class="text-xl font-semibold tabular-nums">{value}</span></Card.Root>
+      {/each}
     </div>
-    {#if scheduler.blockedReason}<div class="border-warning/40 bg-warning/10 rounded-md border px-3 py-2 text-sm">{scheduler.blockedReason}</div>{/if}
+    {#if scheduler.blockedReason}<Alert.Root variant="warning"><Alert.Description>{scheduler.blockedReason}</Alert.Description></Alert.Root>{/if}
   {/if}
 
-  {#if error}<div class="border-destructive/40 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-sm">{error}</div>{/if}
+  {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
 
   <Card.Root class="min-h-0 flex-1 gap-0 overflow-hidden py-0">
     <div class="min-h-0 flex-1 overflow-auto">
       {#if loading}
-        <div class="text-muted-foreground flex h-40 items-center justify-center gap-2"><Loader2 class="size-4 animate-spin" />Loading jobs…</div>
+        <div class="text-muted-foreground flex h-40 items-center justify-center gap-2"><Loader2 class="size-4 animate-spin" />Loading…</div>
       {:else if jobs.length === 0}
-        <div class="text-muted-foreground flex h-40 items-center justify-center">No Studio jobs yet.</div>
+        <EmptyState title="No jobs" />
       {:else}
         <table class="w-full text-left text-sm">
-          <thead class="bg-muted/60 sticky top-0">
-            <tr><th class="px-3 py-2">Operation</th><th class="px-3 py-2">Class</th><th class="px-3 py-2">State</th><th class="px-3 py-2">Progress</th><th class="px-3 py-2">Duration</th><th class="px-3 py-2">Created</th><th class="px-3 py-2"></th></tr>
+          <thead class="bg-(--panel-header-bg) text-muted-foreground sticky top-0 border-b text-xs">
+            <tr><th class="px-3 py-2 font-medium">Operation</th><th class="px-3 py-2 font-medium">Class</th><th class="px-3 py-2 font-medium">State</th><th class="px-3 py-2 font-medium">Progress</th><th class="px-3 py-2 font-medium">Duration</th><th class="px-3 py-2 font-medium">Created</th><th class="px-3 py-2 font-medium"></th></tr>
           </thead>
-          <tbody>
+          <tbody class="divide-y">
             {#each jobs as job (job.id)}
-              <tr class="border-t">
-                <td class="max-w-64 px-3 py-2"><div class="font-medium">{job.operation ?? "Studio"}</div><div class="text-muted-foreground truncate text-xs">{job.input}{job.output ? " → " + job.output : ""}</div></td>
+              <tr class="hover:bg-muted/50">
+                <td class="max-w-64 px-3 py-2"><div class="font-medium">{job.operation ?? "Studio"}</div><div class="text-muted-foreground truncate font-mono text-xs">{job.input}{job.output ? " → " + job.output : ""}</div></td>
                 <td class="px-3 py-2 uppercase text-xs">{job.jobClass ?? "—"}</td>
-                <td class="px-3 py-2"><span class="bg-muted rounded px-2 py-1 text-xs uppercase">{job.state}</span></td>
+                <td class="px-3 py-2"><span class="inline-flex items-center gap-2 text-xs capitalize"><span class="size-2 rounded-full {job.state === 'running' ? 'bg-primary' : job.state === 'completed' ? 'bg-success' : job.state === 'failed' ? 'bg-destructive' : 'bg-muted-foreground/40'}" aria-hidden="true"></span>{job.state}</span></td>
                 <td class="min-w-28 px-3 py-2"><div class="bg-muted h-1.5 overflow-hidden rounded-full"><div class="bg-primary h-full" style:width={Math.max(0, job.pct) + "%"}></div></div><div class="text-muted-foreground mt-1 truncate text-xs">{job.message}</div></td>
-                <td class="px-3 py-2"><span class="inline-flex items-center gap-1"><Timer class="size-3" />{duration(job)}</span></td>
+                <td class="px-3 py-2 tabular-nums"><span class="inline-flex items-center gap-1"><Timer class="size-3" />{duration(job)}</span></td>
                 <td class="px-3 py-2 text-xs">{new Date(job.createdAt).toLocaleString()}</td>
                 <td class="px-3 py-2"><div class="flex gap-1">{#if isActive(job)}<Button variant="destructive" size="sm" onclick={() => cancel(job)}><Square class="size-3" />Cancel</Button>{:else if job.state === "failed" && job.operation === "pipeline"}<Button variant="outline" size="sm" onclick={() => retryPipeline(job)}>Retry failed step</Button>{:else if job.state === "completed" && job.output}{#if isGGUFOutput(job)}<Button variant="outline" size="sm" onclick={() => useOutput(job)}>Use output</Button>{/if}<Button variant="outline" size="sm" onclick={() => useOutputInPipeline(job)}>Use in pipeline</Button>{/if}</div></td>
               </tr>

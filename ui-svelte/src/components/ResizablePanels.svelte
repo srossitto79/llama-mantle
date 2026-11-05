@@ -108,8 +108,8 @@
 
   let handleClass = $derived(
     direction === "horizontal"
-      ? "w-2 h-full cursor-col-resize"
-      : "w-full h-2 cursor-row-resize"
+      ? "w-1.5 h-full cursor-col-resize"
+      : "w-full h-1.5 cursor-row-resize"
   );
 
   let leftStyle = $derived(
@@ -135,7 +135,7 @@
   <div
     role="separator"
     tabindex="0"
-    class="{handleClass} bg-primary hover:bg-success transition-colors rounded-md flex-shrink-0"
+    class="{handleClass} bg-border hover:bg-primary focus-visible:bg-primary rounded-md transition-colors shrink-0 outline-none"
     onmousedown={handleMouseDown}
     ontouchstart={handleTouchStart}
     onkeydown={handleKeyDown}

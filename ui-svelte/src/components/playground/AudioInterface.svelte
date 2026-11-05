@@ -4,9 +4,10 @@
   import { transcribeAudio } from "../../lib/audioApi";
   import { playgroundStores } from "../../stores/playgroundActivity";
   import ModelSelector from "./ModelSelector.svelte";
-  import EmptyState from "../EmptyState.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
-  import { Copy, Check } from "@lucide/svelte";
+  import * as Alert from "$lib/components/ui/alert/index.js";
+  import { EmptyState } from "$lib/components/ui/empty-state/index.js";
+  import { CircleAlert, Copy, Check, LoaderCircle } from "@lucide/svelte";
   import { formatFileSize } from "../../lib/format";
   import { copyText } from "../../lib/clipboard";
 
@@ -118,37 +119,39 @@
   }
 </script>
 
-<div class="flex flex-col h-full">
-  <!-- Model selector -->
-  <div class="shrink-0 flex flex-wrap gap-2 mb-4">
+<div class="flex h-full min-h-0 flex-col gap-3">
+  <!-- Toolbar -->
+  <div class="bg-(--panel-header-bg) flex shrink-0 flex-wrap items-center gap-2 rounded-lg border px-3 py-2">
     <ModelSelector bind:value={$selectedModelStore} placeholder="Select an audio model..." disabled={isTranscribing} capabilities={["audio_transcriptions"]} />
   </div>
 
-  <!-- Empty state for no models configured -->
   {#if !$hasListedModels}
-    <EmptyState message="No models configured. Add models to your configuration to transcribe audio." />
+    <EmptyState title="No models configured" class="rounded-lg border" />
   {:else}
-    <!-- File upload / Result display area -->
-    <div class="flex-1 overflow-auto mb-4 flex items-center justify-center bg-background border border-border rounded-md">
+    <!-- File / result -->
+    <div class="bg-background flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-lg border">
       {#if isTranscribing}
-        <div class="text-center text-muted-foreground">
-          <div class="inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mb-2"></div>
+        <div class="text-muted-foreground flex flex-col items-center gap-2 text-sm">
+          <LoaderCircle class="size-6 animate-spin" />
           <p>Transcribing audio...</p>
         </div>
       {:else if $error}
-        <div class="text-center text-destructive p-4">
-          <p class="font-medium">Error</p>
-          <p class="text-sm mt-1">{$error}</p>
+        <div class="w-full p-4">
+          <Alert.Root variant="destructive">
+            <CircleAlert />
+            <Alert.Title>{$error}</Alert.Title>
+          </Alert.Root>
         </div>
       {:else if transcriptionResult}
-        <div class="w-full h-full flex flex-col p-4">
-          <div class="flex justify-between items-center mb-2">
-            <h3 class="font-medium">Transcription Result</h3>
+        <div class="flex h-full w-full flex-col">
+          <div class="bg-(--panel-header-bg) flex items-center gap-2 border-b px-4 py-2.5">
+            <h2 class="text-heading flex-1">Transcription</h2>
             <Button
               variant="outline"
               size="icon-sm"
               onclick={copyToClipboard}
-              title={copied ? 'Copied!' : 'Copy to clipboard'}
+              aria-label="Copy to clipboard"
+              title={copied ? 'Copied' : 'Copy to clipboard'}
             >
               {#if copied}
                 <Check class="text-success" />
@@ -157,36 +160,32 @@
               {/if}
             </Button>
           </div>
-          <div class="flex-1 overflow-auto p-3 rounded-md border border-border bg-background whitespace-pre-wrap">
+          <div class="flex-1 overflow-auto p-4 text-sm whitespace-pre-wrap">
             {transcriptionResult}
           </div>
         </div>
       {:else if selectedFile}
-        <div class="text-center text-muted-foreground p-4">
-          <p class="font-medium mb-2">File Selected</p>
-          <p class="text-sm">{selectedFile.name}</p>
-          <p class="text-xs mt-1">{formatFileSize(selectedFile.size)}</p>
+        <div class="flex flex-col items-center gap-1 p-4 text-center">
+          <h3 class="text-label text-muted-foreground font-semibold uppercase">File</h3>
+          <p class="font-mono text-[0.8125rem]">{selectedFile.name}</p>
+          <p class="text-muted-foreground text-xs tabular-nums">{formatFileSize(selectedFile.size)}</p>
         </div>
       {:else}
         <div
           role="region"
           aria-label="Audio file drop zone"
-          class="w-full h-full flex items-center justify-center text-center text-muted-foreground p-8 {isDragging ? 'bg-primary/10' : ''}"
+          class="flex h-full w-full items-center justify-center {isDragging ? 'bg-primary/10' : ''}"
           ondragover={handleDragOver}
           ondragleave={handleDragLeave}
           ondrop={handleDrop}
         >
-          <div>
-            <p class="mb-2">Drag and drop an audio file here</p>
-            <p class="text-sm">or use the Browse button below</p>
-            <p class="text-xs mt-4">Accepted formats: MP3, WAV, OGG (max 25MB)</p>
-          </div>
+          <EmptyState title="Drop an audio file" description="MP3, WAV, OGG. Maximum 25MB." full />
         </div>
       {/if}
     </div>
 
-    <!-- File input and transcribe button -->
-    <div class="shrink-0 flex gap-2">
+    <!-- Actions -->
+    <div class="flex shrink-0 flex-wrap items-center gap-2">
       <input
         type="file"
         accept=".mp3,.wav,.ogg"
@@ -195,7 +194,7 @@
         bind:this={fileInput}
       />
       <Button variant="outline" onclick={() => fileInput?.click()} disabled={isTranscribing}>
-        Browse Files
+        Browse
       </Button>
       <div class="flex-1"></div>
       {#if isTranscribing}
