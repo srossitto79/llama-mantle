@@ -4,7 +4,10 @@ export const REASONING_EFFORTS = ["off", "low", "medium", "high", "xhigh", "thin
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
 export interface IntelligenceConfig {
-  models: { id: string; name: string }[];
+  models: { id: string; name: string; reasoning_effort?: string | null }[];
+  /** The whole suite catalog; each item lists the profiles that run it. */
+  items?: { id: string; title: string; category: string; profiles?: string[]; requires?: string | null }[];
+  categories?: { id: string; name: string }[];
   profiles: { id: string; description: string }[];
   defaults: { temperature: number; max_tokens: number; timeout: number };
 }
@@ -14,7 +17,9 @@ export interface IntelligenceRun {
   started_at: number;
   suite_sha256?: string;
   params: { profile: string; models: string[] };
-  settings?: { temperature: number; max_tokens: number; timeout: number; reasoning_effort?: string };
+  settings?: { temperature: number; max_tokens: number; timeout: number; reasoning_effort?: string | null };
+  /** The service's model configuration when the run started (per-model overrides). */
+  model_config?: { id: string; name: string; reasoning_effort?: string | null; temperature?: number | null }[];
   totals?: { items_done: number; items_total: number; score: number; max_score: number };
   current?: { title: string; model_id: string; item_id: string; content: string; reasoning: string; content_chars: number; reasoning_chars: number };
   // Per-model progress, appended item by item as the run proceeds.
@@ -88,6 +93,9 @@ export type HumanScores = Record<string, Record<string, number>>;
 export interface IntelligenceResultModel {
   model_id: string; model_name: string; items: IntelligenceItem[];
   reasoning_effort?: string | null;
+  temperature?: number | null;
+  /** When the result file was last written (ISO 8601). */
+  timestamp?: string;
   context?: number | string | null;
   provider?: string | null;
   totals: {

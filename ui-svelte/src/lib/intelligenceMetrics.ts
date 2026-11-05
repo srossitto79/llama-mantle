@@ -43,14 +43,14 @@ function configParts(result: IntelligenceResult, model: IntelligenceResultModel)
 }
 
 /**
- * A label states what differs across the compared set and nothing else -- a bare
- * model name when every entry shares the same effort, `Model · high` only once
- * efforts actually diverge. Appending every dimension unconditionally (or a date
+ * A label states what identifies a row and nothing else: the effort whenever
+ * any compared model has one (`Model · high`, `Model · default`), the other
+ * dimensions only once they diverge. Appending every dimension unconditionally (or a date
  * that never repeats) would just be noise on the common case of one run.
  */
 function labelFor(name: string, parts: ConfigParts, varying: Set<keyof ConfigParts>): string {
   const suffixes: string[] = [];
-  if (varying.has("effort") && parts.effort) suffixes.push(parts.effort);
+  if (varying.has("effort")) suffixes.push(parts.effort || "default");
   if (varying.has("temperature") && parts.temperature) suffixes.push(`t=${parts.temperature}`);
   if (varying.has("context") && parts.context) suffixes.push(parts.context);
   if (varying.has("provider") && parts.provider) suffixes.push(parts.provider);
@@ -461,9 +461,13 @@ export function resolveModels(
   // the label -- see labelFor.
   const varying = new Set<keyof ConfigParts>();
   const allParts = entries.map(e => configParts(e.result, e.model));
-  for (const dim of ["effort", "temperature", "context", "provider"] as const) {
+  for (const dim of ["temperature", "context", "provider"] as const) {
     if (new Set(allParts.map(p => p[dim])).size > 1) varying.add(dim);
   }
+  // Effort is shown whenever any compared model has one: two runs of the same
+  // model at different efforts are different subjects, and a lone "xhigh" run
+  // must still say so.
+  if (allParts.some(p => p.effort)) varying.add("effort");
 
   if (mode === "all") {
     return entries.map(entry => {
@@ -503,4 +507,49 @@ export interface FrontierPoint { x: number; y: number }
 export function paretoFrontier<T extends FrontierPoint>(points: T[]): boolean[] {
   return points.map(p =>
     !points.some(o => o !== p && o.x <= p.x && o.y >= p.y && (o.x < p.x || o.y > p.y)));
+}
+
+/** The effort a run asked for, as shown in the run list. */
+export function runEffort(run: { settings?: { reasoning_effort?: string | null } }): string {
+  return run.settings?.reasoning_effort || "default";
+}
+
+/** A model result a run holds that was not answered under that run's settings. */
+export interface ForeignResult {
+  runID: string;
+  modelName: string;
+  recordedEffort: string;
+  expectedEffort: string;
+}
+
+/**
+ * Splits off model results recorded under a different effort or temperature
+ * than their run asked for. The service seeds a run that reuses answers with
+ * each model's latest result file, whatever effort that file was answered at;
+ * a run stopped before the model wrote its own result keeps that other run's
+ * file. Comparing it would credit one effort's scores to another.
+ */
+export function splitForeignResults(result: IntelligenceResult): { result: IntelligenceResult; foreign: ForeignResult[] } {
+  const run = result.run;
+  const overrides = new Map((run.model_config ?? []).map(m => [m.id, m]));
+  const foreign: ForeignResult[] = [];
+  const models = result.models.filter(model => {
+    const own = overrides.get(model.model_id);
+    const expectedEffort = own?.reasoning_effort ?? run.settings?.reasoning_effort ?? null;
+    const recordedEffort = model.reasoning_effort ?? null;
+    const expectedTemp = own?.temperature ?? run.settings?.temperature;
+    const recordedTemp = model.temperature;
+    const effortDiffers = recordedEffort !== expectedEffort;
+    // Temperature is compared only when both sides recorded one.
+    const tempDiffers = typeof recordedTemp === "number" && typeof expectedTemp === "number" && Math.abs(recordedTemp - expectedTemp) > 1e-9;
+    if (!effortDiffers && !tempDiffers) return true;
+    foreign.push({
+      runID: run.run_id,
+      modelName: model.model_name,
+      recordedEffort: recordedEffort ?? "default",
+      expectedEffort: expectedEffort ?? "default",
+    });
+    return false;
+  });
+  return { result: { ...result, models }, foreign };
 }

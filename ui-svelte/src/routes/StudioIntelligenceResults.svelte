@@ -15,12 +15,17 @@
   import IntelligenceMeter from "../components/IntelligenceMeter.svelte";
   import { CategoricalAssignment, OUTCOME } from "$lib/intelligenceColors";
   import { isDarkMode } from "../stores/theme";
-  import { configKey, resolveModels, type Coverage, type DuplicateMode, type ResolvedModel } from "$lib/intelligenceMetrics";
+  import { configKey, resolveModels, runEffort, splitForeignResults, type ForeignResult, type Coverage, type DuplicateMode, type ResolvedModel } from "$lib/intelligenceMetrics";
+  import { NativeSelect } from "$lib/components/ui/native-select/index.js";
+  import Tag from "../components/Tag.svelte";
   import { deleteIntelligenceRun, intelligenceRequest, intelligenceURL, loadHumanScores, needsHumanScore, saveHumanScore, type HumanScores, type IntelligenceItem, type IntelligenceRun, type IntelligenceResult } from "$lib/intelligenceApi";
 
   let runs = $state<IntelligenceRun[]>([]);
   let selected = $state<string[]>([]);
   let results = $state<IntelligenceResult[]>([]);
+  // Model results a run holds that were answered under other settings; left
+  // out of every panel (see splitForeignResults).
+  let foreign = $state<ForeignResult[]>([]);
   let filter = $state("");
   let error = $state("");
   let busy = $state(false);
@@ -29,7 +34,17 @@
   let savingScore = $state("");
   let duplicateMode = $state<DuplicateMode>("latest");
   let generation = 0;
-  let visible = $derived(runs.filter(r => `${r.params.profile} ${r.state} ${new Date(r.started_at * 1000).toLocaleString()}`.toLowerCase().includes(filter.toLowerCase())));
+  // Effort is part of what a run measured: the same model at low and at high
+  // effort are different subjects, so the list can be narrowed to one effort.
+  let effortFilter = $state("");
+  let runEfforts = $derived([...new Set(runs.map(runEffort))].sort());
+  let visible = $derived(runs.filter(r =>
+    (!effortFilter || runEffort(r) === effortFilter)
+    && `${r.params.profile} ${r.state} ${runEffort(r)} ${runModelNames(r)} ${new Date(r.started_at * 1000).toLocaleString()}`.toLowerCase().includes(filter.toLowerCase())));
+
+  function runModelNames(run: IntelligenceRun): string {
+    return run.models?.length ? run.models.map(m => m.name).join(", ") : `${run.params.models.length} models`;
+  }
   // suite_sha256 alone misses the common case: it hashes the companion's entire
   // unfiltered catalog, which is identical across every profile run from the
   // same suite version. Comparing a `quick` run (a handful of items) against a
@@ -287,7 +302,12 @@
     busy = true;
     try {
       const loaded = await Promise.all(selected.map(id => intelligenceRequest<IntelligenceResult>(`runs/${id}`)));
-      if (request === generation) { results = loaded; error = ""; }
+      if (request === generation) {
+        const split = loaded.map(splitForeignResults);
+        results = split.map(s => s.result);
+        foreign = split.flatMap(s => s.foreign);
+        error = "";
+      }
     } catch (e) { if (request === generation) error = String(e); }
     finally { if (request === generation) busy = false; }
   }
@@ -357,7 +377,15 @@
   <Card.Root class="gap-0 py-0">
     <div class="bg-(--panel-header-bg) flex flex-wrap items-center gap-3 border-b px-4 py-2.5">
       <h2 class="text-heading">Runs</h2>
-      <Input class="ml-auto h-8 max-w-xs" aria-label="Filter runs" placeholder="Profile, date or status" bind:value={filter} />
+      <div class="ml-auto flex w-full flex-wrap gap-2 sm:w-auto">
+        {#if runEfforts.length > 1}
+          <NativeSelect class="w-full sm:w-40" aria-label="Effort" bind:value={effortFilter}>
+            <option value="">All efforts</option>
+            {#each runEfforts as e (e)}<option value={e}>{e}</option>{/each}
+          </NativeSelect>
+        {/if}
+        <Input class="h-8 w-full sm:w-64" aria-label="Filter runs" placeholder="Model, profile, date or status" bind:value={filter} />
+      </div>
     </div>
     <div class="max-h-56 overflow-auto">
       <ul class="divide-y">
@@ -368,8 +396,8 @@
               <span class="tabular-nums">{new Date(run.started_at * 1000).toLocaleString()}</span>
               <span class="font-medium">{run.params.profile}</span>
               <Badge variant={STATE_VARIANT[run.state] ?? "outline"}>{run.state}</Badge>
-              <span class="text-muted-foreground">{run.params.models.length} models</span>
-              <span class="grow"></span>
+              <span title="Thinking effort"><Tag class="font-mono text-[0.6875rem]">{runEffort(run)}</Tag></span>
+              <span class="text-muted-foreground min-w-0 flex-1 basis-48 truncate" title={runModelNames(run)}>{runModelNames(run)}</span>
               <Button size="icon-sm" variant="ghost" title="Delete run" aria-label="Delete run" disabled={deletingID === run.run_id || run.state === "starting" || run.state === "running"} onclick={() => removeRun(run.run_id)}><Trash2 class="text-destructive size-4" /></Button>
             </label>
           </li>
@@ -381,6 +409,18 @@
   </Card.Root>
 
   <!-- Attempted totals exclude unsupported, diagnostic and unscored rubric items; profiles or coverage that differ are not directly comparable. -->
+  {#if foreign.length}
+    <Alert.Root>
+      <Alert.Title>{foreign.length === 1 ? "1 result excluded" : `${foreign.length} results excluded`}: answered under other settings than their run</Alert.Title>
+      <Alert.Description>
+        <ul class="font-mono text-xs">
+          {#each foreign as f (f.runID + f.modelName)}
+            <li>{f.modelName} · effort {f.recordedEffort}, run {f.expectedEffort} · ({new Date((runs.find(r => r.run_id === f.runID)?.started_at ?? 0) * 1000).toLocaleString()})</li>
+          {/each}
+        </ul>
+      </Alert.Description>
+    </Alert.Root>
+  {/if}
   {#if differentSuites}<Alert.Root><Alert.Description>These runs cover different items. Check coverage before comparing scores.</Alert.Description></Alert.Root>{/if}
 
   {#if hasDuplicates}

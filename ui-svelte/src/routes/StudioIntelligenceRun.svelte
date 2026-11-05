@@ -8,6 +8,8 @@
   import * as Field from "$lib/components/ui/field/index.js";
   import { NativeSelect } from "$lib/components/ui/native-select/index.js";
   import IntelligenceRunHeatmap from "../components/IntelligenceRunHeatmap.svelte";
+  import IntelligenceTestPicker from "../components/IntelligenceTestPicker.svelte";
+  import { profileItems, runItems } from "$lib/intelligenceSelection";
   import { shouldAutoScroll } from "$lib/scroll";
   import { intelligenceRequest, intelligenceURL, REASONING_EFFORTS, type IntelligenceConfig, type IntelligenceRun, type IntelligenceDownload } from "$lib/intelligenceApi";
 
@@ -33,6 +35,7 @@ function suiteLabel(kind: string): string {
     selected: string[]; profile: string; useCustomTemperature: boolean;
     temperature: number; timeout: number; maxTokens: number;
     reasoningEffort: string; resume: boolean; retryFailed: boolean; retryUnsupported: boolean;
+    allTests?: boolean; tests?: string[];
   }
   function loadCache<T>(key: string): T | null {
     try {
@@ -57,6 +60,8 @@ function suiteLabel(kind: string): string {
   let resume = $state(cachedForm?.resume ?? false);
   let retryFailed = $state(cachedForm?.retryFailed ?? false);
   let retryUnsupported = $state(cachedForm?.retryUnsupported ?? false);
+  let allTests = $state(cachedForm?.allTests ?? true);
+  let selectedTests = $state<Set<string>>(new Set(cachedForm?.tests ?? []));
   // Seeded from cache so the heatmap and progress bar render immediately on
   // mount instead of going blank until the first /run/status resolves.
   let run = $state<IntelligenceRun | null>(loadCache<IntelligenceRun>(RUN_CACHE_KEY));
@@ -73,6 +78,8 @@ function suiteLabel(kind: string): string {
   let wasAtBottom = $state(true);
   let active = $derived(run?.state === "starting" || run?.state === "running");
   let blocked = $derived(busy || active || download.state === "running");
+  let testsInProfile = $derived(config ? profileItems(config.items ?? [], profile) : []);
+  let testsToRun = $derived(runItems(allTests, selectedTests, testsInProfile));
   let filteredModels = $derived(
     config?.models.filter(m => m.name.toLowerCase().includes(modelFilter.trim().toLowerCase())) ?? [],
   );
@@ -164,7 +171,7 @@ function suiteLabel(kind: string): string {
   });
 
   $effect(() => {
-    saveCache(FORM_KEY, { selected, profile, useCustomTemperature, temperature, timeout, maxTokens, reasoningEffort, resume, retryFailed, retryUnsupported } satisfies FormCache);
+    saveCache(FORM_KEY, { selected, profile, useCustomTemperature, temperature, timeout, maxTokens, reasoningEffort, resume, retryFailed, retryUnsupported, allTests, tests: [...selectedTests] } satisfies FormCache);
   });
   onMount(() => {
     void loadConfig().catch(e => configError = String(e));
@@ -218,6 +225,9 @@ function suiteLabel(kind: string): string {
               <NativeSelect {id} aria-describedby={describedBy} bind:value={profile}>{#each profiles as p}<option value={p.id}>{p.id}</option>{/each}</NativeSelect>
             {/snippet}
           </Field.Root>
+          {#if config.items?.length}
+            <IntelligenceTestPicker items={testsInProfile} categories={config.categories ?? []} bind:allTests bind:selected={selectedTests} disabled={blocked} />
+          {/if}
           <details open class="space-y-3">
             <summary class="text-label text-muted-foreground cursor-pointer font-semibold uppercase">Advanced settings</summary>
             <div class="mt-3 grid gap-3 sm:grid-cols-2">
@@ -251,7 +261,7 @@ function suiteLabel(kind: string): string {
             {/if}
           </details>
         </fieldset>
-        <Button size="sm" disabled={blocked || !selected.length || !(timeout > 0) || !(maxTokens > 0)} onclick={() => action("run", { models: selected, profile, temperature: useCustomTemperature ? temperature : false, reasoning_effort: reasoningEffort, timeout, max_tokens: maxTokens, only_missing: resume, retry_failed: retryFailed, retry_unsupported: retryFailed && retryUnsupported, stream: true })}>Start run</Button>
+        <Button size="sm" disabled={blocked || !selected.length || (testsToRun !== undefined && testsToRun.length === 0) || !(timeout > 0) || !(maxTokens > 0)} onclick={() => action("run", { models: selected, profile, items: testsToRun, temperature: useCustomTemperature ? temperature : false, reasoning_effort: reasoningEffort, timeout, max_tokens: maxTokens, only_missing: resume, retry_failed: retryFailed, retry_unsupported: retryFailed && retryUnsupported, stream: true })}>Start run</Button>
       {/if}
     </div>
   </Card.Root>

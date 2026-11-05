@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { configKey, costTotals, paretoFrontier, resolveModels, speedTotals, type DuplicateMode } from "./intelligenceMetrics";
+import { configKey, costTotals, paretoFrontier, resolveModels, speedTotals, splitForeignResults, type DuplicateMode } from "./intelligenceMetrics";
 import type { IntelligenceItem, IntelligenceResult, IntelligenceResultModel } from "./intelligenceApi";
 
 function item(overrides: Partial<IntelligenceItem> = {}): IntelligenceItem {
@@ -324,5 +324,55 @@ describe("resolveModels profile scoping (carry-forward)", () => {
     const [row] = resolveModels([r], "latest", {});
     expect(row.byCategory).toEqual({ logic: 10 });
     expect(row.byCategoryMax).toEqual({ logic: 20 });
+  });
+});
+
+describe("resolveModels effort labels", () => {
+  const run = (id: string, at: number, effort: string | undefined) => ({
+    run_id: id, state: "done", started_at: at, params: { profile: "quick", models: ["model-a"] }, suite_sha256: "sha-1",
+    settings: { temperature: 0, max_tokens: 4096, timeout: 60, reasoning_effort: effort },
+  });
+
+  it("names the effort even when every compared run used the same one", () => {
+    const model = modelResult({ reasoning_effort: null });
+    const rows = resolveModels([result({ run: run("r1", 1, "xhigh") }, [model])], "latest", {});
+    expect(rows.map(r => r.label)).toEqual(["Model A · xhigh"]);
+  });
+
+  it("labels the run without an effort as default next to one with an effort", () => {
+    const model = modelResult({ reasoning_effort: null });
+    const rows = resolveModels([result({ run: run("r1", 1, undefined) }, [model]), result({ run: run("r2", 2, "high") }, [model])], "latest", {});
+    expect(rows.map(r => r.label).sort()).toEqual(["Model A · default", "Model A · high"]);
+  });
+
+  it("keeps bare names when no compared model has an effort", () => {
+    const model = modelResult({ reasoning_effort: null });
+    const rows = resolveModels([result({ run: run("r1", 1, undefined) }, [model])], "latest", {});
+    expect(rows.map(r => r.label)).toEqual(["Model A"]);
+  });
+});
+
+describe("splitForeignResults", () => {
+  const baseRun = { run_id: "r1", state: "stopped", started_at: 10, params: { profile: "quick", models: ["model-a"] }, suite_sha256: "sha-1" };
+
+  it("drops a result recorded at another effort than its run", () => {
+    const r = result({ run: { ...baseRun, settings: { temperature: 0, max_tokens: 1, timeout: 1, reasoning_effort: null } } }, [modelResult({ reasoning_effort: "xhigh" })]);
+    const { result: kept, foreign } = splitForeignResults(r);
+    expect(kept.models).toHaveLength(0);
+    expect(foreign).toEqual([{ runID: "r1", modelName: "Model A", recordedEffort: "xhigh", expectedEffort: "default" }]);
+  });
+
+  it("keeps results that match the run effort or the model's own override", () => {
+    const run = { ...baseRun, settings: { temperature: 0, max_tokens: 1, timeout: 1, reasoning_effort: "low" }, model_config: [{ id: "model-b", name: "B", reasoning_effort: "high" }] };
+    const a = modelResult({ reasoning_effort: "low" });
+    const b = modelResult({ model_id: "model-b", model_name: "B", reasoning_effort: "high" });
+    const { result: kept, foreign } = splitForeignResults(result({ run }, [a, b]));
+    expect(kept.models).toHaveLength(2);
+    expect(foreign).toEqual([]);
+  });
+
+  it("drops a result recorded at another temperature", () => {
+    const r = result({ run: { ...baseRun, settings: { temperature: 0, max_tokens: 1, timeout: 1 } } }, [modelResult({ temperature: 0.7 })]);
+    expect(splitForeignResults(r).foreign).toHaveLength(1);
   });
 });
