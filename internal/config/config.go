@@ -216,6 +216,8 @@ type Config struct {
 	ModelsDir   string `yaml:"-"`
 	BackendsDir string `yaml:"-"`
 	BuildScript string `yaml:"-"`
+	// WatchConfig is true when -watch-config reloads the server on file change.
+	WatchConfig bool `yaml:"-"`
 
 	// upstream controls behaviour of the /upstream passthrough endpoint
 	Upstream UpstreamConfig `yaml:"upstream"`

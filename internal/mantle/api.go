@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/billziss-gh/golib/shlex"
 	"github.com/mostlygeek/llama-swap/internal/config"
+	"github.com/mostlygeek/llama-swap/internal/configedit"
 	"github.com/mostlygeek/llama-swap/internal/event"
 	"github.com/mostlygeek/llama-swap/internal/shared"
 )
@@ -30,6 +30,12 @@ type Handler struct {
 	backendsDir string
 	buildScript string
 	configMu    sync.Mutex
+
+	// Config editing, interface-first so tests can swap implementations.
+	source    configedit.SourceReader
+	effective configedit.EffectiveReader
+	planner   configedit.Planner
+	validator configedit.Validator
 }
 
 // NewHandler creates a new mantle API handler. tm is constructed once by the
@@ -45,6 +51,11 @@ func NewHandler(tm *TaskManager, cfg *config.Config, configPath, modelsDir, back
 		backendsDir: backendsDir,
 		buildScript: buildScript,
 	}
+	load := func(raw []byte) (config.Config, error) { return config.LoadConfigFromReader(bytes.NewReader(raw)) }
+	h.validator = configedit.NewValidator(load)
+	h.source = configedit.NewSourceReader()
+	h.effective = configedit.NewEffectiveReader(load)
+	h.planner = configedit.NewPlanner(h.validator)
 	tm.SetStudioRegister(h.registerStudioModel)
 	return h
 }
@@ -125,6 +136,10 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Config management
 	mux.HandleFunc("GET /api/mantle/config", h.handleGetConfig)
 	mux.HandleFunc("PUT /api/mantle/config", h.handlePutConfig)
+	mux.HandleFunc("POST /api/mantle/config/validate", h.handleValidateConfig)
+	mux.HandleFunc("GET /api/mantle/config/source", h.handleGetConfigSource)
+	mux.HandleFunc("POST /api/mantle/config/changes/preview", h.handlePreviewConfigChanges)
+	mux.HandleFunc("POST /api/mantle/config/changes/apply", h.handleApplyConfigChanges)
 	mux.HandleFunc("GET /api/mantle/config/models", h.handleListConfigModels)
 	mux.HandleFunc("PUT /api/mantle/config/models/{name}", h.handlePutConfigModel)
 	mux.HandleFunc("DELETE /api/mantle/config/models/{name}", h.handleDeleteConfigModel)
@@ -729,173 +744,7 @@ func (h *Handler) handleDeleteLocalModel(w http.ResponseWriter, r *http.Request)
 	jsonResponse(w, http.StatusOK, map[string]string{"msg": "deleted"})
 }
 
-// --- Config ---
-
-func (h *Handler) handleGetConfig(w http.ResponseWriter, r *http.Request) {
-	data, err := os.ReadFile(h.configPath)
-	if err != nil {
-		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read config: %v", err))
-		return
-	}
-	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
-	w.Write(data)
-}
-
-func (h *Handler) handlePutConfig(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		jsonError(w, http.StatusBadRequest, "failed to read body")
-		return
-	}
-	if err := h.applyConfigBytes(body); err != nil {
-		jsonError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	jsonResponse(w, http.StatusOK, map[string]string{"msg": "config updated and reloaded"})
-}
-
-// applyConfigBytes validates a full config YAML document, writes it to disk,
-// and hot-reloads the running config. Shared by the raw config PUT and the
-// structured models/groups editing routes below, which produce their new
-// full-document bytes via targeted yaml.Node surgery (see config_edit.go)
-// rather than a client-supplied full document.
-func (h *Handler) applyConfigBytes(body []byte) error {
-	h.configMu.Lock()
-	defer h.configMu.Unlock()
-
-	// Validate by attempting to parse
-	newCfg, err := config.LoadConfigFromReader(bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("invalid config: %w", err)
-	}
-
-	// Preserve runtime paths
-	newCfg.ConfigPath = h.configPath
-	newCfg.ModelsDir = h.modelsDir
-	newCfg.BackendsDir = h.backendsDir
-	newCfg.BuildScript = h.buildScript
-
-	// Write to config file
-	if err := os.WriteFile(h.configPath, body, 0644); err != nil {
-		return fmt.Errorf("failed to write config: %w", err)
-	}
-
-	// Emit config changed event so the server hot-reloads
-	event.Emit(shared.ConfigFileChangedEvent{State: shared.ReloadingStateStart})
-	*h.cfg = newCfg
-	event.Emit(shared.ConfigFileChangedEvent{State: shared.ReloadingStateEnd})
-	return nil
-}
-
-func (h *Handler) handleListConfigModels(w http.ResponseWriter, r *http.Request) {
-	jsonResponse(w, http.StatusOK, ListModels(h.cfg))
-}
-
-func (h *Handler) handlePutConfigModel(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	if name == "" {
-		jsonError(w, http.StatusBadRequest, "model name is required")
-		return
-	}
-	var model config.ModelConfig
-	if err := json.NewDecoder(r.Body).Decode(&model); err != nil {
-		jsonError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	raw, err := os.ReadFile(h.configPath)
-	if err != nil {
-		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read config: %v", err))
-		return
-	}
-	newRaw, err := UpsertModelYAML(raw, name, model)
-	if err != nil {
-		jsonError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if err := h.applyConfigBytes(newRaw); err != nil {
-		jsonError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	jsonResponse(w, http.StatusOK, map[string]string{"msg": "model saved"})
-}
-
-func (h *Handler) handleDeleteConfigModel(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	if name == "" {
-		jsonError(w, http.StatusBadRequest, "model name is required")
-		return
-	}
-	raw, err := os.ReadFile(h.configPath)
-	if err != nil {
-		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read config: %v", err))
-		return
-	}
-	newRaw, err := DeleteModelYAML(raw, name)
-	if err != nil {
-		jsonError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if err := h.applyConfigBytes(newRaw); err != nil {
-		jsonError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	jsonResponse(w, http.StatusOK, map[string]string{"msg": "model deleted"})
-}
-
-func (h *Handler) handleListConfigGroups(w http.ResponseWriter, r *http.Request) {
-	jsonResponse(w, http.StatusOK, ListGroups(h.cfg))
-}
-
-func (h *Handler) handlePutConfigGroup(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	if name == "" {
-		jsonError(w, http.StatusBadRequest, "group name is required")
-		return
-	}
-	var group config.GroupConfig
-	if err := json.NewDecoder(r.Body).Decode(&group); err != nil {
-		jsonError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	raw, err := os.ReadFile(h.configPath)
-	if err != nil {
-		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read config: %v", err))
-		return
-	}
-	newRaw, err := UpsertGroupYAML(raw, name, group)
-	if err != nil {
-		jsonError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if err := h.applyConfigBytes(newRaw); err != nil {
-		jsonError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	jsonResponse(w, http.StatusOK, map[string]string{"msg": "group saved"})
-}
-
-func (h *Handler) handleDeleteConfigGroup(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	if name == "" {
-		jsonError(w, http.StatusBadRequest, "group name is required")
-		return
-	}
-	raw, err := os.ReadFile(h.configPath)
-	if err != nil {
-		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read config: %v", err))
-		return
-	}
-	newRaw, err := DeleteGroupYAML(raw, name)
-	if err != nil {
-		jsonError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if err := h.applyConfigBytes(newRaw); err != nil {
-		jsonError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	jsonResponse(w, http.StatusOK, map[string]string{"msg": "group deleted"})
-}
+// --- Config --- (handlers in config_api.go)
 
 func (h *Handler) handleTokenizeCmd(w http.ResponseWriter, r *http.Request) {
 	var req struct {
@@ -1074,21 +923,7 @@ func (h *Handler) registerStudioModel(req RegisterStudioModelRequest, modelPath 
 	if err != nil {
 		return err
 	}
-	newCfg, err := config.LoadConfigFromReader(bytes.NewReader(updated))
-	if err != nil {
-		return fmt.Errorf("validate updated config: %w", err)
-	}
-	newCfg.ConfigPath = h.configPath
-	newCfg.ModelsDir = h.modelsDir
-	newCfg.BackendsDir = h.backendsDir
-	newCfg.BuildScript = h.buildScript
-	if err := os.WriteFile(h.configPath, updated, 0644); err != nil {
-		return fmt.Errorf("write config: %w", err)
-	}
-	event.Emit(shared.ConfigFileChangedEvent{State: shared.ReloadingStateStart})
-	*h.cfg = newCfg
-	event.Emit(shared.ConfigFileChangedEvent{State: shared.ReloadingStateEnd})
-	return nil
+	return h.writeConfigLocked(updated)
 }
 
 // --- Backend Builds ---

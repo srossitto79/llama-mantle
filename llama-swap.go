@@ -124,6 +124,7 @@ func main() {
 	} else if cfg.BuildScript == "" {
 		cfg.BuildScript = "/usr/local/bin/build-llamacpp.sh"
 	}
+	cfg.WatchConfig = *flagWatchConfig
 
 	// Loggers are wired per cfg.LogToStdout: proxy/upstream feed muxLog, which
 	// owns the combined history served by /logs. They outlive config reloads,
@@ -239,6 +240,7 @@ func main() {
 		newCfg.ModelsDir = cfg.ModelsDir
 		newCfg.BackendsDir = cfg.BackendsDir
 		newCfg.BuildScript = cfg.BuildScript
+		newCfg.WatchConfig = cfg.WatchConfig
 
 		if perfMon != nil {
 			perfMon.UpdateConfig(newCfg.Performance)
