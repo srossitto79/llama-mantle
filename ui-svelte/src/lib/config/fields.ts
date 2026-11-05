@@ -73,6 +73,7 @@ export const modelFieldGroups: FieldGroup[] = [
     fields: [
       { name: "reasoningLoopGuard.mode", label: "Mode", kind: "select", options: ["off", "stop", "recover"], defaultValue: "off" },
       { name: "reasoningLoopGuard.recovery", label: "Recovery", kind: "select", options: ["wrapUp", "lowEffort"], defaultValue: "wrapUp" },
+      { name: "reasoningLoopGuard.continuation", label: "Continuation", kind: "select", options: ["llamacpp", "vllm"], defaultValue: "llamacpp" },
       { name: "reasoningLoopGuard.coverage", label: "Coverage", kind: "number", defaultValue: 0.25 },
       { name: "reasoningLoopGuard.checkEvery", label: "Check every (tokens)", kind: "number", defaultValue: 512 },
     ],

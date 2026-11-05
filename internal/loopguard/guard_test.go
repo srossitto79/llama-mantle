@@ -351,7 +351,7 @@ func TestLoopGuard_Eligible(t *testing.T) {
 }
 
 func TestLoopGuard_LowEffortContinuation(t *testing.T) {
-	c, err := NewPrefillContinuer(RecoveryLowEffort)
+	c, err := NewContinuer(RecoveryLowEffort, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -368,5 +368,32 @@ func TestLoopGuard_LowEffortContinuation(t *testing.T) {
 		gjson.GetBytes(b, "max_tokens").Int() != 1 ||
 		gjson.GetBytes(b, "messages.1.reasoning_content").String() != "thinking" {
 		t.Fatalf("continuation body %s", b)
+	}
+}
+
+func TestLoopGuard_VLLMContinuation(t *testing.T) {
+	c, err := NewContinuer(RecoveryWrapUp, ContinuationVLLM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := []byte(`{"messages":[{"role":"user","content":"q"}],"chat_template_kwargs":{"enable_thinking":true}}`)
+	got, err := c.Continue(orig, "thinking", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := got.Body
+	if gjson.GetBytes(b, "add_generation_prompt").Bool() ||
+		!gjson.GetBytes(b, "add_generation_prompt").Exists() ||
+		!gjson.GetBytes(b, "chat_template_kwargs.continue_reasoning").Bool() ||
+		!gjson.GetBytes(b, "chat_template_kwargs.enable_thinking").Bool() ||
+		gjson.GetBytes(b, "messages.1.role").String() != "assistant" ||
+		gjson.GetBytes(b, "messages.1.reasoning_content").String() != "thinking"+wrapUpSentence {
+		t.Fatalf("continuation body %s", b)
+	}
+	if got.Echo != "" || got.Lead != wrapUpSentence {
+		t.Fatalf("echo %q lead %q", got.Echo, got.Lead)
+	}
+	if _, err := NewContinuer(RecoveryWrapUp, "sglang"); err == nil {
+		t.Fatal("unknown continuation accepted")
 	}
 }

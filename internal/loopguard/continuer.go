@@ -20,26 +20,51 @@ const (
 // wrapUpSentence closes looping reasoning under RecoveryWrapUp.
 const wrapUpSentence = "\n\nI am repeating myself; time to settle on an answer."
 
+// Continuation strategies: how the upstream is asked to resume inside the
+// reasoning.
+const (
+	// ContinuationLlamaCpp sends the reasoning as a final assistant message;
+	// llama.cpp continues an assistant message as a prefill.
+	ContinuationLlamaCpp = "llamacpp"
+	// ContinuationVLLM sends the same message with add_generation_prompt off
+	// and chat_template_kwargs.continue_reasoning on. vLLM renders the prompt
+	// as is, so the chat template must leave the last assistant message's
+	// <think> block open when continue_reasoning is set (see
+	// docker/hyperqwen/chat_template.jinja).
+	ContinuationVLLM = "vllm"
+)
+
 // Continuation sampling floors, from Strata.
 const (
 	minTemperature     = 1.0
 	minPresencePenalty = 1.5
 )
 
-// NewPrefillContinuer returns a ReplyContinuer that resends the chat request
-// with the reasoning so far as a final assistant message (no content), which
-// llama.cpp continues as a prefill inside the reasoning.
-func NewPrefillContinuer(policy string) (ReplyContinuer, error) {
+// NewContinuer returns a ReplyContinuer that resends the chat request with
+// the reasoning so far as a final assistant message (no content), for the
+// upstream to continue inside the reasoning. strategy is ContinuationLlamaCpp
+// (also when empty) or ContinuationVLLM.
+func NewContinuer(policy, strategy string) (ReplyContinuer, error) {
 	switch policy {
 	case RecoveryWrapUp, RecoveryLowEffort:
-		return &prefillContinuer{policy: policy}, nil
 	default:
 		return nil, fmt.Errorf("loopguard: unknown recovery policy %q", policy)
+	}
+	switch strategy {
+	case "", ContinuationLlamaCpp:
+		return &prefillContinuer{policy: policy}, nil
+	case ContinuationVLLM:
+		return &prefillContinuer{policy: policy, templateFlag: true}, nil
+	default:
+		return nil, fmt.Errorf("loopguard: unknown continuation %q", strategy)
 	}
 }
 
 type prefillContinuer struct {
 	policy string
+	// templateFlag asks the chat template to leave the reasoning open instead
+	// of relying on the server to treat the assistant message as a prefill.
+	templateFlag bool
 }
 
 func (c *prefillContinuer) Continue(original []byte, reasoning string, generatedTokens int) (Continuation, error) {
@@ -57,6 +82,17 @@ func (c *prefillContinuer) Continue(original []byte, reasoning string, generated
 	}
 	if body, err = sjson.SetBytes(body, "messages.-1", prefill); err != nil {
 		return Continuation{}, fmt.Errorf("loopguard: appending prefill: %w", err)
+	}
+
+	echo := reasoning + lead
+	if c.templateFlag {
+		if body, err = sjson.SetBytes(body, "add_generation_prompt", false); err != nil {
+			return Continuation{}, fmt.Errorf("loopguard: setting add_generation_prompt: %w", err)
+		}
+		if body, err = sjson.SetBytes(body, "chat_template_kwargs.continue_reasoning", true); err != nil {
+			return Continuation{}, fmt.Errorf("loopguard: setting continue_reasoning: %w", err)
+		}
+		echo = "" // vLLM streams only new tokens
 	}
 
 	if c.policy == RecoveryLowEffort {
@@ -87,7 +123,7 @@ func (c *prefillContinuer) Continue(original []byte, reasoning string, generated
 		}
 	}
 
-	return Continuation{Body: body, Lead: lead, Echo: reasoning + lead}, nil
+	return Continuation{Body: body, Lead: lead, Echo: echo}, nil
 }
 
 func raiseFloor(body []byte, key string, floor float64) ([]byte, error) {

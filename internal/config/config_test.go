@@ -1849,3 +1849,25 @@ routing:
 	require.NoError(t, err)
 	assert.Equal(t, 5, cfg.Routing.Scheduler.Settings.Fifo.Priority["gemma"])
 }
+
+func TestConfig_LoopGuardContinuation(t *testing.T) {
+	load := func(guard string) (Config, error) {
+		return LoadConfigFromReader(strings.NewReader(`
+models:
+  m:
+    cmd: test-server --port ${PORT}
+    reasoningLoopGuard: ` + guard + `
+`))
+	}
+
+	cfg, err := load(`{ mode: recover }`)
+	require.NoError(t, err)
+	assert.Equal(t, LoopGuardContinuationLlamaCpp, cfg.Models["m"].ReasoningLoopGuard.Continuation)
+
+	cfg, err = load(`{ mode: recover, continuation: vllm }`)
+	require.NoError(t, err)
+	assert.Equal(t, LoopGuardContinuationVLLM, cfg.Models["m"].ReasoningLoopGuard.Continuation)
+
+	_, err = load(`{ mode: recover, continuation: sglang }`)
+	assert.ErrorContains(t, err, "reasoningLoopGuard.continuation")
+}

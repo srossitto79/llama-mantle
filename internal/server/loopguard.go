@@ -77,10 +77,11 @@ func loopGuardSettings(cfg config.Config, r *http.Request) (loopguard.Settings, 
 	}
 	g := mc.ReasoningLoopGuard
 	return loopguard.Settings{
-		Model:      data.ModelID,
-		Mode:       g.Mode,
-		Recovery:   g.Recovery,
-		Coverage:   g.Coverage,
-		CheckEvery: g.CheckEvery,
+		Model:        data.ModelID,
+		Mode:         g.Mode,
+		Recovery:     g.Recovery,
+		Continuation: g.Continuation,
+		Coverage:     g.Coverage,
+		CheckEvery:   g.CheckEvery,
 	}, true
 }

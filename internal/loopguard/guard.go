@@ -27,11 +27,14 @@ const (
 
 // Settings configure the guard for one request.
 type Settings struct {
-	Model      string  // model id, for the log line
-	Mode       string  // ModeStop or ModeRecover
-	Recovery   string  // RecoveryWrapUp or RecoveryLowEffort
-	Coverage   float64 // loop threshold
-	CheckEvery int     // reasoning tokens between checks
+	Model    string // model id, for the log line
+	Mode     string // ModeStop or ModeRecover
+	Recovery string // RecoveryWrapUp or RecoveryLowEffort
+	// Continuation is ContinuationLlamaCpp (default when empty) or
+	// ContinuationVLLM.
+	Continuation string
+	Coverage     float64 // loop threshold
+	CheckEvery   int     // reasoning tokens between checks
 
 	// OnAction, when set, is called once when the guard stops or recovers a
 	// reply.
@@ -74,7 +77,7 @@ func NewHandler(s Settings, next http.Handler, log Logger) (http.Handler, error)
 	}
 	g := &guard{settings: s, next: next, log: log}
 	if s.Mode == ModeRecover {
-		c, err := NewPrefillContinuer(s.Recovery)
+		c, err := NewContinuer(s.Recovery, s.Continuation)
 		if err != nil {
 			return nil, err
 		}

@@ -415,7 +415,7 @@ models:
     # - the client receives one normal reply, streamed or not; a non-streaming request is
     #   streamed upstream and assembled into one JSON response
     # - continues through the upstream's chat endpoint with the reasoning so far as an
-    #   assistant prefill; the backend must continue a final assistant message (llama.cpp does)
+    #   assistant prefill (see continuation)
     # - leave it off for Strata models: Strata has its own reasoning_loop_recovery
     reasoningLoopGuard:
       # mode: off | stop | recover
@@ -428,6 +428,13 @@ models:
       #   processed again
       # - both raise temperature to at least 1.0 and presence_penalty to at least 1.5
       recovery: wrapUp
+      # continuation: llamacpp | vllm, default: llamacpp
+      # - llamacpp: llama.cpp continues a final assistant message as a prefill
+      # - vllm: sets add_generation_prompt to false and
+      #   chat_template_kwargs.continue_reasoning to true; the model's chat template must
+      #   then leave the last assistant message's <think> block open
+      #   (docker/hyperqwen/chat_template.jinja is the HyperQwen template patched this way)
+      continuation: llamacpp
       # coverage: share of the last 2,000 words inside 12-word passages seen 3+ times
       # - default: 0.25
       coverage: 0.25

@@ -567,6 +567,12 @@
                                 "enum": ["wrapUp", "lowEffort"],
                                 "default": "wrapUp"
                             },
+                            "continuation": {
+                                "type": "string",
+                                "enum": ["llamacpp", "vllm"],
+                                "default": "llamacpp",
+                                "description": "How the upstream resumes inside the reasoning: llamacpp continues an assistant prefill; vllm needs a chat template that honours chat_template_kwargs.continue_reasoning."
+                            },
                             "coverage": {
                                 "type": "number",
                                 "exclusiveMinimum": 0,

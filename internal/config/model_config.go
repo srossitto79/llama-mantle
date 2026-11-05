@@ -171,18 +171,24 @@ const (
 	LoopGuardRecoveryWrapUp    = "wrapUp"
 	LoopGuardRecoveryLowEffort = "lowEffort"
 
+	LoopGuardContinuationLlamaCpp = "llamacpp"
+	LoopGuardContinuationVLLM     = "vllm"
+
 	LoopGuardDefaultCoverage   = 0.25
 	LoopGuardDefaultCheckEvery = 512
 )
 
 // ReasoningLoopGuardConfig configures the per-model reasoning loop guard.
-// Zero values mean defaults: mode off, recovery wrapUp, coverage 0.25,
-// checkEvery 512.
+// Zero values mean defaults: mode off, recovery wrapUp, continuation
+// llamacpp, coverage 0.25, checkEvery 512.
 type ReasoningLoopGuardConfig struct {
-	Mode       string  `yaml:"mode" json:"mode,omitempty"`
-	Recovery   string  `yaml:"recovery" json:"recovery,omitempty"`
-	Coverage   float64 `yaml:"coverage" json:"coverage,omitempty"`
-	CheckEvery int     `yaml:"checkEvery" json:"checkEvery,omitempty"`
+	Mode     string `yaml:"mode" json:"mode,omitempty"`
+	Recovery string `yaml:"recovery" json:"recovery,omitempty"`
+	// Continuation is how the upstream resumes inside the reasoning:
+	// llamacpp (assistant prefill) or vllm (chat template flag).
+	Continuation string  `yaml:"continuation" json:"continuation,omitempty"`
+	Coverage     float64 `yaml:"coverage" json:"coverage,omitempty"`
+	CheckEvery   int     `yaml:"checkEvery" json:"checkEvery,omitempty"`
 }
 
 // Enabled reports whether the guard acts on requests.
@@ -195,7 +201,7 @@ func (c ReasoningLoopGuardConfig) Enabled() bool {
 func (c *ReasoningLoopGuardConfig) normalize() error {
 	switch c.Mode {
 	case "", LoopGuardModeOff:
-		if c.Recovery == "" && c.Coverage == 0 && c.CheckEvery == 0 {
+		if c.Recovery == "" && c.Continuation == "" && c.Coverage == 0 && c.CheckEvery == 0 {
 			return nil
 		}
 	case LoopGuardModeStop, LoopGuardModeRecover:
@@ -208,6 +214,13 @@ func (c *ReasoningLoopGuardConfig) normalize() error {
 	case LoopGuardRecoveryWrapUp, LoopGuardRecoveryLowEffort:
 	default:
 		return fmt.Errorf("reasoningLoopGuard.recovery: invalid value %q, must be one of: wrapUp, lowEffort", c.Recovery)
+	}
+	switch c.Continuation {
+	case "":
+		c.Continuation = LoopGuardContinuationLlamaCpp
+	case LoopGuardContinuationLlamaCpp, LoopGuardContinuationVLLM:
+	default:
+		return fmt.Errorf("reasoningLoopGuard.continuation: invalid value %q, must be one of: llamacpp, vllm", c.Continuation)
 	}
 	if c.Coverage == 0 {
 		c.Coverage = LoopGuardDefaultCoverage
