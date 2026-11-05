@@ -154,8 +154,74 @@ type ModelConfig struct {
 	// Capabilities defines what modalities and features the model supports.
 	Capabilities ModelCapConfig `yaml:"capabilities" json:"capabilities,omitempty"`
 
+	// ReasoningLoopGuard stops reasoning that repeats whole passages and
+	// continues the reply. Off unless configured.
+	ReasoningLoopGuard ReasoningLoopGuardConfig `yaml:"reasoningLoopGuard" json:"reasoningLoopGuard,omitempty"`
+
 	// Copy of HealthCheckTimeout from global config
 	HealthCheckTimeout int `yaml:"healthCheckTimeout" json:"healthCheckTimeout,omitempty"`
+}
+
+// Reasoning loop guard modes and recovery policies.
+const (
+	LoopGuardModeOff     = "off"
+	LoopGuardModeStop    = "stop"
+	LoopGuardModeRecover = "recover"
+
+	LoopGuardRecoveryWrapUp    = "wrapUp"
+	LoopGuardRecoveryLowEffort = "lowEffort"
+
+	LoopGuardDefaultCoverage   = 0.25
+	LoopGuardDefaultCheckEvery = 512
+)
+
+// ReasoningLoopGuardConfig configures the per-model reasoning loop guard.
+// Zero values mean defaults: mode off, recovery wrapUp, coverage 0.25,
+// checkEvery 512.
+type ReasoningLoopGuardConfig struct {
+	Mode       string  `yaml:"mode" json:"mode,omitempty"`
+	Recovery   string  `yaml:"recovery" json:"recovery,omitempty"`
+	Coverage   float64 `yaml:"coverage" json:"coverage,omitempty"`
+	CheckEvery int     `yaml:"checkEvery" json:"checkEvery,omitempty"`
+}
+
+// Enabled reports whether the guard acts on requests.
+func (c ReasoningLoopGuardConfig) Enabled() bool {
+	return c.Mode == LoopGuardModeStop || c.Mode == LoopGuardModeRecover
+}
+
+// normalize validates the values and, when the guard is enabled, fills the
+// defaults. A disabled guard stays as configured.
+func (c *ReasoningLoopGuardConfig) normalize() error {
+	switch c.Mode {
+	case "", LoopGuardModeOff:
+		if c.Recovery == "" && c.Coverage == 0 && c.CheckEvery == 0 {
+			return nil
+		}
+	case LoopGuardModeStop, LoopGuardModeRecover:
+	default:
+		return fmt.Errorf("reasoningLoopGuard.mode: invalid value %q, must be one of: off, stop, recover", c.Mode)
+	}
+	switch c.Recovery {
+	case "":
+		c.Recovery = LoopGuardRecoveryWrapUp
+	case LoopGuardRecoveryWrapUp, LoopGuardRecoveryLowEffort:
+	default:
+		return fmt.Errorf("reasoningLoopGuard.recovery: invalid value %q, must be one of: wrapUp, lowEffort", c.Recovery)
+	}
+	if c.Coverage == 0 {
+		c.Coverage = LoopGuardDefaultCoverage
+	}
+	if c.Coverage < 0 || c.Coverage > 1 {
+		return fmt.Errorf("reasoningLoopGuard.coverage: must be between 0 and 1, got %v", c.Coverage)
+	}
+	if c.CheckEvery == 0 {
+		c.CheckEvery = LoopGuardDefaultCheckEvery
+	}
+	if c.CheckEvery < 0 {
+		return fmt.Errorf("reasoningLoopGuard.checkEvery: must be > 0, got %d", c.CheckEvery)
+	}
+	return nil
 }
 
 func (m *ModelConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {

@@ -486,6 +486,32 @@ models:
       tlsHandshake: 10
       idleConn: 90
 
+    # reasoningLoopGuard: stop reasoning that repeats whole passages and continue the reply
+    # - optional, default: off
+    # - acts on /v1/chat/completions only; skips requests with image or audio input and n > 1
+    # - checks the reasoning (reasoning_content) until the answer starts; once per request
+    # - the client receives one normal reply, streamed or not; a non-streaming request is
+    #   streamed upstream and assembled into one JSON response
+    # - continues through the upstream's chat endpoint with the reasoning so far as an
+    #   assistant prefill; the backend must continue a final assistant message (llama.cpp does)
+    # - leave it off for Strata models: Strata has its own reasoning_loop_recovery
+    reasoningLoopGuard:
+      # mode: off | stop | recover
+      # - stop: end the reply with finish_reason "length"
+      # - recover: continue the reply in a way that breaks the loop
+      mode: recover
+      # recovery: wrapUp | lowEffort, default: wrapUp
+      # - wrapUp: same prompt (prefix cache reused), a closing sentence appended to the reasoning
+      # - lowEffort: chat_template_kwargs.reasoning_effort set to "low"; the whole prompt is
+      #   processed again
+      # - both raise temperature to at least 1.0 and presence_penalty to at least 1.5
+      recovery: wrapUp
+      # coverage: share of the last 2,000 words inside 12-word passages seen 3+ times
+      # - default: 0.25
+      coverage: 0.25
+      # checkEvery: reasoning tokens between two checks, default: 512
+      checkEvery: 512
+
   # Unlisted model example:
   "qwen-unlisted":
     # unlisted: boolean, true or false

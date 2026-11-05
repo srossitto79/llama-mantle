@@ -285,6 +285,7 @@ func (s *Server) routes() {
 		CreateFilterMiddleware(s.cfg),
 		CreateFormFilterMiddleware(s.cfg),
 		CreateMetricsMiddleware(s.metrics, s.cfg),
+		CreateLoopGuardMiddleware(s.cfg, s.proxylog),
 	)
 	// Custom endpoints only need auth.
 	apiChain := chain.New(authMW)

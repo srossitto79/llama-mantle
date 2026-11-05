@@ -552,6 +552,34 @@
                     "timeouts": {
                         "$ref": "#/definitions/timeouts"
                     },
+                    "reasoningLoopGuard": {
+                        "type": "object",
+                        "description": "Stops reasoning that repeats whole passages and continues the reply. Leave off for Strata models.",
+                        "additionalProperties": false,
+                        "properties": {
+                            "mode": {
+                                "type": "string",
+                                "enum": ["off", "stop", "recover"],
+                                "default": "off"
+                            },
+                            "recovery": {
+                                "type": "string",
+                                "enum": ["wrapUp", "lowEffort"],
+                                "default": "wrapUp"
+                            },
+                            "coverage": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1,
+                                "default": 0.25
+                            },
+                            "checkEvery": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "default": 512
+                            }
+                        }
+                    },
                     "capabilities": {
                         "type": "object",
                         "properties": {

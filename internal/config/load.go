@@ -143,6 +143,10 @@ func LoadConfigFromReader(r io.Reader) (Config, error) {
 			modelConfig.UnloadTimeout = config.UnloadTimeout
 		}
 
+		if err := modelConfig.ReasoningLoopGuard.normalize(); err != nil {
+			return Config{}, fmt.Errorf("model %s: %w", modelId, err)
+		}
+
 		// Validate model macros
 		for _, macro := range modelConfig.Macros {
 			if err = validateMacro(macro.Name, macro.Value); err != nil {
