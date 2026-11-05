@@ -75,10 +75,16 @@ func (c *prefillContinuer) Continue(original []byte, reasoning string, generated
 	if c.policy == RecoveryWrapUp {
 		lead = wrapUpSentence
 	}
+	// Newer vLLM (0.32 here) reads the message's reasoning from "reasoning" and
+	// drop "reasoning_content".
+	field := reasoningContentKey
+	if c.templateFlag {
+		field = reasoningKey
+	}
 	prefill := map[string]any{
-		"role":              "assistant",
-		"content":           "",
-		"reasoning_content": reasoning + lead,
+		"role":    "assistant",
+		"content": "",
+		field:     reasoning + lead,
 	}
 	if body, err = sjson.SetBytes(body, "messages.-1", prefill); err != nil {
 		return Continuation{}, fmt.Errorf("loopguard: appending prefill: %w", err)

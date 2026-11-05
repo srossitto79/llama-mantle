@@ -22,6 +22,9 @@ import (
 // answers at once when loop is false); a prefill request finishes the reply.
 type fakeLlama struct {
 	loop bool
+	// vllm streams reasoning under "reasoning", reads the prefill from it and
+	// does not echo the prefill.
+	vllm bool
 
 	mu        sync.Mutex
 	bodies    [][]byte
@@ -54,8 +57,12 @@ func (f *fakeLlama) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return err == nil
 	}
+	key := reasoningContentKey
+	if f.vllm {
+		key = reasoningKey
+	}
 	reason := func(s string) bool {
-		d, _ := json.Marshal(map[string]string{"reasoning_content": s})
+		d, _ := json.Marshal(map[string]string{key: s})
 		return send(string(d), "")
 	}
 	finish := func(prompt, completion int) {
@@ -67,12 +74,17 @@ func (f *fakeLlama) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	send(`{"role":"assistant","content":null}`, "")
 	messages := gjson.GetBytes(body, "messages").Array()
 	if messages[len(messages)-1].Get("role").String() == "assistant" {
-		// llama.cpp re-sends the prefill with the first new token.
-		reason(messages[len(messages)-1].Get("reasoning_content").String() + " I settle it.")
+		prefill := messages[len(messages)-1].Get(key).String()
+		if f.vllm {
+			reason(" I settle it.")
+		} else {
+			// llama.cpp re-sends the prefill with the first new token.
+			reason(prefill + " I settle it.")
+		}
 		send(`{"content":"The answer"}`, "")
 		send(`{"content":" is 42."}`, "")
 		// The prompt holds the prefilled reasoning, about a token per word.
-		finish(100+len(strings.Fields(messages[len(messages)-1].Get("reasoning_content").String())), 7)
+		finish(100+len(strings.Fields(prefill)), 7)
 		return
 	}
 	if !f.loop {
@@ -387,7 +399,7 @@ func TestLoopGuard_VLLMContinuation(t *testing.T) {
 		!gjson.GetBytes(b, "chat_template_kwargs.continue_reasoning").Bool() ||
 		!gjson.GetBytes(b, "chat_template_kwargs.enable_thinking").Bool() ||
 		gjson.GetBytes(b, "messages.1.role").String() != "assistant" ||
-		gjson.GetBytes(b, "messages.1.reasoning_content").String() != "thinking"+wrapUpSentence {
+		gjson.GetBytes(b, "messages.1.reasoning").String() != "thinking"+wrapUpSentence {
 		t.Fatalf("continuation body %s", b)
 	}
 	if got.Echo != "" || got.Lead != wrapUpSentence {
@@ -395,5 +407,40 @@ func TestLoopGuard_VLLMContinuation(t *testing.T) {
 	}
 	if _, err := NewContinuer(RecoveryWrapUp, "sglang"); err == nil {
 		t.Fatal("unknown continuation accepted")
+	}
+}
+
+func TestLoopGuard_VLLMStreamRecovers(t *testing.T) {
+	up := &fakeLlama{loop: true, vllm: true}
+	h, err := NewHandler(Settings{Model: "m", Mode: ModeRecover, Recovery: RecoveryWrapUp, Continuation: ContinuationVLLM, Coverage: 0.25, CheckEvery: 128}, up, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatBody(true))))
+
+	var reasoning, content strings.Builder
+	for _, e := range readSSE(t, rec.Body.Bytes()) {
+		if gjson.Get(e, "choices.0.delta.reasoning_content").Exists() {
+			t.Fatalf("reasoning sent under reasoning_content: %s", e)
+		}
+		reasoning.WriteString(gjson.Get(e, "choices.0.delta.reasoning").String())
+		content.WriteString(gjson.Get(e, "choices.0.delta.content").String())
+	}
+	if content.String() != "The answer is 42." {
+		t.Fatalf("content %q", content.String())
+	}
+
+	up.mu.Lock()
+	defer up.mu.Unlock()
+	if len(up.bodies) != 2 {
+		t.Fatalf("upstream calls %d, want 2 (loop not detected)", len(up.bodies))
+	}
+	cut := strings.TrimSuffix(reasoning.String(), wrapUpSentence+" I settle it.")
+	if !strings.HasPrefix(up.streamed.String(), cut) || len(cut) < 2000 {
+		t.Fatalf("reasoning before the cut (%d bytes) is not what upstream streamed", len(cut))
+	}
+	if got := gjson.GetBytes(up.bodies[1], "messages.1.reasoning").String(); got != cut+wrapUpSentence {
+		t.Fatalf("prefill reasoning %d bytes, want the streamed reasoning plus the wrap-up sentence", len(got))
 	}
 }

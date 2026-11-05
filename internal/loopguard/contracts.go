@@ -49,7 +49,11 @@ type Chunk struct {
 	// Raw is the JSON payload of the event.
 	Raw []byte
 	// Fields parsed from Raw (choice 0 only; the guard skips n > 1).
-	Reasoning    string
+	Reasoning string
+	// ReasoningKey is the delta key Reasoning came from: reasoningContentKey
+	// (llama.cpp, older vLLM) or reasoningKey (newer vLLM, 0.32 here). Empty
+	// when the chunk carries no reasoning.
+	ReasoningKey string
 	Content      string
 	ToolCalls    []byte // raw JSON array of tool call deltas, nil when absent
 	FinishReason string

@@ -60,10 +60,11 @@ func (f *echoFilter) apply(c Chunk) (out Chunk, drop bool) {
 		return c, false
 	}
 	c.Reasoning = shown
+	path := "choices.0.delta." + c.ReasoningKey
 	if shown == "" {
-		c.Raw, _ = sjson.DeleteBytes(c.Raw, "choices.0.delta.reasoning_content")
+		c.Raw, _ = sjson.DeleteBytes(c.Raw, path)
 	} else {
-		c.Raw, _ = sjson.SetBytes(c.Raw, "choices.0.delta.reasoning_content", shown)
+		c.Raw, _ = sjson.SetBytes(c.Raw, path, shown)
 	}
 	empty := c.Reasoning == "" && c.Content == "" && c.ToolCalls == nil &&
 		c.FinishReason == "" && c.Usage == nil && c.Timings == nil

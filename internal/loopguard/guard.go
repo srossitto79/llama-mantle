@@ -19,6 +19,14 @@ const (
 	ModeRecover = "recover"
 )
 
+// Keys a reasoning delta or message field may use. vLLM renamed
+// reasoning_content to reasoning, in both streamed deltas and request
+// messages.
+const (
+	reasoningContentKey = "reasoning_content"
+	reasoningKey        = "reasoning"
+)
+
 // Actions reported through Settings.OnAction.
 const (
 	ActionRecovered = "recovered"
@@ -101,10 +109,11 @@ type reply struct {
 	created   int64
 	hasID     bool
 
-	reasoning bytes.Buffer
-	tokens    int // reasoning chunks before the cut, about one token each
-	answered  bool
-	lastCheck int
+	reasoning    bytes.Buffer
+	reasoningKey string // delta key the upstream streams reasoning under
+	tokens       int    // reasoning chunks before the cut, about one token each
+	answered     bool
+	lastCheck    int
 }
 
 func (g *guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -232,6 +241,7 @@ func (g *guard) relay(up *upstreamResponse, rp *reply, detector LoopDetector, ec
 			rp.answered = true
 		}
 		if !continuation && !rp.answered && c.Reasoning != "" {
+			rp.reasoningKey = c.ReasoningKey
 			rp.reasoning.WriteString(c.Reasoning)
 			rp.tokens++
 			if detector != nil {
@@ -270,12 +280,17 @@ func (rp *reply) chunkRaw() []byte {
 	return raw
 }
 
-// reasoningChunk returns a chunk carrying reasoning text.
+// reasoningChunk returns a chunk carrying reasoning text, under the key the
+// upstream used.
 func (rp *reply) reasoningChunk(text string) Chunk {
+	key := rp.reasoningKey
+	if key == "" {
+		key = reasoningContentKey
+	}
 	raw := rp.chunkRaw()
 	raw, _ = sjson.SetRawBytes(raw, "choices", []byte(`[{"index":0,"delta":{},"finish_reason":null}]`))
-	raw, _ = sjson.SetBytes(raw, "choices.0.delta.reasoning_content", text)
-	return Chunk{Raw: raw, Reasoning: text}
+	raw, _ = sjson.SetBytes(raw, "choices.0.delta."+key, text)
+	return Chunk{Raw: raw, Reasoning: text, ReasoningKey: key}
 }
 
 func (g *guard) logf(format string, args ...any) {
@@ -327,9 +342,14 @@ func parseChunk(data []byte) (Chunk, bool) {
 	choice := gjson.GetBytes(raw, "choices.0")
 	c := Chunk{
 		Raw:          raw,
-		Reasoning:    choice.Get("delta.reasoning_content").String(),
 		Content:      choice.Get("delta.content").String(),
 		FinishReason: choice.Get("finish_reason").String(),
+	}
+	for _, key := range []string{reasoningContentKey, reasoningKey} {
+		if v := choice.Get("delta." + key).String(); v != "" {
+			c.Reasoning, c.ReasoningKey = v, key
+			break
+		}
 	}
 	if tc := choice.Get("delta.tool_calls"); tc.IsArray() && len(tc.Array()) > 0 {
 		c.ToolCalls = []byte(tc.Raw)

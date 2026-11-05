@@ -69,6 +69,7 @@ type jsonReplyWriter struct {
 	created      int64
 	fingerprint  string
 	reasoning    []byte
+	reasoningKey string
 	content      []byte
 	toolCalls    map[int64]*toolCall
 	finishReason string
@@ -104,6 +105,9 @@ func (j *jsonReplyWriter) Chunk(c Chunk) error {
 		j.model = gjson.GetBytes(c.Raw, "model").String()
 		j.created = gjson.GetBytes(c.Raw, "created").Int()
 		j.fingerprint = gjson.GetBytes(c.Raw, "system_fingerprint").String()
+	}
+	if c.Reasoning != "" && j.reasoningKey == "" {
+		j.reasoningKey = c.ReasoningKey
 	}
 	j.reasoning = append(j.reasoning, c.Reasoning...)
 	j.content = append(j.content, c.Content...)
@@ -151,7 +155,11 @@ func (j *jsonReplyWriter) End() error {
 
 	message := map[string]any{"role": "assistant", "content": string(j.content)}
 	if len(j.reasoning) > 0 {
-		message["reasoning_content"] = string(j.reasoning)
+		key := j.reasoningKey
+		if key == "" {
+			key = reasoningContentKey
+		}
+		message[key] = string(j.reasoning)
 	}
 	if len(j.toolCalls) > 0 {
 		idx := make([]int64, 0, len(j.toolCalls))
