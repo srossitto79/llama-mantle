@@ -18,7 +18,7 @@
   bind:indeterminate
   data-slot="checkbox"
   class={cn(
-    "border-input dark:bg-input/30 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground data-[state=checked]:border-primary data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground data-[state=indeterminate]:border-primary focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:border-destructive peer flex size-4 shrink-0 items-center justify-center rounded-[4px] border outline-none focus-visible:ring-3 disabled:cursor-not-allowed disabled:opacity-50",
+    "border-muted-foreground/70 bg-background data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground data-[state=checked]:border-primary data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground data-[state=indeterminate]:border-primary focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:border-destructive peer flex size-4 shrink-0 items-center justify-center rounded-[4px] border outline-none focus-visible:ring-3 disabled:cursor-not-allowed disabled:opacity-50",
     className,
   )}
   {...restProps}
