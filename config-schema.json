@@ -76,8 +76,8 @@
                 "idleConn": {
                     "type": "integer",
                     "minimum": 0,
-                    "default": 90,
-                    "description": "Idle connection timeout in seconds. Set to 0 to disable."
+                    "default": 4,
+                    "description": "Idle upstream connection timeout in seconds; keep it below the upstream server's keep-alive (5s for llama-server). Set to 0 to disable."
                 }
             },
             "additionalProperties": false,

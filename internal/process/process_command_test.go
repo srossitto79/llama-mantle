@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -443,6 +445,65 @@ func TestProcessCommand_ApiKeyInjected(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200 with injected key, got %d", resp.StatusCode)
+	}
+}
+
+// TestProcessCommand_IdleUpstreamConnDropped verifies that timeouts.idleConn
+// reaches the upstream transport: a connection idle for longer is not reused.
+// Reusing one the upstream is closing fails a POST with EOF (a 502), so the
+// default must stay below llama-server's 5s keep-alive.
+func TestProcessCommand_IdleUpstreamConnDropped(t *testing.T) {
+	skipIfNoSimpleResponder(t)
+
+	var newConns atomic.Int32
+	upstream := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	upstream.Config.ConnState = func(_ net.Conn, s http.ConnState) {
+		if s == http.StateNew {
+			newConns.Add(1)
+		}
+	}
+	upstream.Start()
+	t.Cleanup(upstream.Close)
+
+	cmd, _ := simpleResponderCmd(t, "-silent")
+	p, err := New(context.Background(), t.Name(), config.ModelConfig{
+		Cmd:                cmd,
+		Proxy:              upstream.URL,
+		CheckEndpoint:      "/health",
+		HealthCheckTimeout: 10,
+		Timeouts:           config.TimeoutsConfig{Connect: 5, IdleConn: 1},
+	}, logmon.NewWriter(io.Discard), logmon.NewWriter(io.Discard))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(func() { p.Stop(testStopTimeout) })
+	_ = runAsync(t, p)
+
+	front := httptest.NewServer(p)
+	t.Cleanup(front.Close)
+	post := func() {
+		resp, err := http.Post(front.URL+"/v1/chat/completions", "application/json", strings.NewReader(`{}`))
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+	}
+
+	post()
+	afterFirst := newConns.Load()
+	post() // immediately: reuses the pooled connection
+	if got := newConns.Load(); got != afterFirst {
+		t.Fatalf("expected the idle connection to be reused, got %d new connections", got-afterFirst)
+	}
+	time.Sleep(1500 * time.Millisecond)
+	post() // past idleConn: the pooled connection was dropped
+	if got := newConns.Load(); got != afterFirst+1 {
+		t.Fatalf("expected one new connection after idleConn, got %d", got-afterFirst)
 	}
 }
 

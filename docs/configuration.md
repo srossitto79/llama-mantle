@@ -477,14 +477,14 @@ models:
     # - keepalive: TCP connection keepalive timeout, default: 30 seconds
     # - responseHeader: time to wait for response headers in seconds, default: 0 (no timeout)
     # - tlsHandshake: TLS handshake timeout in seconds, default: 10 seconds
-    # - idleConn: idle connection timeout in seconds, default: 90 seconds
+    # - idleConn: idle connection timeout in seconds, default: 4 seconds (below llama-server's 5s keep-alive)
     # - set any value to 0 to disable that timeout (not recommended)
     timeouts:
       connect: 30
       keepalive: 0
       responseHeader: 60
       tlsHandshake: 10
-      idleConn: 90
+      idleConn: 4
 
     # reasoningLoopGuard: stop reasoning that repeats whole passages and continue the reply
     # - optional, default: off

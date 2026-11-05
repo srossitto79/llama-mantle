@@ -174,7 +174,7 @@ groups:
 		ResponseHeader: 0,
 		TLSHandshake:   10,
 		ExpectContinue: 1,
-		IdleConn:       90,
+		IdleConn:       4,
 	}
 
 	expectedGroups := map[string]GroupConfig{

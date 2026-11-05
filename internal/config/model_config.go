@@ -241,14 +241,18 @@ func (m *ModelConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		Name:             "",
 		Description:      "",
 
-		// matches http.DefaultTransport
+		// matches http.DefaultTransport, except IdleConn
 		Timeouts: TimeoutsConfig{
 			Connect:        30,
 			KeepAlive:      30,
 			ResponseHeader: 0,
 			TLSHandshake:   10,
 			ExpectContinue: 1,
-			IdleConn:       90,
+			// Below the upstream's keep-alive: llama-server (cpp-httplib) and
+			// uvicorn close idle connections after 5s. Reusing one as the
+			// upstream closes it fails the request with EOF, and Go does not
+			// retry a POST, so the client gets a 502.
+			IdleConn: 4,
 		},
 	}
 
