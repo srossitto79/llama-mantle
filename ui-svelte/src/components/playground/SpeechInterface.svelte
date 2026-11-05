@@ -266,7 +266,7 @@
         </div>
       {:else if error}
         <div class="flex items-center justify-center py-8">
-          <div class="text-center text-red-500">
+          <div class="text-center text-destructive">
             <p class="font-medium">Error</p>
             <p class="text-sm mt-1">{error}</p>
           </div>

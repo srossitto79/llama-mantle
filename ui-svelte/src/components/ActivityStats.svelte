@@ -38,7 +38,7 @@
           <TokenHistogram
             data={stats.prompt_histogram}
             unit="prompt tokens/sec"
-            colorClass="text-amber-500 dark:text-amber-400"
+            colorClass="text-chart-2"
           />
         {:else}
           <div class="text-muted-foreground py-6 text-center text-sm">No prompt speed data yet</div>

@@ -1,6 +1,12 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { startBuild, cancelBuild, listBackends, deleteBackend, updateBackend } from "../lib/mantleApi";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import { Input } from "$lib/components/ui/input/index.js";
+  import * as Card from "$lib/components/ui/card/index.js";
+  import * as Page from "$lib/components/ui/page/index.js";
+  import { EmptyState } from "$lib/components/ui/empty-state/index.js";
+  import { toast } from "$lib/components/ui/toast/index.js";
   import type { BackendEntry } from "../lib/types";
   import { activeBuilds, trackBuild, removeBuild, syncTasks } from "../stores/tasks";
 
@@ -24,7 +30,10 @@
     building = true;
     const task = await startBuild(repo.trim(), branch.trim() || "main", cmakeFlags.trim(), backendName.trim());
     building = false;
-    if (!task) return;
+    if (!task) {
+      toast.show({ kind: "error", title: "Build failed" });
+      return;
+    }
     trackBuild(task);
   }
 
@@ -41,7 +50,8 @@
 
   async function doDeleteBackend(name: string) {
     if (!confirm(`Delete backend "${name}"?`)) return;
-    await deleteBackend(name);
+    const ok = await deleteBackend(name);
+    if (!ok) toast.show({ kind: "error", title: "Delete failed", description: name });
     await refreshBackends();
   }
 
@@ -55,7 +65,10 @@
     const label = `${shortRepo(be.repo)}@${be.branch || "main"}`;
     if (!confirm(`Rebuild "${be.name}" from ${label}? The existing backend will be replaced.`)) return;
     const task = await updateBackend(be.name);
-    if (!task) return;
+    if (!task) {
+      toast.show({ kind: "error", title: "Update failed", description: be.name });
+      return;
+    }
     trackBuild(task);
     await refreshBackends();
   }
@@ -69,7 +82,10 @@
     if (!confirm(`Rebuild "${name}" from ${adoptRepo.trim()}@${adoptBranch.trim() || "main"}? The existing backend will be replaced.`)) return;
     const task = await updateBackend(name, adoptRepo.trim(), adoptBranch.trim() || "main");
     adoptingBackend = null;
-    if (!task) return;
+    if (!task) {
+      toast.show({ kind: "error", title: "Update failed", description: name });
+      return;
+    }
     trackBuild(task);
     await refreshBackends();
   }
@@ -94,58 +110,32 @@
   });
 </script>
 
-<div class="card h-full flex flex-col p-4">
-  <h2>Backend Manager</h2>
-
+<Page.Root title="Backends" width="wide">
   <!-- Build trigger -->
-  <div class="border border-border rounded p-4 mb-4">
+  <Card.Root class="gap-0 p-4 mb-4">
     <h3 class="text-sm font-semibold mb-3">Build llama.cpp Fork</h3>
     <div class="flex flex-col gap-2">
       <div class="flex gap-2 items-center">
-        <label for="backend-name" class="text-sm text-txtsecondary w-12">Name:</label>
-        <input
-          id="backend-name"
-          type="text"
-          class="input flex-1 px-3 py-1.5 border rounded bg-surface text-sm"
-          placeholder="beellama-cuda"
-          bind:value={backendName}
-        />
+        <label for="backend-name" class="text-sm text-muted-foreground w-16">Name:</label>
+        <Input id="backend-name" type="text" class="flex-1" placeholder="beellama-cuda" bind:value={backendName} />
       </div>
       <div class="flex gap-2 items-center">
-        <label for="backend-repo" class="text-sm text-txtsecondary w-12">Repo:</label>
-        <input
-          id="backend-repo"
-          type="text"
-          class="input flex-1 px-3 py-1.5 border rounded bg-surface text-sm"
-          placeholder="https://github.com/user/llama.cpp"
-          bind:value={repo}
-        />
+        <label for="backend-repo" class="text-sm text-muted-foreground w-16">Repo:</label>
+        <Input id="backend-repo" type="text" class="flex-1" placeholder="https://github.com/user/llama.cpp" bind:value={repo} />
       </div>
       <div class="flex gap-2 items-center">
-        <label for="backend-branch" class="text-sm text-txtsecondary w-12">Branch:</label>
-        <input
-          id="backend-branch"
-          type="text"
-          class="input flex-1 px-3 py-1.5 border rounded bg-surface text-sm"
-          placeholder="main"
-          bind:value={branch}
-        />
+        <label for="backend-branch" class="text-sm text-muted-foreground w-16">Branch:</label>
+        <Input id="backend-branch" type="text" class="flex-1" placeholder="main" bind:value={branch} />
       </div>
       <div class="flex gap-2 items-center">
-        <label for="backend-cmake" class="text-sm text-txtsecondary w-12">CMake:</label>
-        <input
-          id="backend-cmake"
-          type="text"
-          class="input flex-1 px-3 py-1.5 border rounded bg-surface text-sm"
-          placeholder='-DGGML_CUDA_FORCE_MMQ=ON -DLLAMA_CURL=OFF'
-          bind:value={cmakeFlags}
-        />
+        <label for="backend-cmake" class="text-sm text-muted-foreground w-16">CMake:</label>
+        <Input id="backend-cmake" type="text" class="flex-1" placeholder='-DGGML_CUDA_FORCE_MMQ=ON -DLLAMA_CURL=OFF' bind:value={cmakeFlags} />
       </div>
-      <button class="btn px-4 py-1.5 self-end" onclick={doBuild} disabled={building || !repo.trim() || !backendName.trim()}>
+      <Button class="self-end" onclick={doBuild} disabled={building || !repo.trim() || !backendName.trim()}>
         {building ? "Starting..." : "Build"}
-      </button>
+      </Button>
     </div>
-  </div>
+  </Card.Root>
 
   <!-- Active builds -->
   {#if $activeBuilds.size > 0}
@@ -156,17 +146,17 @@
           <div class="flex-1 min-w-0">
             <div class="flex justify-between">
               <span class="truncate font-medium">{shortRepo(entry.task.repo || "")}@{entry.task.branch || "main"}</span>
-              <span class="text-txtsecondary">{entry.task.pct >= 0 ? `${entry.task.pct}%` : ""}</span>
+              <span class="text-muted-foreground">{entry.task.pct >= 0 ? `${entry.task.pct}%` : ""}</span>
             </div>
-            <p class="text-xs text-txtsecondary truncate">{entry.task.message}</p>
+            <p class="text-xs text-muted-foreground truncate">{entry.task.message}</p>
             {#if entry.task.pct >= 0}
-              <div class="w-full bg-gray-200 dark:bg-gray-700 rounded h-1.5 mt-1">
-                <div class="bg-green-500 h-1.5 rounded" style="width: {entry.task.pct}%"></div>
+              <div class="w-full bg-muted rounded h-1.5 mt-1">
+                <div class="bg-success h-1.5 rounded" style="width: {entry.task.pct}%"></div>
               </div>
             {/if}
           </div>
           {#if entry.task.state === "running"}
-            <button class="btn btn--sm text-red-500" onclick={() => doCancelBuild(id)}>Cancel</button>
+            <Button variant="destructive" size="sm" onclick={() => doCancelBuild(id)}>Cancel</Button>
           {/if}
         </div>
       {/each}
@@ -180,14 +170,14 @@
       {#each builtinBackends as be (be.name)}
         <div class="py-2 px-2 border-b border-border text-sm flex items-center gap-2">
           <span class="font-medium">{be.name}</span>
-          <span class="font-mono text-xs text-txtsecondary">{be.path}</span>
+          <span class="font-mono text-xs text-muted-foreground">{be.path}</span>
           {#if be.repo}
-            <span class="text-txtsecondary text-xs">{shortRepo(be.repo)}{be.branch ? `@${be.branch.slice(0, 12)}` : ""}</span>
+            <span class="text-muted-foreground text-xs">{shortRepo(be.repo)}{be.branch ? `@${be.branch.slice(0, 12)}` : ""}</span>
           {/if}
           {#if be.size}
-            <span class="text-txtsecondary">{formatSize(be.size)}</span>
+            <span class="text-muted-foreground">{formatSize(be.size)}</span>
           {/if}
-          <span class="ml-auto text-xs text-txtsecondary italic">{be.kind ?? ""} · part of the image</span>
+          <span class="ml-auto text-xs text-muted-foreground italic">{be.kind ?? ""} · part of the image</span>
         </div>
       {/each}
     </div>
@@ -197,49 +187,39 @@
   <div class="flex-1 min-h-0">
     <div class="flex items-center justify-between mb-2">
       <h3 class="text-sm font-semibold">Compiled Backends</h3>
-      <button class="btn btn--sm" onclick={refreshBackends}>Refresh</button>
+      <Button variant="outline" size="sm" onclick={refreshBackends}>Refresh</Button>
     </div>
     {#if loadingBackends}
-      <p class="text-sm text-txtsecondary">Loading...</p>
+      <p class="text-sm text-muted-foreground">Loading...</p>
     {:else if compiledBackends.length === 0}
-      <p class="text-sm text-txtsecondary">No compiled backends yet. Build one above.</p>
+      <EmptyState title="No compiled backends" />
     {:else}
       <div class="overflow-y-auto max-h-64">
         {#each compiledBackends as be}
-          <div class="py-2 px-2 border-b border-border hover:bg-secondary-hover text-sm">
+          <div class="py-2 px-2 border-b border-border hover:bg-muted text-sm">
             <div class="flex items-center justify-between">
               <div class="flex-1 min-w-0">
                 <span class="font-medium">{be.name}</span>
                 {#if be.repo}
-                  <span class="text-txtsecondary text-xs ml-2">{shortRepo(be.repo)}@{be.branch || "main"}</span>
+                  <span class="text-muted-foreground text-xs ml-2">{shortRepo(be.repo)}@{be.branch || "main"}</span>
                 {:else}
-                  <span class="text-txtsecondary text-xs ml-2 italic">source unknown</span>
+                  <span class="text-muted-foreground text-xs ml-2 italic">source unknown</span>
                 {/if}
                 {#if be.size}
-                  <span class="text-txtsecondary ml-2">{formatSize(be.size)}</span>
+                  <span class="text-muted-foreground ml-2">{formatSize(be.size)}</span>
                 {/if}
               </div>
               <div class="flex items-center gap-1 shrink-0 ml-2">
-                <button class="btn btn--sm" onclick={() => doUpdateBackend(be)}>Update</button>
-                <button class="btn btn--sm text-red-500" onclick={() => doDeleteBackend(be.name)}>Delete</button>
+                <Button variant="outline" size="sm" onclick={() => doUpdateBackend(be)}>Update</Button>
+                <Button variant="destructive" size="sm" onclick={() => doDeleteBackend(be.name)}>Delete</Button>
               </div>
             </div>
             {#if adoptingBackend === be.name}
               <div class="flex gap-2 items-center mt-2">
-                <input
-                  type="text"
-                  class="input flex-1 px-2 py-1 border rounded bg-surface text-xs"
-                  placeholder="https://github.com/user/llama.cpp"
-                  bind:value={adoptRepo}
-                />
-                <input
-                  type="text"
-                  class="input w-24 px-2 py-1 border rounded bg-surface text-xs"
-                  placeholder="main"
-                  bind:value={adoptBranch}
-                />
-                <button class="btn btn--sm" onclick={() => confirmAdopt(be.name)} disabled={!adoptRepo.trim()}>Rebuild</button>
-                <button class="btn btn--sm" onclick={cancelAdopt}>Cancel</button>
+                <Input type="text" class="flex-1 h-8 text-xs" placeholder="https://github.com/user/llama.cpp" bind:value={adoptRepo} />
+                <Input type="text" class="w-24 h-8 text-xs" placeholder="main" bind:value={adoptBranch} />
+                <Button variant="outline" size="sm" onclick={() => confirmAdopt(be.name)} disabled={!adoptRepo.trim()}>Rebuild</Button>
+                <Button variant="outline" size="sm" onclick={cancelAdopt}>Cancel</Button>
               </div>
             {/if}
           </div>
@@ -247,15 +227,4 @@
       </div>
     {/if}
   </div>
-</div>
-
-<style>
-  .input {
-    border: 1px solid var(--color-border);
-  }
-  .input:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 1px #3b82f6;
-  }
-</style>
+</Page.Root>

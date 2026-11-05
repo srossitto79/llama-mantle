@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { params } from "svelte-spa-router";
+  import { params, link } from "svelte-spa-router";
   import { models } from "../stores/api";
   import { statusDotColor } from "../stores/modelLoad";
   import type { Model } from "../lib/types";
@@ -14,21 +14,21 @@
   let modelId = $derived($params?.id ?? "");
 
   let model = $derived<Model | undefined>($models.find((m) => m.id === modelId));
+  import * as Page from "$lib/components/ui/page/index.js";
 </script>
 
-<div class="flex h-full flex-col gap-4 overflow-y-auto p-2">
+<Page.Root title={model ? model.name || model.id : modelId} width="full" fill>
   {#if !model}
     <Card.Root class="shrink-0 p-6">
       <p class="text-muted-foreground">Model “{modelId}” not found.</p>
-      <a href="/" class="text-primary hover:underline">Back to Playground</a>
+      <a href="/models" use:link class="text-primary hover:underline">Back to Models</a>
     </Card.Root>
   {:else}
     <Card.Root class="shrink-0 gap-0 overflow-hidden py-0">
       <Card.Header class="shrink-0 gap-2 border-b px-4 py-3">
         <div class="flex items-center gap-2">
           <span class={`size-2.5 shrink-0 rounded-full ${statusDotColor(model)}`}></span>
-          <Card.Title class="text-lg">{model.name || model.id}</Card.Title>
-          <span class="text-muted-foreground text-sm">({model.id})</span>
+          {#if model.name && model.name !== model.id}<span class="text-muted-foreground text-sm">{model.id}</span>{/if}
           <span class="text-muted-foreground text-xs uppercase tracking-wide">{model.state}</span>
           <div class="ml-auto flex items-center gap-2">
             <a
@@ -76,4 +76,4 @@
       </TabsContent>
     </Tabs>
   {/if}
-</div>
+</Page.Root>

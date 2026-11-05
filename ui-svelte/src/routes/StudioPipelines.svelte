@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Download, Loader2, Play, Save, Trash2, Upload, Workflow } from "@lucide/svelte";
+  import { Download, Loader2, Play, Save, Trash2, Upload } from "@lucide/svelte";
   import * as Card from "$lib/components/ui/card/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
@@ -92,10 +92,10 @@
       if (preselectedModel && foundResources.some((resource) => resource.path === preselectedModel)) input = preselectedModel;
     });
   });
+  import * as Page from "$lib/components/ui/page/index.js";
 </script>
 
-<div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-2">
-  <div class="flex items-center gap-2"><Workflow class="size-5" /><h2 class="text-lg font-semibold">Recipes &amp; pipelines</h2><span class="text-muted-foreground text-sm">One operation is a recipe; add steps to build a pipeline.</span></div>
+<Page.Root title="Studio Pipelines" description="One operation is a recipe; add steps to build a pipeline." width="full">
   <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
     <Card.Root>
       <Card.Header><Card.Title>Custom recipe</Card.Title><Card.Description>Common settings have controls. Advanced request JSON exposes every argument supported by the Studio operation API and is validated by the backend before execution.</Card.Description></Card.Header>
@@ -116,4 +116,4 @@
       {#each visibleTemplates as template}<div class="border-border flex items-center gap-2 rounded-md border p-2"><button class="min-w-0 flex-1 truncate text-left text-sm" onclick={() => load(template)}>{template.name}<span class="text-muted-foreground block text-xs">{template.pipeline.steps.length === 1 ? "1 operation" : `${template.pipeline.steps.length} steps`}</span></button><Button variant="ghost" size="icon" onclick={() => remove(template)}><Trash2 class="size-4" /></Button></div>{/each}
     </Card.Content></Card.Root>
   </div>
-</div>
+</Page.Root>

@@ -4,7 +4,7 @@
   let {
     data,
     unit = "tokens/sec",
-    colorClass = "text-blue-500 dark:text-blue-400",
+    colorClass = "text-chart-1",
   }: {
     data: HistogramData;
     unit?: string;
@@ -99,7 +99,7 @@
       stroke-width="2"
       stroke-dasharray="4 2"
       opacity="0.7"
-      class="text-gray-600 dark:text-gray-400"
+      class="text-muted-foreground"
     />
 
     <line
@@ -111,7 +111,7 @@
       stroke-width="2"
       stroke-dasharray="4 2"
       opacity="0.7"
-      class="text-orange-500 dark:text-orange-400"
+      class="text-chart-5"
     />
 
     <line
@@ -123,7 +123,7 @@
       stroke-width="2"
       stroke-dasharray="4 2"
       opacity="0.7"
-      class="text-green-500 dark:text-green-400"
+      class="text-chart-4"
     />
 
     <!-- X-axis labels -->

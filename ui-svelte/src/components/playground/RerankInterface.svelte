@@ -222,7 +222,7 @@
 
   function scoreColor(score: number | null): string {
     if (score === null) return "text-muted-foreground";
-    if (score > 0) return "text-green-600 dark:text-green-400";
+    if (score > 0) return "text-success";
     return "text-destructive";
   }
 

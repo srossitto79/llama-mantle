@@ -101,12 +101,11 @@
       if (refreshTimer !== null) clearTimeout(refreshTimer);
     };
   });
+  import * as Page from "$lib/components/ui/page/index.js";
 </script>
 
-<div class="p-2">
-  <div class="mt-4 mb-4">
-    <ActivityStats {stats} />
-  </div>
+<Page.Root title="Activity" width="full">
+  <ActivityStats {stats} />
 
   <ActivityTable
     metrics={rows}
@@ -126,4 +125,4 @@
     cardClass="min-h-[30rem] overflow-auto"
     emptyMessage="No activity recorded"
   />
-</div>
+</Page.Root>

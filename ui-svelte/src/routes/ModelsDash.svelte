@@ -5,20 +5,30 @@
   import { showUnlistedModels as showUnlisted } from "../stores/modelDisplay";
   import ModelLoadButton from "../components/ModelLoadButton.svelte";
   import Tag from "../components/Tag.svelte";
+  import * as Page from "$lib/components/ui/page/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Switch from "$lib/components/ui/switch/index.js";
   import * as Label from "$lib/components/ui/label/index.js";
-  import { PowerOff, Loader2, ExternalLink, SquareStack, Eye } from "@lucide/svelte";
+  import { Input } from "$lib/components/ui/input/index.js";
+  import { PowerOff, Loader2, ExternalLink, Search } from "@lucide/svelte";
 
   let unloadingAll = $state(false);
+  let query = $state("");
 
-  let visibleModels = $derived(
-    $showUnlisted ? $models : $models.filter((m) => !m.unlisted)
-  );
-
+  let listed = $derived($showUnlisted ? $models : $models.filter((m) => !m.unlisted));
+  let visibleModels = $derived.by(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return listed;
+    return listed.filter(
+      (m) =>
+        m.id.toLowerCase().includes(q) ||
+        (m.name ?? "").toLowerCase().includes(q) ||
+        (m.aliases ?? []).some((a) => a.toLowerCase().includes(q)),
+    );
+  });
   let readyCount = $derived($models.filter((m) => m.state === "ready").length);
-  let anyReady = $derived(readyCount > 0);
+  let unlistedCount = $derived($models.filter((m) => m.unlisted).length);
 
   async function handleUnloadAll(): Promise<void> {
     unloadingAll = true;
@@ -32,96 +42,76 @@
   }
 </script>
 
-<div class="flex h-full flex-col gap-4 overflow-y-auto p-2">
-  <Card.Root class="shrink-0 gap-0 overflow-hidden py-0">
-    <Card.Header class="shrink-0 gap-2 border-b px-4 py-3">
-      <div class="flex items-center gap-2">
-        <SquareStack class="size-5" />
-        <Card.Title class="text-lg">Models</Card.Title>
-        <span class="text-muted-foreground text-sm">
-          ({visibleModels.length} of {$models.length})
-        </span>
-        <span class="text-muted-foreground text-xs uppercase tracking-wide">
-          {readyCount} ready
-        </span>
-        <div class="ml-auto flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onclick={handleUnloadAll}
-            disabled={!anyReady || unloadingAll}
-          >
-            {#if unloadingAll}
-              <Loader2 class="size-3.5 animate-spin" />
-            {:else}
-              <PowerOff class="size-3.5" />
-            {/if}
-            Unload All
-          </Button>
-        </div>
-      </div>
-    </Card.Header>
-    <Card.Content class="flex items-center gap-2 px-4 py-2">
-      <Eye class="text-muted-foreground size-4" />
-      <Label.Root for="show-unlisted-toggle" class="text-sm">
-        Show unlisted models
-      </Label.Root>
-      <Switch.Root
-        id="show-unlisted-toggle"
-        checked={$showUnlisted}
-        onCheckedChange={(v) => showUnlisted.set(v)}
-      />
-      <span class="text-muted-foreground text-xs">
-        {$models.filter((m) => m.unlisted).length} unlisted
-      </span>
-    </Card.Content>
-  </Card.Root>
+<Page.Root title="Models" description="{$models.length} configured · {readyCount} running" fill>
+  {#snippet actions()}
+    <Button variant="outline" size="sm" onclick={handleUnloadAll} disabled={readyCount === 0 || unloadingAll}>
+      {#if unloadingAll}
+        <Loader2 class="size-3.5 animate-spin" />
+      {:else}
+        <PowerOff class="size-3.5" />
+      {/if}
+      Unload all
+    </Button>
+  {/snippet}
 
-  <Card.Root class="min-h-0 flex-1 gap-0 overflow-hidden py-0">
-    <Card.Content class="overflow-y-auto p-0">
+  <Card.Root class="min-h-0 flex-1 gap-0 py-0">
+    <div class="bg-(--panel-header-bg) flex flex-wrap items-center gap-3 border-b px-4 py-2.5">
+      <div class="relative w-full max-w-xs">
+        <Search class="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+        <Input bind:value={query} placeholder="Filter models" class="h-8 pl-8" aria-label="Filter models" />
+      </div>
+      <div class="ml-auto flex items-center gap-2">
+        <Switch.Root
+          id="show-unlisted-toggle"
+          checked={$showUnlisted}
+          onCheckedChange={(v) => showUnlisted.set(v)}
+        />
+        <Label.Root for="show-unlisted-toggle" class="text-muted-foreground text-sm font-normal">
+          Unlisted ({unlistedCount})
+        </Label.Root>
+      </div>
+    </div>
+
+    <div class="min-h-0 flex-1 overflow-y-auto">
       {#if visibleModels.length === 0}
-        <div class="text-muted-foreground px-4 py-8 text-center text-sm">
-          No models available
+        <div class="text-muted-foreground px-4 py-12 text-center text-sm">
+          {query ? "No matching models" : "No models configured"}
         </div>
       {:else}
-        <div class="divide-y">
+        <ul class="divide-y">
           {#each visibleModels as model (model.id)}
-            <div class="hover:bg-muted/50 flex items-center gap-3 px-4 py-2.5">
-              <span class={`size-2.5 shrink-0 rounded-full ${statusDotColor(model)}`}></span>
-              <a
-                href="/models/{encodeURIComponent(model.id)}"
-                use:link
-                class="min-w-0 flex-1"
-              >
+            <li class="hover:bg-muted/50 flex items-center gap-3 px-4 py-2.5">
+              <span class="size-2 shrink-0 rounded-full {statusDotColor(model)}" aria-hidden="true"></span>
+              <a href="/models/{encodeURIComponent(model.id)}" use:link class="min-w-0 flex-1">
                 <div class="truncate text-sm font-medium">{model.name || model.id}</div>
-                <div class="text-muted-foreground truncate text-xs">
-                  {model.id}
-                  {#if model.aliases && model.aliases.length > 0}
-                    · {model.aliases.join(", ")}
+                <div class="text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs">
+                  <span class="truncate font-mono">{model.id}</span>
+                  {#if model.aliases?.length}
+                    <span class="shrink-0" title={model.aliases.join("\n")}>
+                      · {model.aliases.length} {model.aliases.length === 1 ? "alias" : "aliases"}
+                    </span>
                   {/if}
                 </div>
               </a>
-              <span class="text-muted-foreground text-xs uppercase tracking-wide">
-                {model.state}
-              </span>
               {#if model.unlisted}
-                <Tag class="px-1.5 text-[0.625rem] uppercase">unlisted</Tag>
+                <Tag class="hidden px-1.5 text-[0.6875rem] sm:inline">Unlisted</Tag>
               {/if}
+              <span class="text-muted-foreground hidden w-16 text-right text-xs capitalize sm:inline">{model.state}</span>
               <a
                 href="/upstream/{encodeURIComponent(model.id)}/"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="text-muted-foreground hover:text-foreground"
+                class="text-muted-foreground hover:text-foreground hidden sm:inline"
                 title="Open model server"
                 aria-label="Open model server"
               >
                 <ExternalLink class="size-4" />
               </a>
               <ModelLoadButton {model} />
-            </div>
+            </li>
           {/each}
-        </div>
+        </ul>
       {/if}
-    </Card.Content>
+    </div>
   </Card.Root>
-</div>
+</Page.Root>

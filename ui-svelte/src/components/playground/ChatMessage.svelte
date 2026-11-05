@@ -199,7 +199,7 @@
         </div>
       {/if}
       {#if genTokens > 0}
-        <div class="mt-2 text-xs text-txtsecondary tabular-nums">
+        <div class="mt-2 text-xs text-muted-foreground tabular-nums">
           {genTokens} tok · {formatDuration(genMs)}{#if tokensPerSec > 0} · {tokensPerSec.toFixed(1)} tok/s{/if}
         </div>
       {/if}

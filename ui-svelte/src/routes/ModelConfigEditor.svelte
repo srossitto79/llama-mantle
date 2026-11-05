@@ -211,13 +211,13 @@
   function modelIdOf(draft: ModelDraft): string {
     return draft.originalId ?? draft.draftId;
   }
+  import * as Page from "$lib/components/ui/page/index.js";
 </script>
 
-<div class="space-y-4 p-2">
-  <div class="flex items-center justify-between">
-    <h3 class="text-lg font-semibold">Model Config</h3>
+<Page.Root title="Model Config" width="wide">
+  {#snippet actions()}
     <a class="text-primary text-sm underline" href="/config" use:link>Edit raw YAML</a>
-  </div>
+  {/snippet}
 
   {#if loading}
     <p class="text-muted-foreground text-sm">Loading…</p>
@@ -329,4 +329,4 @@
       {/if}
     </section>
   {/if}
-</div>
+</Page.Root>

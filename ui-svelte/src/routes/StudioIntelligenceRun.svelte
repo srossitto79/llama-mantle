@@ -167,10 +167,10 @@ function suiteLabel(kind: string): string {
     const timer = setInterval(() => void refresh(), 2000);
     return () => { disposed = true; clearInterval(timer); source?.close(); };
   });
+  import * as Page from "$lib/components/ui/page/index.js";
 </script>
 
-<div class="mx-auto w-full max-w-6xl space-y-6 overflow-auto p-6">
-  <div><h1 class="text-2xl font-semibold">Run intelligence suite</h1><p class="text-muted-foreground mt-1">Measure model capabilities with reproducible, automatically graded tasks.</p></div>
+<Page.Root title="Intelligence Run" description="Measure model capabilities with reproducible, automatically graded tasks." width="full">
   {#if error}<p role="alert" class="text-destructive rounded-lg border p-4">{error}</p>{/if}
   {#if configError}<p role="alert" class="text-destructive rounded-lg border p-4">{configError} <button class="underline" onclick={() => loadConfig().catch(e => configError = String(e))}>Retry model discovery</button></p>{/if}
 
@@ -254,4 +254,4 @@ function suiteLabel(kind: string): string {
     {/if}
     <a class="text-primary text-sm underline" href="/studio/intelligence/results" use:link>View results</a>
   </section>
-</div>
+</Page.Root>

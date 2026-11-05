@@ -419,9 +419,10 @@
     });
     return () => stopStream?.();
   });
+  import * as Page from "$lib/components/ui/page/index.js";
 </script>
 
-<div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-2">
+<Page.Root title="Llama Studio" width="full">
   {#if showWelcome}
     <Card.Root class="border-primary/40 bg-primary/5 shrink-0"><Card.Header><div class="flex gap-3"><div class="min-w-0 flex-1"><Card.Title>Welcome to Runner</Card.Title><Card.Description>Choose an outcome below. Runner will help select resources, check hardware fit, run the job, compare the result, and prepare it for serving.</Card.Description></div><Button size="sm" variant="ghost" onclick={dismissWelcome}>Dismiss</Button></div></Card.Header><Card.Content><ol class="grid gap-2 text-sm md:grid-cols-4"><li>1. Select or download a model</li><li>2. Choose a guided recipe</li><li>3. Check hardware fit</li><li>4. Run and review the artifacts</li></ol></Card.Content></Card.Root>
   {/if}
@@ -763,4 +764,4 @@
       </Card.Content>
     </Card.Root>
   {/if}
-</div>
+</Page.Root>

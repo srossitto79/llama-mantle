@@ -4,12 +4,12 @@
   let eventStatusColor = $derived.by(() => {
     switch ($connectionState) {
       case "connected":
-        return "bg-emerald-500";
+        return "bg-success";
       case "connecting":
-        return "bg-amber-500";
+        return "bg-warning";
       case "disconnected":
       default:
-        return "bg-red-500";
+        return "bg-destructive";
     }
   });
 

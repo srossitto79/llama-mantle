@@ -136,14 +136,14 @@
           <p>Transcribing audio...</p>
         </div>
       {:else if $error}
-        <div class="text-center text-red-500 p-4">
+        <div class="text-center text-destructive p-4">
           <p class="font-medium">Error</p>
           <p class="text-sm mt-1">{$error}</p>
         </div>
       {:else if transcriptionResult}
         <div class="w-full h-full flex flex-col p-4">
           <div class="flex justify-between items-center mb-2">
-            <h3 class="pb-0 font-medium">Transcription Result</h3>
+            <h3 class="font-medium">Transcription Result</h3>
             <Button
               variant="outline"
               size="icon-sm"

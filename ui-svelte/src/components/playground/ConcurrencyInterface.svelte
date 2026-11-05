@@ -306,24 +306,24 @@
   }
 
   function waitingBarClass(run: RunState): string {
-    if (run.status === "error" && run.phase === "waiting") return "bg-red-500";
-    return "bg-slate-200 dark:bg-white/10";
+    if (run.status === "error" && run.phase === "waiting") return "bg-destructive";
+    return "bg-muted";
   }
 
   function loadingBarClass(run: RunState): string {
-    if (run.status === "error" && run.phase === "loading") return "bg-red-500";
-    return "bg-slate-400 dark:bg-slate-500";
+    if (run.status === "error" && run.phase === "loading") return "bg-destructive";
+    return "bg-muted-foreground/50";
   }
 
   function reasoningBarClass(run: RunState): string {
-    if (run.status === "error" && run.phase === "reasoning") return "bg-red-500";
-    return "bg-purple-500";
+    if (run.status === "error" && run.phase === "reasoning") return "bg-destructive";
+    return "bg-chart-1";
   }
 
   function contentBarClass(run: RunState): string {
-    if (run.status === "error" && run.phase === "content") return "bg-red-500";
-    if (run.status === "done") return "bg-green-500";
-    return "bg-amber-400 dark:bg-amber-500";
+    if (run.status === "error" && run.phase === "content") return "bg-destructive";
+    if (run.status === "done") return "bg-success";
+    return "bg-chart-5";
   }
 
   function niceStepMs(maxMs: number): number {
@@ -350,13 +350,13 @@
   function statusBadgeClass(status: Status): string {
     switch (status) {
       case "waiting":
-        return "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200";
+        return "bg-muted text-muted-foreground";
       case "streaming":
-        return "bg-amber-200 text-amber-900 dark:bg-amber-500/30 dark:text-amber-200";
+        return "bg-warning/20 text-foreground";
       case "done":
-        return "bg-green-200 text-green-900 dark:bg-green-500/30 dark:text-green-200";
+        return "bg-success/20 text-foreground";
       case "error":
-        return "bg-red-200 text-red-900 dark:bg-red-500/30 dark:text-red-200";
+        return "bg-destructive/20 text-foreground";
     }
   }
 
@@ -411,7 +411,7 @@
                 <div class="bg-muted/50 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                   {section.label}
                 </div>
-                <div class="divide-y divide-gray-100 dark:divide-white/5">
+                <div class="divide-y divide-border">
                   {#each section.ids as id (id)}
                     <button
                       type="button"
@@ -470,7 +470,7 @@
     {#if $testListStore.length === 0}
       <div class="h-full flex items-center justify-center px-6">
         <div class="max-w-md text-sm text-muted-foreground space-y-4">
-          <h4 class="text-base font-semibold text-foreground pb-0">Load Test</h4>
+          <h4 class="text-base font-semibold">Load Test</h4>
           <p>
             Fire several streaming chat completions at llama-swap at the same time to see how it handles parallel
             loading and concurrent inference. Each request streams into its own panel with a live timer and status.
@@ -503,12 +503,12 @@
             <span>Timeline</span>
             {#if !$timelineCollapsedStore}
               <span class="flex items-center gap-3 text-[10px] text-muted-foreground font-normal ml-3" aria-hidden="true">
-                <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-slate-200 dark:bg-white/10 border border-gray-300 dark:border-white/10"></span>waiting</span>
-                <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-slate-400 dark:bg-slate-500"></span>loading</span>
-                <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-purple-500"></span>reasoning</span>
-                <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-amber-400 dark:bg-amber-500"></span>streaming</span>
-                <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-green-500"></span>done</span>
-                <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-red-500"></span>error</span>
+                <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-muted border border-border"></span>waiting</span>
+                <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-muted-foreground/50"></span>loading</span>
+                <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-chart-1"></span>reasoning</span>
+                <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-chart-5"></span>streaming</span>
+                <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-success"></span>done</span>
+                <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-destructive"></span>error</span>
               </span>
             {/if}
             <span class="ml-auto tabular-nums text-muted-foreground">
@@ -625,7 +625,7 @@
               <Button
                 variant="ghost"
                 size="icon-sm"
-                class="h-5 w-5 text-muted-foreground hover:text-red-500"
+                class="h-5 w-5 text-muted-foreground hover:text-destructive"
                 onclick={() => removeEntry(entry.id)}
                 disabled={isRunning}
                 aria-label="Remove"
@@ -639,19 +639,19 @@
                 <div class="bg-secondary/40 dark:bg-white/5 text-muted-foreground rounded-md px-2 py-1 mb-2 whitespace-pre-wrap">{run.loadingText.trim()}</div>
               {/if}
               {#if run?.reasoningContent}
-                <div class="text-purple-700 dark:text-purple-300 whitespace-pre-wrap">{run.reasoningContent}</div>
+                <div class="text-chart-1 whitespace-pre-wrap">{run.reasoningContent}</div>
               {/if}
               {#if run?.content}
                 <div class="whitespace-pre-wrap {run.reasoningContent ? 'mt-2' : ''}">{run.content}</div>
               {/if}
               {#if run?.status === "error" && run?.error}
-                <div class="text-red-500 mt-2">[error] {run.error}</div>
+                <div class="text-destructive mt-2">[error] {run.error}</div>
               {/if}
             </div>
             {#if run?.status === "done"}
               {@const ttftMs = (run.waitingMs) + (run.loadingMs) + (run.reasoningMs)}
               {@const tps = run.completionTokens && run.contentMs > 0 ? run.completionTokens / (run.contentMs / 1000) : 0}
-              <div class="shrink-0 flex items-center gap-3 px-2 py-1 text-[10px] tabular-nums text-txtsecondary border-t border-gray-100 dark:border-white/10">
+              <div class="shrink-0 flex items-center gap-3 px-2 py-1 text-[10px] tabular-nums text-muted-foreground border-t border-border">
                 {#if run.loadingMs > 0}
                   <span title="Model load time">load {formatElapsed(run.loadingMs)}</span>
                 {/if}

@@ -13,9 +13,10 @@
   let direction = $derived<"horizontal" | "vertical">(
     $screenWidth === "xs" || $screenWidth === "sm" ? "vertical" : "horizontal",
   );
+  import * as Page from "$lib/components/ui/page/index.js";
 </script>
 
-<div class="flex flex-col h-full w-full gap-2">
+<Page.Root title="Logs" width="full" fill>
   <Tabs
     value={$viewModeStore}
     onValueChange={(v) => v && viewModeStore.set(v as ViewMode)}
@@ -48,4 +49,4 @@
       </TabsContent>
     </div>
   </Tabs>
-</div>
+</Page.Root>

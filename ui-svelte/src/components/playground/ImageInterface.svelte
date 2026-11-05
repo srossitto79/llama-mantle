@@ -354,7 +354,7 @@
           {/if}
         </div>
         {#if loraError}
-          <p class="text-xs text-red-500 mb-1">{loraError}</p>
+          <p class="text-xs text-destructive mb-1">{loraError}</p>
         {/if}
         {#if lorasLoaded && availableLoras.length === 0}
           <p class="text-xs text-muted-foreground">No LoRAs available</p>
@@ -402,7 +402,7 @@
           <p>Generating image...</p>
         </div>
       {:else if $error}
-        <div class="text-center text-red-500 p-4">
+        <div class="text-center text-destructive p-4">
           <p class="font-medium">Error</p>
           <p class="text-sm mt-1">{$error}</p>
         </div>

@@ -10,6 +10,7 @@
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
   import * as Select from "$lib/components/ui/select/index.js";
+  import { Toaster } from "$lib/components/ui/toast/index.js";
   import {
     activeProfile,
     checkPerformanceEnabled,
@@ -41,6 +42,7 @@
     "/settings": wrap({ asyncComponent: () => import("./routes/Settings.svelte"), loadingComponent: RouteLoading }),
     "/config": wrap({ asyncComponent: () => import("./routes/ConfigEditor.svelte"), loadingComponent: RouteLoading }),
     "/config/models": wrap({ asyncComponent: () => import("./routes/ModelConfigEditor.svelte"), loadingComponent: RouteLoading }),
+    "/config/preview": wrap({ asyncComponent: () => import("./routes/ConfigPreview.svelte"), loadingComponent: RouteLoading }),
     "/backends": wrap({ asyncComponent: () => import("./routes/BackendManager.svelte"), loadingComponent: RouteLoading }),
     "/studio": wrap({ asyncComponent: () => import("./routes/Studio.svelte"), loadingComponent: RouteLoading }),
     "/studio/jobs": wrap({ asyncComponent: () => import("./routes/StudioJobs.svelte"), loadingComponent: RouteLoading }),
@@ -55,42 +57,12 @@
     "*": wrap({ asyncComponent: () => import("./routes/Activity.svelte"), loadingComponent: RouteLoading }),
   };
 
-  const routeTitles: Record<string, string> = {
-    "/": "Activity",
-    "/playground": "Playground",
-    "/models": "Models",
-    "/models/hub": "Model Hub",
-    "/activity": "Activity",
-    "/logs": "Logs",
-    "/settings": "Settings",
-    "/config": "Configuration",
-    "/config/models": "Model Config",
-    "/backends": "Backends",
-    "/studio": "Llama Studio / Runner",
-    "/studio/jobs": "Studio Jobs",
-    "/studio/pipelines": "Studio Pipelines",
-    "/studio/artifacts": "Studio Artifacts",
-    "/studio/datasets": "Studio Datasets",
-    "/studio/intelligence/run": "Intelligence / Run Suite",
-    "/studio/intelligence/results": "Intelligence / Results",
-    "/studio/evaluations": "Studio Evaluations",
-    "/studio/projects": "Studio Projects",
-    "/performance": "Performance",
-  };
-
-  let sectionTitle = $derived.by(() => {
-    if ($currentRoute === "/playground") {
-      const tab = playgroundTabs.find((t) => t.id === $selectedPlaygroundTab);
-      return `Playground / ${tab?.label ?? ""}`;
-    }
-    if ($currentRoute.startsWith("/models/")) {
-      const id = $currentRoute.slice("/models/".length);
-      return id ? `Models / ${decodeURIComponent(id)}` : "Models";
-    }
-    if ($currentRoute === "/models") {
-      return "Models";
-    }
-    return routeTitles[$currentRoute] ?? "Activity";
+  // Routes render their own title in the page header (ui/page). The
+  // Playground is mounted outside the router and has no page header, so the
+  // top bar names it.
+  let playgroundTitle = $derived.by(() => {
+    const tab = playgroundTabs.find((t) => t.id === $selectedPlaygroundTab);
+    return tab ? `Playground / ${tab.label}` : "Playground";
   });
 
   const noProfileValue = "__none__";
@@ -161,8 +133,10 @@
         class="bg-background sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b px-4"
       >
         <Sidebar.Trigger class="-ml-1" />
-        <Separator orientation="vertical" class="mr-2 !h-4" />
-        <h2 class="truncate pb-0 text-sm font-semibold">{sectionTitle}</h2>
+        {#if $currentRoute === "/playground"}
+          <Separator orientation="vertical" class="mr-2 !h-4" />
+          <span class="truncate text-sm font-semibold">{playgroundTitle}</span>
+        {/if}
         {#if $profiles.length > 0}
           <div class="ml-auto flex items-center gap-2">
             <span class="text-muted-foreground hidden text-xs sm:inline">Profile</span>
@@ -204,3 +178,4 @@
     </Sidebar.Inset>
   </Sidebar.Provider>
 </Tooltip.Provider>
+<Toaster />

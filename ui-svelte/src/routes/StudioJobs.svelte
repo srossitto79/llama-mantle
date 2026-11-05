@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { push } from "svelte-spa-router";
-  import { Loader2, RefreshCw, Square, Timer, Workflow } from "@lucide/svelte";
+  import { Loader2, RefreshCw, Square, Timer } from "@lucide/svelte";
+  import * as Page from "$lib/components/ui/page/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { cancelStudioJob, getStudioScheduler, listTasks, retryStudioPipeline } from "../lib/mantleApi";
@@ -74,12 +75,10 @@
   });
 </script>
 
-<div class="flex h-full min-h-0 flex-col gap-4">
-  <div class="flex items-center gap-2">
-    <Workflow class="size-5" />
-    <h2 class="text-lg font-semibold">Studio jobs</h2>
-    <Button class="ml-auto" variant="outline" size="sm" onclick={refresh}><RefreshCw class="size-4" />Refresh</Button>
-  </div>
+<Page.Root title="Studio Jobs" width="full" fill={true}>
+  {#snippet actions()}
+    <Button variant="outline" size="sm" onclick={refresh}><RefreshCw class="size-4" />Refresh</Button>
+  {/snippet}
 
   {#if scheduler}
     <div class="grid gap-3 sm:grid-cols-4">
@@ -88,7 +87,7 @@
       <Card.Root class="gap-1 px-4 py-3"><span class="text-muted-foreground text-xs">Queued</span><span class="text-xl font-semibold">{scheduler.queued}</span></Card.Root>
       <Card.Root class="gap-1 px-4 py-3"><span class="text-muted-foreground text-xs">Resource blocked</span><span class="text-xl font-semibold">{scheduler.blocked}</span></Card.Root>
     </div>
-    {#if scheduler.blockedReason}<div class="border-amber-500/40 bg-amber-500/10 rounded-md border px-3 py-2 text-sm">{scheduler.blockedReason}</div>{/if}
+    {#if scheduler.blockedReason}<div class="border-warning/40 bg-warning/10 rounded-md border px-3 py-2 text-sm">{scheduler.blockedReason}</div>{/if}
   {/if}
 
   {#if error}<div class="border-destructive/40 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-sm">{error}</div>{/if}
@@ -121,4 +120,4 @@
       {/if}
     </div>
   </Card.Root>
-</div>
+</Page.Root>

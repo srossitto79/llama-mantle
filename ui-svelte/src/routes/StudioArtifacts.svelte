@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { push } from "svelte-spa-router";
-  import { BarChart3, Boxes, GitBranch, RefreshCw, Save, ShieldCheck, Trash2 } from "@lucide/svelte";
+  import { BarChart3, GitBranch, RefreshCw, Save, ShieldCheck, Trash2 } from "@lucide/svelte";
   import * as Card from "$lib/components/ui/card/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
@@ -122,10 +122,11 @@
     return [prompt === undefined ? "" : `PP ${Number(prompt).toFixed(1)} t/s`, generation === undefined ? "" : `TG ${Number(generation).toFixed(1)} t/s`].filter(Boolean).join(" · ") || "No parsed result";
   }
   onMount(() => { void refresh(); });
+  import * as Page from "$lib/components/ui/page/index.js";
 </script>
 
-<div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-2">
-  <div class="flex items-center gap-2"><Boxes class="size-5" /><h2 class="text-lg font-semibold">Artifacts</h2><Button class="ml-auto" variant="outline" size="sm" onclick={verifyVisible} disabled={busy || visible.every((artifact) => !artifact.exists)}><ShieldCheck class="size-4" />Verify visible</Button><Button variant="outline" size="sm" onclick={refresh}><RefreshCw class="size-4" />Refresh</Button></div>
+<Page.Root title="Studio Artifacts" width="full">
+  {#snippet actions()}<Button variant="outline" size="sm" onclick={verifyVisible} disabled={busy || visible.every((artifact) => !artifact.exists)}><ShieldCheck class="size-4" />Verify visible</Button><Button variant="outline" size="sm" onclick={refresh}><RefreshCw class="size-4" />Refresh</Button>{/snippet}
   {#if error}<div class="border-destructive/40 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-sm">{error}</div>{/if}
   <div class="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
     <Card.Root class="min-h-0 gap-0 overflow-hidden py-0">
@@ -139,4 +140,4 @@
       <Card.Root class="h-fit"><Card.Header><Card.Title>Retention preview</Card.Title></Card.Header><Card.Content class="space-y-3"><div class="space-y-1"><Label.Root for="retention-days">Remove artifacts older than days</Label.Root><Input id="retention-days" type="number" min="1" bind:value={retentionDays} /></div><label class="flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={includeTagged} />Include tagged artifacts</label><p class="text-muted-foreground text-xs">The current type filter is applied. Serving registrations are always excluded.</p><Button size="sm" variant="outline" onclick={previewRetention} disabled={busy}>Preview</Button>{#if retentionPreview}<div class="border-border rounded-md border p-2 text-sm"><div>{retentionPreview.candidates.length} files · {formatSize(retentionPreview.totalBytes)}</div><div class="text-muted-foreground mt-1 max-h-28 whitespace-pre-wrap overflow-auto text-xs">{retentionPreview.candidates.map((artifact) => artifact.path).join("\n")}</div><Button class="mt-2" size="sm" variant="destructive" onclick={applyRetention} disabled={busy || retentionPreview.candidates.length === 0}>Apply exact preview</Button></div>{/if}</Card.Content></Card.Root>
     </div>
   </div>
-</div>
+</Page.Root>

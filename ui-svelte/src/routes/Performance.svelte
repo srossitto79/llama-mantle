@@ -352,11 +352,11 @@
   const gpuVramTempDatasets = $derived(buildGpuDatasets(filteredGpuStats, "vram_temp_c"));
   const gpuPowerDatasets = $derived(buildGpuDatasets(filteredGpuStats, "power_draw_w"));
   const hasVramTemp = $derived(filteredGpuStats.some((g) => g.vram_temp_c > 0));
+  import * as Page from "$lib/components/ui/page/index.js";
 </script>
 
-<div class="space-y-6">
-  <div class="flex items-center justify-between">
-    <h2 class="text-xl font-semibold text-foreground">Performance (Experimental)</h2>
+<Page.Root title="Performance" width="wide">
+  {#snippet actions()}
     <div class="flex items-center gap-4">
       <SegmentedControl items={WINDOWS} selected={$selectedWindow} onSelect={(i) => ($selectedWindow = i)} />
       <SegmentedControl
@@ -369,7 +369,7 @@
         <RefreshCw class={refreshing ? "animate-spin" : ""} />
       </Button>
     </div>
-  </div>
+  {/snippet}
   <p class="text-sm text-muted-foreground">
     This is an experimental feature. Please use <a
       class="underline hover:text-foreground"
@@ -483,4 +483,4 @@
       {/if}
     </div>
   </section>
-</div>
+</Page.Root>

@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { Button } from "$lib/components/ui/button/index.js";
+  import { Textarea } from "$lib/components/ui/textarea/index.js";
+  import * as Page from "$lib/components/ui/page/index.js";
   import { getConfig, putConfig } from "../lib/mantleApi";
 
   let yaml = $state("");
@@ -45,34 +48,31 @@
   }
 </script>
 
-<div class="card h-full flex flex-col p-4">
-  <div class="flex items-center justify-between mb-4">
-    <h2>Config Editor</h2>
-    <div class="flex items-center gap-2">
-      {#if message}
-        <span class="text-sm" class:text-green-500={messageType === "success"} class:text-red-500={messageType === "error"}>
-          {message}
-        </span>
-      {/if}
-      <button class="btn px-4 py-1.5" onclick={saveConfig} disabled={saving || loading}>
-        {saving ? "Saving..." : "Save & Reload"}
-      </button>
-    </div>
-  </div>
+<Page.Root title="Configuration" width="full" fill={true}>
+  {#snippet actions()}
+    {#if message}
+      <span class="text-sm" class:text-success={messageType === "success"} class:text-destructive={messageType === "error"}>
+        {message}
+      </span>
+    {/if}
+    <Button size="sm" onclick={saveConfig} disabled={saving || loading}>
+      {saving ? "Saving..." : "Save & Reload"}
+    </Button>
+  {/snippet}
 
   {#if loading}
-    <div class="flex-1 flex items-center justify-center text-txtsecondary">
+    <div class="flex-1 flex items-center justify-center text-muted-foreground">
       Loading config...
     </div>
   {:else}
-    <textarea
-      class="flex-1 w-full font-mono text-sm p-4 rounded border border-border bg-surface resize-none focus:outline-none focus:ring-1 focus:ring-blue-500"
+    <Textarea
+      class="flex-1 w-full font-mono text-sm p-4 resize-none"
       bind:value={yaml}
       onkeydown={handleKeydown}
       spellcheck="false"
-    ></textarea>
-    <p class="text-xs text-txtsecondary mt-2">
+    />
+    <p class="text-xs text-muted-foreground mt-2">
       Ctrl+S to save. Invalid YAML will be rejected before the file is written.
     </p>
   {/if}
-</div>
+</Page.Root>

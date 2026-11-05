@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Database, Download, Eye, RefreshCw, Search, Trash2, Upload } from "@lucide/svelte";
+  import { Download, Eye, RefreshCw, Search, Trash2, Upload } from "@lucide/svelte";
   import * as Card from "$lib/components/ui/card/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
@@ -98,11 +98,12 @@
   }
 
   onMount(refresh);
+  import * as Page from "$lib/components/ui/page/index.js";
 </script>
 
-<div class="h-full overflow-auto p-4">
-  <div class="mx-auto max-w-7xl space-y-4">
-    <div class="flex items-center gap-2"><Database class="size-5" /><h2 class="text-lg font-semibold">Datasets</h2><Button class="ml-auto" size="sm" variant="outline" onclick={refresh} disabled={loading}><RefreshCw class="size-4" />Refresh</Button></div>
+<Page.Root title="Studio Datasets" width="full">
+  {#snippet actions()}<Button size="sm" variant="outline" onclick={refresh} disabled={loading}><RefreshCw class="size-4" />Refresh</Button>{/snippet}
+  <div class="space-y-4">
     {#if error}<p class="text-destructive text-sm">{error}</p>{/if}
     {#if status}<p class="text-muted-foreground text-sm">{status}</p>{/if}
 
@@ -143,4 +144,4 @@
       </div>
     </div>
   </div>
-</div>
+</Page.Root>

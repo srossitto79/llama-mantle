@@ -84,7 +84,7 @@
     <div class="bg-card flex h-[80vh] w-full max-w-4xl flex-col rounded-lg border shadow-xl">
       <!-- Header -->
       <div class="flex items-center justify-between border-b p-4">
-        <h3 class="pb-0 font-medium">Edit Text</h3>
+        <h3 class="font-medium">Edit Text</h3>
         <Button variant="ghost" size="icon-sm" onclick={closeExpanded} title="Close" type="button">
           <X />
         </Button>

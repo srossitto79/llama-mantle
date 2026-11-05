@@ -11,14 +11,11 @@
 
   let themeLabel = $derived(themes.find((t) => t.value === $themeName)?.label ?? "Default");
   let modeLabel = $derived(modes.find((m) => m.value === $themeMode)?.label ?? "System");
+  import * as Page from "$lib/components/ui/page/index.js";
 </script>
 
-<div class="p-2">
-  <div class="mt-4 mb-4">
-    <h3 class="text-lg font-semibold">Settings</h3>
-  </div>
-
-  <div class="rounded-lg border p-4 space-y-3 max-w-md mb-4">
+<Page.Root title="Settings" width="narrow">
+  <div class="rounded-lg border p-4 space-y-3 max-w-md">
     <h4 class="text-sm font-semibold text-muted-foreground">Appearance</h4>
     <div class="flex items-center justify-between gap-4">
       <span class="text-sm">Theme</span>
@@ -73,4 +70,4 @@
       </div>
     </dl>
   </div>
-</div>
+</Page.Root>

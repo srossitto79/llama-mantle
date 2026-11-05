@@ -306,10 +306,11 @@
     finally { deletingID = ""; }
   }
   onMount(() => { void refresh(); });
+  import * as Page from "$lib/components/ui/page/index.js";
 </script>
 
-<div class="mx-auto w-full max-w-7xl space-y-6 overflow-auto p-6">
-  <div class="flex items-center justify-between"><div><h1 class="text-2xl font-semibold">Intelligence results</h1><p class="text-muted-foreground mt-1">Compare saved runs and inspect the answers behind each score.</p></div><Button variant="outline" disabled={busy} onclick={refresh}>Refresh</Button></div>
+<Page.Root title="Intelligence Results" description="Compare saved runs and inspect the answers behind each score." width="full">
+  {#snippet actions()}<Button variant="outline" disabled={busy} onclick={refresh}>Refresh</Button>{/snippet}
   {#if error}<p role="alert" class="text-destructive rounded-lg border p-4">{error}</p>{/if}
 
   {#if kpis.runs}
@@ -451,4 +452,4 @@
   {:else if results.length}
     <p class="text-muted-foreground text-sm">No item results saved yet for the selected runs.</p>
   {/if}
-</div>
+</Page.Root>
