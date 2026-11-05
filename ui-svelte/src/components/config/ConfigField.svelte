@@ -177,6 +177,25 @@
         <option value="yes">Yes</option>
         <option value="no">No</option>
       </NativeSelect.Root>
+    {:else if meta.kind === "select"}
+      <NativeSelect.Root
+        id={fieldId}
+        class="w-40"
+        value={typeof value === "string" ? value : ""}
+        disabled={locked}
+        onchange={(e) => {
+          const v = (e.currentTarget as HTMLSelectElement).value;
+          commit(v === "" ? undefined : v);
+        }}
+      >
+        <option value="">{defaultValue !== undefined ? `Default (${defaultValue})` : "Not set"}</option>
+        {#each meta.options ?? [] as opt (opt)}
+          <option value={opt}>{opt}</option>
+        {/each}
+        {#if typeof value === "string" && value !== "" && !(meta.options ?? []).includes(value)}
+          <option value={value}>{value}</option>
+        {/if}
+      </NativeSelect.Root>
     {:else if meta.kind === "list" || meta.kind === "members"}
       <Textarea
         id={fieldId}

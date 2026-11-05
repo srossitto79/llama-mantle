@@ -5,7 +5,7 @@
   import { onMount } from "svelte";
   import { configSession } from "$lib/config/session";
   import { configDraft } from "$lib/config/draft";
-  import { groupFields, groupDefaults, usedModelNames, validateModelId, type ListItem } from "$lib/config/fields";
+  import { groupFields, groupDefaults, usedModelNames, validateModelId, entryCopy, type ListItem } from "$lib/config/fields";
   import type { EntrySection, SourceEntry } from "$lib/config/configApi";
   import { models as runtimeModels } from "../stores/api";
   import { statusDotColor } from "../stores/modelLoad";
@@ -84,20 +84,41 @@
   });
   const addNoun: Record<EntrySection, string> = { models: "model", groups: "group", profiles: "profile", peers: "peer" };
 
+  /** Entry being duplicated by the add dialog, if any. */
+  let copyOf = $state<{ id: string; value: Record<string, unknown>; skipped: string[] } | null>(null);
+
   function openAdd(section: EntrySection): void {
     addSection = section;
     addId = "";
+    addCmd = "";
+    copyOf = null;
+  }
+
+  function openDuplicate(section: EntrySection, entry: SourceEntry): void {
+    const current = configDraft.currentId(section, entry.id) || entry.id;
+    copyOf = { id: current, ...entryCopy(entry, $configDraft, section) };
+    addSection = section;
+    const taken = new Set(section === "models" ? usedModelNames(entriesOf("models")).keys() : entriesOf(section).map((e) => e.id));
+    let n = 1;
+    addId = `${current}-copy`;
+    while (taken.has(addId)) addId = `${current}-copy${++n}`;
     addCmd = "";
   }
 
   function confirmAdd(): void {
     if (!addSection || !addId.trim() || addError) return;
     const id = addId.trim();
-    const value: Record<string, unknown> =
-      addSection === "models" ? { cmd: addCmd.trim() } : addSection === "groups" ? { members: [] } : {};
+    const value: Record<string, unknown> = copyOf
+      ? copyOf.value
+      : addSection === "models"
+        ? { cmd: addCmd.trim() }
+        : addSection === "groups"
+          ? { members: [] }
+          : {};
     configDraft.add(addSection, id, value);
     selected[addSection] = id;
     addSection = null;
+    copyOf = null;
   }
 </script>
 
@@ -115,6 +136,7 @@
           {macros}
           effective={snapshot?.effective[entry.id]}
           running={$runtimeModels.some((m) => m.id === entry.id && m.state === "ready")}
+          onduplicate={() => openDuplicate(section, entry)}
         />
       {/key}
     {:else}
@@ -126,6 +148,7 @@
           fields={section === "groups" ? groupFields : []}
           defaults={section === "groups" ? groupDefaults : {}}
           knownIds={section === "groups" ? entriesOf("models").map((e) => configDraft.currentId("models", e.id)).filter(Boolean) : undefined}
+          onduplicate={() => openDuplicate(section, entry)}
         />
       {/key}
     {/if}
@@ -183,7 +206,7 @@
 <Dialog.Root open={addSection !== null} onOpenChange={(o) => !o && (addSection = null)}>
   <Dialog.Content class="sm:max-w-lg">
     <Dialog.Header>
-      <Dialog.Title>Add {addSection ? addNoun[addSection] : ""}</Dialog.Title>
+      <Dialog.Title>{copyOf ? `Duplicate ${copyOf.id}` : `Add ${addSection ? addNoun[addSection] : ""}`}</Dialog.Title>
     </Dialog.Header>
     <div class="grid gap-3">
       <Field.Root label="Id" error={addError} required>
@@ -191,7 +214,10 @@
           <Input {id} bind:value={addId} aria-describedby={describedBy} aria-invalid={invalid} class="font-mono" onkeydown={(e) => e.key === "Enter" && addSection !== "models" && confirmAdd()} />
         {/snippet}
       </Field.Root>
-      {#if addSection === "models"}
+      {#if copyOf && copyOf.skipped.length > 0}
+        <p class="text-muted-foreground text-sm">Not copied (secrets): <span class="font-mono">{copyOf.skipped.join(", ")}</span></p>
+      {/if}
+      {#if addSection === "models" && !copyOf}
         <Field.Root label="Command" required>
           {#snippet control({ id })}
             <Textarea {id} bind:value={addCmd} rows={4} class="font-mono text-[0.8125rem]" placeholder={"llama-server --port ${PORT} -m /models/model.gguf"} spellcheck={false} />
@@ -201,7 +227,7 @@
     </div>
     <Dialog.Footer>
       <Button variant="outline" onclick={() => (addSection = null)}>Cancel</Button>
-      <Button disabled={!addId.trim() || !!addError || (addSection === "models" && !addCmd.trim())} onclick={confirmAdd}>Stage</Button>
+      <Button disabled={!addId.trim() || !!addError || (addSection === "models" && !copyOf && !addCmd.trim())} onclick={confirmAdd}>Stage</Button>
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>

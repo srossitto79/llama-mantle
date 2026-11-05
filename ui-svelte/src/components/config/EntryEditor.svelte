@@ -11,7 +11,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Textarea } from "$lib/components/ui/textarea/index.js";
-  import { Pencil, Trash2, Undo2, Check, X, Plus } from "@lucide/svelte";
+  import { Pencil, Trash2, Undo2, Check, X, Plus, Copy } from "@lucide/svelte";
 
   let {
     section,
@@ -20,8 +20,10 @@
     fields = [],
     defaults = {},
     knownIds,
+    onduplicate,
   }: {
     section: Exclude<EntrySection, "models">;
+    onduplicate?: () => void;
     entry: SourceEntry;
     /** Ids in the section, for duplicate checks. */
     ids: string[];
@@ -101,6 +103,7 @@
     {#if isNew}<Tag>New</Tag>{/if}
     {#if !deleted && !renaming}
       <Button variant="ghost" size="sm" onclick={() => { newId = currentId; renaming = true; }}><Pencil />Rename</Button>
+      {#if onduplicate}<Button variant="ghost" size="sm" onclick={onduplicate}><Copy />Duplicate</Button>{/if}
       <Button variant="ghost" size="sm" class="text-destructive" onclick={() => configDraft.remove(section, currentId)}><Trash2 />Delete</Button>
     {/if}
   </div>

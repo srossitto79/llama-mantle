@@ -10,7 +10,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Alert from "$lib/components/ui/alert/index.js";
-  import { Pencil, Trash2, Undo2, Check, X, Link2 } from "@lucide/svelte";
+  import { Pencil, Trash2, Undo2, Check, X, Link2, Copy } from "@lucide/svelte";
 
   let {
     entry,
@@ -18,7 +18,9 @@
     macros,
     effective,
     running = false,
+    onduplicate,
   }: {
+    onduplicate?: () => void;
     /** The entry as written (original id). Undefined fields mean absent. */
     entry: SourceEntry;
     /** All model entries, for duplicate checks. */
@@ -110,6 +112,7 @@
     {#if isNew}<Tag>New</Tag>{/if}
     {#if !deleted && !renaming}
       <Button variant="ghost" size="sm" onclick={startRename}><Pencil />Rename</Button>
+      {#if onduplicate}<Button variant="ghost" size="sm" onclick={onduplicate}><Copy />Duplicate</Button>{/if}
       <Button variant="ghost" size="sm" class="text-destructive" onclick={() => configDraft.remove("models", currentId)}><Trash2 />Delete</Button>
     {/if}
   </div>
@@ -143,7 +146,7 @@
                 source={sourceFor(meta)}
                 {macros}
                 expanded={meta.name === "cmd" ? effective?.cmd : undefined}
-                defaultValue={meta.name === "unlisted" ? false : undefined}
+                defaultValue={meta.defaultValue ?? (meta.name === "unlisted" ? false : undefined)}
               />
               {#if meta.name === "cmd"}
                 <details class="pb-3" bind:open={flagsOpen}>
