@@ -42,7 +42,7 @@
     "/activity": wrap({ asyncComponent: () => import("./routes/Activity.svelte"), loadingComponent: RouteLoading }),
     "/settings": wrap({ asyncComponent: () => import("./routes/Settings.svelte"), loadingComponent: RouteLoading }),
     "/config": wrap({ asyncComponent: () => import("./routes/Config.svelte"), loadingComponent: RouteLoading }),
-    "/config/models": wrap({ asyncComponent: () => import("./routes/ModelConfigEditor.svelte"), loadingComponent: RouteLoading }),
+    "/config/models": wrap({ asyncComponent: () => import("./routes/Config.svelte"), loadingComponent: RouteLoading }),
     "/backends": wrap({ asyncComponent: () => import("./routes/BackendManager.svelte"), loadingComponent: RouteLoading }),
     "/studio": wrap({ asyncComponent: () => import("./routes/Studio.svelte"), loadingComponent: RouteLoading }),
     "/studio/jobs": wrap({ asyncComponent: () => import("./routes/StudioJobs.svelte"), loadingComponent: RouteLoading }),

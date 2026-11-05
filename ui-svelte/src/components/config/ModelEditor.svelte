@@ -1,9 +1,10 @@
 <script lang="ts">
   // Editor for one model entry. All edits go to the config draft.
   import { configDraft, resolveId } from "$lib/config/draft";
-  import { modelFieldGroups, otherFields, fieldPath, getPath, usedModelNames, validateModelId, type FieldMeta } from "$lib/config/fields";
+  import { modelFieldGroups, otherFields, fieldPath, getPath, stagedValue, usedModelNames, validateModelId, type FieldMeta } from "$lib/config/fields";
   import type { EffectiveModel, SourceEntry, SourceField } from "$lib/config/configApi";
   import ConfigField from "./ConfigField.svelte";
+  import CommandFlags from "./CommandFlags.svelte";
   import Tag from "../Tag.svelte";
   import * as Card from "$lib/components/ui/card/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -67,6 +68,15 @@
   }
 
   const others = $derived(otherFields(entry.order));
+
+  // The flags view edits the same cmd as the text field: the staged value when
+  // there is one, else the value as written.
+  let flagsOpen = $state(false);
+  const cmdState = $derived(stagedValue($configDraft, "models", currentId, ["cmd"]));
+  const currentCmd = $derived(String((cmdState.staged ? (cmdState.removed ? "" : cmdState.value) : entry.fields.cmd?.value) ?? ""));
+  function setCmd(next: string): void {
+    configDraft.set("models", currentId, ["cmd"], next, entry.fields.cmd?.value);
+  }
   const displayName = $derived((entry.fields.name?.value as string | undefined) || currentId);
 </script>
 
@@ -135,6 +145,16 @@
                 expanded={meta.name === "cmd" ? effective?.cmd : undefined}
                 defaultValue={meta.name === "unlisted" ? false : undefined}
               />
+              {#if meta.name === "cmd"}
+                <details class="pb-3" bind:open={flagsOpen}>
+                  <summary class="text-muted-foreground hover:text-foreground cursor-pointer text-sm sm:ml-[calc(11rem+1rem)]">Flags</summary>
+                  {#if flagsOpen}
+                    <div class="mt-3 sm:ml-[calc(11rem+1rem)]">
+                      <CommandFlags cmd={currentCmd} {macros} disabled={!!entry.fields.cmd?.alias} onchange={setCmd} />
+                    </div>
+                  {/if}
+                </details>
+              {/if}
             {/each}
           </div>
         </section>
