@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { configDraft } from "$lib/config/draft";
   import { onMount } from "svelte";
   import { link } from "svelte-spa-router";
   import { FerrisWheel, Boxes, Activity, ScrollText, Gauge, Sun, Moon, Monitor, ChevronRight, Settings, PackageSearch, Cog, Server, Wrench, Workflow, Database, BarChart3, FolderKanban, SlidersHorizontal } from "@lucide/svelte";
@@ -255,6 +256,9 @@
                 <a href="/config" use:link {...props}>
                   <Cog />
                   <span>Configuration</span>
+                  {#if $configDraft.length > 0}
+                    <span class="bg-primary text-primary-foreground ml-auto rounded-full px-1.5 text-[0.6875rem] leading-4 font-medium" title="Staged changes">{$configDraft.length}</span>
+                  {/if}
                 </a>
               {/snippet}
             </Sidebar.MenuButton>

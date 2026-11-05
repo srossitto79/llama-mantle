@@ -96,30 +96,6 @@ export async function deleteLocalModel(name: string): Promise<boolean> {
 
 // --- Config ---
 
-export async function getConfig(): Promise<string | null> {
-  try {
-    const res = await fetch("/api/mantle/config");
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.text();
-  } catch (e) {
-    console.error("Get config failed:", e);
-    return null;
-  }
-}
-
-export async function putConfig(yaml: string): Promise<boolean> {
-  try {
-    const res = await fetch("/api/mantle/config", {
-      method: "PUT",
-      headers: { "Content-Type": "text/yaml" },
-      body: yaml,
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
 // --- Structured config editing (guided editor) ---
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {

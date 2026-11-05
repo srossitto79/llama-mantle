@@ -127,8 +127,13 @@ export interface ConfigReader {
   readRaw(): Promise<RawConfig>;
 }
 
+export interface ValidationResult {
+  problems: ConfigProblem[];
+  reload: ReloadMode;
+}
+
 export interface ConfigValidator {
-  validate(text: string): Promise<ConfigProblem[]>;
+  validate(text: string): Promise<ValidationResult>;
 }
 
 export interface ConfigWriter {
@@ -182,7 +187,7 @@ export function createConfigApi(fetchFn: FetchFn = (i, init) => fetch(i, init)):
         headers: { "Content-Type": "text/yaml" },
         body: text,
       });
-      return (await json<{ problems: ConfigProblem[] }>(res)).problems;
+      return json<ValidationResult>(res);
     },
     async preview(baseHash, changes) {
       return json<ConfigPreview>(await postJSON(fetchFn, `${BASE}/changes/preview`, { baseHash, changes }));

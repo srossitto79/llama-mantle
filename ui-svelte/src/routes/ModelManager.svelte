@@ -1,7 +1,13 @@
 <script lang="ts">
+  import { parse as parseYAML } from "yaml";
+  import { configApi } from "$lib/config/configApi";
+  import { configDraft } from "$lib/config/draft";
+  import { configSession } from "$lib/config/session";
+  import { usedModelNames, validateModelId } from "$lib/config/fields";
+  import { toast } from "$lib/components/ui/toast/index.js";
   import {
     searchHFModels, listHFFiles, startDownload, startRepoDownload, cancelDownload,
-    listLocalModels, deleteLocalModel, listBackends, getConfig, putConfig,
+    listLocalModels, deleteLocalModel, listBackends, 
     type HFSort, type HFKind
   } from "../lib/mantleApi";
   import type { HFModel, HFFile, LocalModel, LocalModelKind, BackendEntry } from "../lib/types";
@@ -187,59 +193,64 @@
     regenerateYaml();
   }
 
+  // Stages the generated entry in the config draft; it is written from
+  // Configuration > Review together with any other staged change.
   async function doAddToConfig() {
     if (!formModelId.trim() || !formYaml.trim()) return;
     savingConfig = true;
-    const current = await getConfig();
-    if (current !== null) {
-      await putConfig(current + formYaml);
+    try {
+      const parsed = parseYAML(formYaml) as Record<string, unknown> | null;
+      const keys = parsed && typeof parsed === "object" ? Object.keys(parsed) : [];
+      if (keys.length !== 1 || typeof parsed![keys[0]] !== "object") {
+        toast.show({ kind: "error", title: "Invalid entry", description: "One model id with its fields" });
+        return;
+      }
+      const id = keys[0];
+      if (!$configSession.snapshot) await configSession.load();
+      const models = $configSession.snapshot?.source.sections.models ?? [];
+      const err = validateModelId(id, usedModelNames(models));
+      if (err) {
+        toast.show({ kind: "error", title: "Invalid model id", description: err });
+        return;
+      }
+      configDraft.add("models", id, parsed![id]);
+      toast.show({ kind: "success", title: `Model ${id} staged`, description: "Configuration → Review" });
+      addConfigFor = null;
+    } catch (e) {
+      toast.show({ kind: "error", title: "Invalid entry", description: e instanceof Error ? e.message.split("\n")[0] : String(e) });
+    } finally {
+      savingConfig = false;
     }
-    savingConfig = false;
-    addConfigFor = null;
   }
 
+  // Removes the models whose command references the file (one config write),
+  // then deletes the file.
   async function doDeleteLocal(model: LocalModel) {
-    const cfg = await getConfig();
-    const inConfig = cfg !== null && cfg.includes(model.path);
-    const question = inConfig
-      ? `"${model.name}" is referenced in your config.\nDelete the file AND remove it from config?`
+    await configSession.load();
+    const snap = $configSession.snapshot;
+    const refs = (snap?.source.sections.models ?? [])
+      .filter((m) => Object.values(m.fields).some((f) => typeof f.value === "string" && f.value.includes(model.path)))
+      .map((m) => m.id);
+    const question = refs.length
+      ? `Delete ${model.name} and remove ${refs.length === 1 ? "model" : "models"} ${refs.join(", ")} from config.yaml?`
       : `Delete ${model.name}?`;
     if (!confirm(question)) return;
 
-    if (inConfig && cfg !== null) {
-      // strip the model block from config — find the 2-space-indented key block
-      // simple approach: remove lines that reference the path
-      const lines = cfg.split("\n");
-      const cleaned = stripModelFromConfig(lines, model.path);
-      await putConfig(cleaned);
+    if (refs.length && snap) {
+      try {
+        await configApi.apply(snap.hash, refs.map((id) => ({ op: "delete" as const, section: "models" as const, id })));
+        await configSession.load();
+      } catch (e) {
+        toast.show({ kind: "error", title: "Config not updated", description: e instanceof Error ? e.message : String(e) });
+        return;
+      }
     }
-
-    await deleteLocalModel(model.name);
+    if (!(await deleteLocalModel(model.name))) {
+      toast.show({ kind: "error", title: "Delete failed", description: model.name });
+    }
     await refreshLocal();
   }
 
-  function stripModelFromConfig(lines: string[], modelPath: string): string {
-    // Find the model entry block that contains modelPath and remove it.
-    // A block starts with a 2-space-indented key (^  \S) and ends before the next one.
-    const result: string[] = [];
-    let skip = false;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      // New top-level model key
-      if (/^  \S/.test(line) && !/^  #/.test(line)) {
-        // Peek ahead: does this block contain the model path?
-        let j = i + 1;
-        let found = false;
-        while (j < lines.length && !/^  \S/.test(lines[j])) {
-          if (lines[j].includes(modelPath)) { found = true; }
-          j++;
-        }
-        skip = found;
-      }
-      if (!skip) result.push(line);
-    }
-    return result.join("\n");
-  }
 
   // ── init ─────────────────────────────────────────────────────────────────
 
@@ -467,7 +478,7 @@
                         onclick={doAddToConfig}
                         disabled={savingConfig || !formModelId.trim() || !formYaml.trim()}
                       >
-                        {savingConfig ? "Saving…" : "Save to Config"}
+                        {savingConfig ? "Saving…" : "Stage"}
                       </Button>
                     </div>
                   </div>

@@ -11,6 +11,7 @@
   import { Separator } from "$lib/components/ui/separator/index.js";
   import * as Select from "$lib/components/ui/select/index.js";
   import { Toaster } from "$lib/components/ui/toast/index.js";
+  import { configDraft } from "$lib/config/draft";
   import {
     activeProfile,
     checkPerformanceEnabled,
@@ -40,9 +41,8 @@
     "/logs": wrap({ asyncComponent: () => import("./routes/LogViewer.svelte"), loadingComponent: RouteLoading }),
     "/activity": wrap({ asyncComponent: () => import("./routes/Activity.svelte"), loadingComponent: RouteLoading }),
     "/settings": wrap({ asyncComponent: () => import("./routes/Settings.svelte"), loadingComponent: RouteLoading }),
-    "/config": wrap({ asyncComponent: () => import("./routes/ConfigEditor.svelte"), loadingComponent: RouteLoading }),
+    "/config": wrap({ asyncComponent: () => import("./routes/Config.svelte"), loadingComponent: RouteLoading }),
     "/config/models": wrap({ asyncComponent: () => import("./routes/ModelConfigEditor.svelte"), loadingComponent: RouteLoading }),
-    "/config/preview": wrap({ asyncComponent: () => import("./routes/ConfigPreview.svelte"), loadingComponent: RouteLoading }),
     "/backends": wrap({ asyncComponent: () => import("./routes/BackendManager.svelte"), loadingComponent: RouteLoading }),
     "/studio": wrap({ asyncComponent: () => import("./routes/Studio.svelte"), loadingComponent: RouteLoading }),
     "/studio/jobs": wrap({ asyncComponent: () => import("./routes/StudioJobs.svelte"), loadingComponent: RouteLoading }),
@@ -95,6 +95,14 @@
     const el = document.documentElement;
     if ($themeName === "default") el.removeAttribute("data-theme");
     else el.setAttribute("data-theme", $themeName);
+  });
+
+  // Staged config changes live in memory; warn before leaving the app.
+  $effect(() => {
+    if ($configDraft.length === 0) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
   });
 
   $effect(() => {
