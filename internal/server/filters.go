@@ -11,6 +11,7 @@ import (
 	"github.com/mostlygeek/llama-swap/internal/chain"
 	"github.com/mostlygeek/llama-swap/internal/config"
 	"github.com/mostlygeek/llama-swap/internal/shared"
+	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
 
@@ -145,6 +146,10 @@ func applyFilters(body []byte, requested, useModelName string, f config.Filters)
 		}
 	}
 
+	if body, err = dropUnsetTokenLimits(body); err != nil {
+		return nil, err
+	}
+
 	setParams, setKeys := f.SanitizedSetParams()
 	for _, key := range setKeys {
 		if body, err = sjson.SetBytes(body, key, setParams[key]); err != nil {
@@ -159,5 +164,28 @@ func applyFilters(body []byte, requested, useModelName string, f config.Filters)
 		}
 	}
 
+	return body, nil
+}
+
+// tokenLimitParams are the completion-length limits a client may send.
+var tokenLimitParams = []string{"max_tokens", "max_completion_tokens"}
+
+// dropUnsetTokenLimits removes a token limit of 0, a negative number or null,
+// so the upstream applies no limit. Clients send 0 to mean "no limit", but
+// llama.cpp then generates nothing and vLLM rejects the request. It runs before
+// setParams, so a configured limit still applies.
+func dropUnsetTokenLimits(body []byte) ([]byte, error) {
+	var err error
+	for _, key := range tokenLimitParams {
+		v := gjson.GetBytes(body, key)
+		if !v.Exists() {
+			continue
+		}
+		if v.Type == gjson.Null || (v.Type == gjson.Number && v.Float() <= 0) {
+			if body, err = sjson.DeleteBytes(body, key); err != nil {
+				return nil, fmt.Errorf("error removing %s from request", key)
+			}
+		}
+	}
 	return body, nil
 }

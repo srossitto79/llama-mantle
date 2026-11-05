@@ -386,6 +386,9 @@ models:
     # filters: a dictionary of filter settings
     # - optional, default: empty dictionary
     # - same capabilities as peer filters (stripParams, setParams)
+    # - always, for every model and peer: max_tokens and max_completion_tokens of 0, a
+    #   negative number or null are removed, so the upstream applies no limit; setParams
+    #   can still set one
     filters:
       # stripParams: a comma separated list of parameters to remove from the request
       # - optional, default: ""

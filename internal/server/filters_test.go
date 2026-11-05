@@ -54,6 +54,46 @@ func TestServer_ApplyFilters(t *testing.T) {
 			t.Errorf("top_p = %v, want 0.1", got)
 		}
 	})
+
+	t.Run("unset token limits are removed", func(t *testing.T) {
+		tests := []struct {
+			body     string
+			kept     []string
+			stripped []string
+		}{
+			{`{"max_tokens":0,"max_completion_tokens":0}`, nil, []string{"max_tokens", "max_completion_tokens"}},
+			{`{"max_tokens":-1,"max_completion_tokens":null}`, nil, []string{"max_tokens", "max_completion_tokens"}},
+			{`{"max_tokens":256,"max_completion_tokens":1}`, []string{"max_tokens", "max_completion_tokens"}, nil},
+			{`{"max_tokens":"0","n_predict":0}`, []string{"max_tokens", "n_predict"}, nil}, // not a number; not a limit we own
+		}
+		for _, tt := range tests {
+			out, err := applyFilters([]byte(tt.body), "m", "", config.Filters{})
+			if err != nil {
+				t.Fatalf("applyFilters(%s): %v", tt.body, err)
+			}
+			for _, k := range tt.kept {
+				if !gjson.GetBytes(out, k).Exists() {
+					t.Errorf("%s: %s removed, want kept", tt.body, k)
+				}
+			}
+			for _, k := range tt.stripped {
+				if gjson.GetBytes(out, k).Exists() {
+					t.Errorf("%s: %s kept, want removed", tt.body, k)
+				}
+			}
+		}
+	})
+
+	t.Run("setParams still sets a token limit", func(t *testing.T) {
+		f := config.Filters{SetParams: map[string]any{"max_tokens": 4096}}
+		out, err := applyFilters([]byte(`{"max_tokens":0}`), "m", "", f)
+		if err != nil {
+			t.Fatalf("applyFilters: %v", err)
+		}
+		if got := gjson.GetBytes(out, "max_tokens").Int(); got != 4096 {
+			t.Errorf("max_tokens = %d, want 4096", got)
+		}
+	})
 }
 
 func TestServer_FormFilterMiddleware(t *testing.T) {
