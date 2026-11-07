@@ -98,3 +98,31 @@ Change the image tag in the entry (and `seed-run-config.sh`'s default), then
 `docker pull` it. The volume keeps the pack, preset and run config. A new engine can
 make an old tuning result less useful; upstream suggests one start with
 `-e TUNE=quick -e RETUNE=1`. See upstream `docs/DOCKER.md` for every setting.
+
+## Swift 1.5 Flash Next Heretic V2 IQ4_XS-plus
+
+`swift-heretic.yaml` serves jackjusko's IQ4_XS-plus build
+(`jackjusko/Swift-1.5-Flash-Next-Heretic-ReverseEngineer`, folder `IQ4_XS/`: six shards,
+94.7 GB, and `strata-pack-heretic-v2-iq4_xs-plus.zip`). Setup pins Swift's files by SHA-256,
+so the entry runs `strata serve` on a run config in its own volume, `strata-swift-heretic`:
+
+- `/data/Strata-data/packs/heretic-v2-iq4xs-plus`: the repo's pre-built pack, unzipped. It
+  names the shards and their offsets, so the shards must stay exactly as downloaded.
+- `/data/Strata-data/mtp` and `models/mmproj-Swift-Qwen3.8-Flash-Next-BF16.gguf`: copied
+  from `strata-data` (Swift's MTP layer and picture reader).
+- `/data/install/strata-swift-heretic-iq4_xs-plus.json`: `swift-heretic-run-config.json`.
+
+```bash
+docker run --rm -v strata-data:/src:ro -v strata-swift-heretic:/dst \
+  -v ~/gguf_models/jackjusko_Swift-1.5-Flash-Next-Heretic-V2-IQ4_XS-plus:/m:ro \
+  -v "$PWD/docker/strata:/r:ro" --entrypoint bash ghcr.io/niko1221/strata:0.2.9-cuda13 -c '
+    mkdir -p /dst/Strata-data/models /dst/Strata-data/packs /dst/install
+    cp -a /src/Strata-data/mtp /dst/Strata-data/
+    cp -a /src/Strata-data/models/mmproj-Swift-Qwen3.8-Flash-Next-BF16.gguf /dst/Strata-data/models/
+    cd /dst/Strata-data/packs && /opt/strata/terminal/python/bin/python3 -I -c \
+      "import zipfile; zipfile.ZipFile(\"/m/strata-pack-heretic-v2-iq4_xs-plus.zip\").extractall(\".\")"
+    cp /r/swift-heretic-run-config.json /dst/install/strata-swift-heretic-iq4_xs-plus.json'
+```
+
+Served model name is `swift-1.5-heretic-iq4_xs-plus`; suffixes `:off`, `:low`, `:medium` and
+`:high` choose reasoning effort.

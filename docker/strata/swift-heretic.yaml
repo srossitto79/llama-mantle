@@ -1,0 +1,31 @@
+# Merge this entry under models: in config.yaml. Paths are Docker host paths.
+swift-1.5-flash-next-heretic-strata-station-128k:
+  name: "Swift 1.5 Flash Next Heretic Strata 128K"
+  description: "IQ4_XS-plus with MTP, INT8 KV and CPU vision"
+  cmd: >-
+    docker run --rm --name strata-swift-heretic
+    --gpus all --ulimit memlock=-1:-1 --shm-size 2g --network llama-mantle_default
+    -v strata-swift-heretic:/data
+    -v /home/sross/gguf_models/jackjusko_Swift-1.5-Flash-Next-Heretic-V2-IQ4_XS-plus:/models:ro
+    -e STRATA_API_KEY
+    ghcr.io/niko1221/strata:0.2.9-cuda13
+    /opt/strata/terminal/bin/strata serve --profile /data/install/strata-swift-heretic-iq4_xs-plus.json --host 0.0.0.0 --port 8080
+  cmdStop: docker stop -t 120 strata-swift-heretic
+  env:
+    - "STRATA_API_KEY=${env.STRATA_API_KEY}"
+  apiKey: ${env.STRATA_API_KEY}
+  proxy: http://strata-swift-heretic:8080
+  checkEndpoint: /health
+  useModelName: swift-1.5-heretic-iq4_xs-plus
+  filters:
+    setParamsByID:
+      "${MODEL_ID}:off":
+        reasoning_effort: none
+      "${MODEL_ID}:low":
+        reasoning_effort: low
+      "${MODEL_ID}:medium":
+        reasoning_effort: medium
+      "${MODEL_ID}:high":
+        reasoning_effort: high
+  reasoningLoopGuard:
+    continuation: vllm
