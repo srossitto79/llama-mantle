@@ -54,6 +54,8 @@ curl http://localhost:9292/running
 
 ## DeepSeek V4.1 Flash
 
+Removed from this installation (files, volumes and entries); kept here as the record of how it was set up.
+
 `deepseek.yaml` holds five entries (16K, 32K, 64K, 128K, 256K) for the IST-DAS 2.00 bpw set:
 138 GB of shards, the 111 GB Engram n-gram table and the 8 GB DSpark drafter, 257 GB
 in total. On a 3090 with 110 GB of RAM, about 20 GB of experts stay on the card and
