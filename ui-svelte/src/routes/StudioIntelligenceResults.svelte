@@ -15,7 +15,7 @@
   import IntelligenceMeter from "../components/IntelligenceMeter.svelte";
   import { CategoricalAssignment, OUTCOME } from "$lib/intelligenceColors";
   import { isDarkMode } from "../stores/theme";
-  import { configKey, resolveModels, runEffort, splitForeignResults, type ForeignResult, type Coverage, type DuplicateMode, type ResolvedModel } from "$lib/intelligenceMetrics";
+  import { answeredSets, configKey, resolveModels, runEffort, splitForeignResults, type ForeignResult, type Coverage, type DuplicateMode, type ResolvedModel } from "$lib/intelligenceMetrics";
   import { NativeSelect } from "$lib/components/ui/native-select/index.js";
   import Tag from "../components/Tag.svelte";
   import { deleteIntelligenceRun, intelligenceRequest, intelligenceURL, loadHumanScores, needsHumanScore, saveHumanScore, type HumanScores, type IntelligenceItem, type IntelligenceRun, type IntelligenceResult } from "$lib/intelligenceApi";
@@ -38,8 +38,15 @@
   // effort are different subjects, so the list can be narrowed to one effort.
   let effortFilter = $state("");
   let runEfforts = $derived([...new Set(runs.map(runEffort))].sort());
-  let visible = $derived(runs.filter(r =>
-    (!effortFilter || runEffort(r) === effortFilter)
+  let effortRuns = $derived(runs.filter(r => !effortFilter || runEffort(r) === effortFilter));
+  // Scores compare directly only between runs that answered the same questions.
+  // Built from the effort-filtered runs so each option's count matches the list.
+  let answeredFilter = $state("");
+  let answeredOptions = $derived(answeredSets(effortRuns));
+  $effect(() => { if (answeredFilter && !answeredOptions.some(s => s.key === answeredFilter)) answeredFilter = ""; });
+  let answeredRunIDs = $derived(new Set(answeredOptions.find(s => s.key === answeredFilter)?.runIDs ?? []));
+  let visible = $derived(effortRuns.filter(r =>
+    (!answeredRunIDs.size || answeredRunIDs.has(r.run_id))
     && `${r.params.profile} ${r.state} ${runEffort(r)} ${runModelNames(r)} ${new Date(r.started_at * 1000).toLocaleString()}`.toLowerCase().includes(filter.toLowerCase())));
 
   function runModelNames(run: IntelligenceRun): string {
@@ -382,6 +389,12 @@
           <NativeSelect class="w-full sm:w-40" aria-label="Effort" bind:value={effortFilter}>
             <option value="">All efforts</option>
             {#each runEfforts as e (e)}<option value={e}>{e}</option>{/each}
+          </NativeSelect>
+        {/if}
+        {#if answeredOptions.length > 1}
+          <NativeSelect class="w-full sm:w-56" aria-label="Answered" bind:value={answeredFilter}>
+            <option value="">All answered sets</option>
+            {#each answeredOptions as s (s.key)}<option value={s.key}>{s.questions} questions / {s.runIDs.length} {s.runIDs.length === 1 ? "run" : "runs"}</option>{/each}
           </NativeSelect>
         {/if}
         <Input class="h-8 w-full sm:w-64" aria-label="Filter runs" placeholder="Model, profile, date or status" bind:value={filter} />

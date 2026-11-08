@@ -514,6 +514,46 @@ export function runEffort(run: { settings?: { reasoning_effort?: string | null }
   return run.settings?.reasoning_effort || "default";
 }
 
+/** Runs that answered exactly the same questions. */
+export interface AnsweredSet {
+  key: string;
+  questions: number;
+  runIDs: string[];
+}
+
+type AnsweredRun = { run_id: string; models?: { items?: IntelligenceItem[] }[] };
+
+/**
+ * The distinct questions a run answered, across all its models. An item that
+ * ended in an error was asked but not answered, so it does not count.
+ */
+export function answeredItemIDs(run: AnsweredRun): string[] {
+  const ids = new Set<string>();
+  for (const model of run.models ?? []) for (const item of model.items ?? []) {
+    if (!item.error && !item.raw?.error) ids.add(item.item_id);
+  }
+  return [...ids].sort();
+}
+
+/**
+ * Groups runs by the exact set of questions they answered: scores are only
+ * directly comparable between runs that answered the same questions. Two sets
+ * of the same size stay separate. Runs that answered nothing are left out.
+ * Largest sets first, then the ones shared by more runs.
+ */
+export function answeredSets(runs: AnsweredRun[]): AnsweredSet[] {
+  const groups = new Map<string, AnsweredSet>();
+  for (const run of runs) {
+    const ids = answeredItemIDs(run);
+    if (!ids.length) continue;
+    const key = ids.join("\n");
+    const group = groups.get(key) ?? { key, questions: ids.length, runIDs: [] };
+    group.runIDs.push(run.run_id);
+    groups.set(key, group);
+  }
+  return [...groups.values()].sort((a, b) => b.questions - a.questions || b.runIDs.length - a.runIDs.length);
+}
+
 /** A model result a run holds that was not answered under that run's settings. */
 export interface ForeignResult {
   runID: string;

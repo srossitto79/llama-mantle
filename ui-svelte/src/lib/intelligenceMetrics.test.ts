@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { configKey, costTotals, paretoFrontier, resolveModels, speedTotals, splitForeignResults, type DuplicateMode } from "./intelligenceMetrics";
+import { answeredSets, configKey, costTotals, paretoFrontier, resolveModels, speedTotals, splitForeignResults, type DuplicateMode } from "./intelligenceMetrics";
 import type { IntelligenceItem, IntelligenceResult, IntelligenceResultModel } from "./intelligenceApi";
 
 function item(overrides: Partial<IntelligenceItem> = {}): IntelligenceItem {
@@ -374,5 +374,36 @@ describe("splitForeignResults", () => {
   it("drops a result recorded at another temperature", () => {
     const r = result({ run: { ...baseRun, settings: { temperature: 0, max_tokens: 1, timeout: 1 } } }, [modelResult({ temperature: 0.7 })]);
     expect(splitForeignResults(r).foreign).toHaveLength(1);
+  });
+});
+
+describe("answeredSets", () => {
+  const run = (run_id: string, ...models: IntelligenceItem[][]) => ({ run_id, models: models.map(items => ({ items })) });
+
+  it("groups runs that answered the same questions, across models and order", () => {
+    const sets = answeredSets([
+      run("r1", [item({ item_id: "a" }), item({ item_id: "b" })]),
+      run("r2", [item({ item_id: "b" })], [item({ item_id: "a" })]),
+    ]);
+    expect(sets).toEqual([{ key: "a\nb", questions: 2, runIDs: ["r1", "r2"] }]);
+  });
+
+  it("keeps same-size sets apart and orders largest first", () => {
+    const sets = answeredSets([
+      run("r1", [item({ item_id: "a" })]),
+      run("r2", [item({ item_id: "b" })]),
+      run("r3", [item({ item_id: "b" })]),
+      run("r4", [item({ item_id: "a" }), item({ item_id: "b" })]),
+    ]);
+    expect(sets.map(s => [s.questions, s.runIDs])).toEqual([[2, ["r4"]], [1, ["r2", "r3"]], [1, ["r1"]]]);
+  });
+
+  it("does not count errored items and drops runs with no answers", () => {
+    const sets = answeredSets([
+      run("r1", [item({ item_id: "a" }), item({ item_id: "b", error: "timeout" }), item({ item_id: "c", raw: { error: "500" } })]),
+      run("r2", [item({ item_id: "a", error: "timeout" })]),
+      { run_id: "r3" },
+    ]);
+    expect(sets).toEqual([{ key: "a", questions: 1, runIDs: ["r1"] }]);
   });
 });
