@@ -6,7 +6,7 @@
     "--native",
     "/models/Swift-1.5-Qwen3.8-Flash-Next-Heretic-V2-IQ4_XS-plus-00001-of-00006.gguf",
     "--ple-gguf",
-    "/models/Swift-1.5-Qwen3.8-Flash-Next-Heretic-V2-IQ4_XS-plus-00001-of-00006.gguf",
+    "/models/Swift-1.5-Qwen3.8-Flash-Next-Heretic-V2-IQ4_XS-plus-00002-of-00006.gguf",
     "--expert-profile",
     "/opt/strata/terminal/data/expert-profile.bin",
     "--expert-cache",
