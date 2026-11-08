@@ -103,6 +103,10 @@ make an old tuning result less useful; upstream suggests one start with
 
 ## Swift 1.5 Flash Next Heretic V2 IQ4_XS-plus
 
+Removed from this installation after qwen-hard (88 items, temperature 0): 68.3% at medium and 70.8% at xhigh,
+against 75.3% and 78.5% for Swift IQ3_XXS, with repetition-loop aborts IQ3_XXS did not have. Kept here as the
+record of how it was set up. Its n-gram table is alone in shard 2, so `--ple-gguf` names that shard.
+
 `swift-heretic.yaml` serves jackjusko's IQ4_XS-plus build
 (`jackjusko/Swift-1.5-Flash-Next-Heretic-ReverseEngineer`, folder `IQ4_XS/`: six shards,
 94.7 GB, and `strata-pack-heretic-v2-iq4_xs-plus.zip`). Setup pins Swift's files by SHA-256,
