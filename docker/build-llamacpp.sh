@@ -159,5 +159,14 @@ if [[ ! -x "$dest/llama-server" ]]; then
   exit 1
 fi
 
+# Tools that must match the binary's source commit, e.g. moe-cache-tune.py
+# replays a copy of src/llama-moe-cache.cpp. Kept in a subdirectory so the
+# build task does not list them as binaries.
+mkdir -p "$dest/tools"
+git rev-parse HEAD > "$dest/tools/SOURCE_COMMIT"
+if [[ -f scripts/moe-cache-tune.py ]]; then
+  cp scripts/moe-cache-tune.py "$dest/tools/"
+fi
+
 echo "=== Built backend binaries ==="
 ls -lh "$dest"
