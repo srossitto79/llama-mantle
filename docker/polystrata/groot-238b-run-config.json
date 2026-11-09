@@ -9,7 +9,9 @@
     "--expert-profile",
     "/data/groot-238b.profile",
     "--conversation-cache-mib",
-    "2048"
+    "2048",
+    "--ram-experts-mib",
+    "98304"
   ],
   "tokenizer": "/data/tokenizer-groot238/tokenizer",
   "model_name": "groot-238b-a18b",
