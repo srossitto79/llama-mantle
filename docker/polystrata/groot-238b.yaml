@@ -1,0 +1,31 @@
+# Merge this entry under models: in config.yaml. Paths are Docker host paths.
+# Groot-238B-A18B (GLM-5.3-Flash prune, glm5-next) on PolyStrata's strata-poly engine.
+# PolyStrata's setup pins GLM-5.3-Flash's files, so the polystrata-groot238 volume holds a
+# hand-written run config and the tokenizer written out of the GGUF (README.md).
+groot-238b-a18b-polystrata-station-64k:
+  name: "Groot 238B A18B PolyStrata 64K"
+  description: "i1-IQ3_M with MTP, text only"
+  cmd: >-
+    docker run --rm --name polystrata-groot238
+    --gpus all --ulimit memlock=-1:-1 --shm-size 2g --network llama-mantle_default
+    -v polystrata-groot238:/data
+    -v /home/sross/gguf_models/mradermacher_Groot-238B-A18B-261023-i1-GGUF:/models:ro
+    -e STRATA_API_KEY
+    --entrypoint /opt/strata/.venv/bin/python
+    polystrata:4de7933
+    serve/server.py --engine strata --config /data/groot-238b.json --host 0.0.0.0 --port 8080
+  cmdStop: docker stop -t 120 polystrata-groot238
+  env:
+    - "STRATA_API_KEY=${env.STRATA_API_KEY}"
+  apiKey: ${env.STRATA_API_KEY}
+  proxy: http://polystrata-groot238:8080
+  checkEndpoint: /health
+  useModelName: groot-238b-a18b
+  # Groot's template knows low, high and max (its default); PolyStrata's server maps high to
+  # xhigh, which the template reads as max, and cannot turn thinking off.
+  filters:
+    setParamsByID:
+      "${MODEL_ID}:low":
+        reasoning_effort: low
+      "${MODEL_ID}:max":
+        reasoning_effort: max

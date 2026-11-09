@@ -1,0 +1,21 @@
+{
+  "exe": "/opt/strata/engine-poly/strata-poly",
+  "cwd": "/opt/strata",
+  "args": [
+    "--model",
+    "/models/Groot-238B-A18B-261023.i1-IQ3_M.gguf",
+    "--max-context",
+    "65536",
+    "--expert-profile",
+    "/data/groot-238b.profile",
+    "--conversation-cache-mib",
+    "2048"
+  ],
+  "tokenizer": "/data/tokenizer-groot238/tokenizer",
+  "model_name": "groot-238b-a18b",
+  "log": "/data/groot-238b-engine.log",
+  "sampling": {
+    "temperature": 1.0,
+    "top_p": 0.95
+  }
+}
