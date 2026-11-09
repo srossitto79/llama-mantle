@@ -29,3 +29,29 @@ groot-238b-a18b-polystrata-station-64k:
         reasoning_effort: low
       "${MODEL_ID}:max":
         reasoning_effort: max
+
+groot-238b-a18b-polystrata-station-128k:
+  name: "Groot 238B A18B PolyStrata 128K"
+  description: "i1-IQ3_M with MTP, text only"
+  cmd: >-
+    docker run --rm --name polystrata-groot238-128k
+    --gpus all --ulimit memlock=-1:-1 --shm-size 2g --network llama-mantle_default
+    -v polystrata-groot238:/data
+    -v /home/sross/gguf_models/mradermacher_Groot-238B-A18B-261023-i1-GGUF:/models:ro
+    -e STRATA_API_KEY
+    --entrypoint /opt/strata/.venv/bin/python
+    polystrata:4de7933
+    serve/server.py --engine strata --config /data/groot-238b-128k.json --host 0.0.0.0 --port 8080
+  cmdStop: docker stop -t 120 polystrata-groot238-128k
+  env:
+    - "STRATA_API_KEY=${env.STRATA_API_KEY}"
+  apiKey: ${env.STRATA_API_KEY}
+  proxy: http://polystrata-groot238-128k:8080
+  checkEndpoint: /health
+  useModelName: groot-238b-a18b
+  filters:
+    setParamsByID:
+      "${MODEL_ID}:low":
+        reasoning_effort: low
+      "${MODEL_ID}:max":
+        reasoning_effort: max
