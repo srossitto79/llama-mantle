@@ -24,12 +24,14 @@
   import MacrosSection from "../components/config/MacrosSection.svelte";
   import RawSection from "../components/config/RawSection.svelte";
   import ReviewSheet from "../components/config/ReviewSheet.svelte";
-  import { FileDiff, CircleAlert, Loader2, RefreshCw } from "@lucide/svelte";
+  import TunerSheet from "../components/config/TunerSheet.svelte";
+  import { FileDiff, CircleAlert, Loader2, RefreshCw, Gauge } from "@lucide/svelte";
 
   type Tab = EntrySection | "macros" | "raw";
 
   let tab = $state<Tab>("models");
   let reviewOpen = $state(false);
+  let tuneOpen = $state(false);
   let rawDirty = $state(false);
   const selected = $state<Record<EntrySection, string | null>>({ models: null, groups: null, profiles: null, peers: null });
 
@@ -159,6 +161,7 @@
   {#snippet actions()}
     {#if $configSession.loading}<Loader2 class="text-muted-foreground size-4 animate-spin" />{/if}
     <Button variant="ghost" size="sm" onclick={() => configSession.load()} disabled={$configSession.loading}><RefreshCw />Reload</Button>
+    <Button variant="ghost" size="sm" onclick={() => (tuneOpen = true)}><Gauge />Tune</Button>
     <Button size="sm" disabled={stagedCount === 0} onclick={() => (reviewOpen = true)}>
       <FileDiff />Review{#if stagedCount}&nbsp;({stagedCount}){/if}
     </Button>
@@ -202,6 +205,7 @@
 </Page.Root>
 
 <ReviewSheet bind:open={reviewOpen} />
+<TunerSheet bind:open={tuneOpen} onstaged={() => (reviewOpen = true)} />
 
 <Dialog.Root open={addSection !== null} onOpenChange={(o) => !o && (addSection = null)}>
   <Dialog.Content class="sm:max-w-lg">

@@ -137,7 +137,7 @@ func TestServer_New_GroupConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New (group): %v", err)
 	}
-	if _, ok := s.local.(*router.Group); !ok {
+	if _, ok := unwrapLocal(s.local).(*router.Group); !ok {
 		t.Fatalf("localRouter=%T want *router.Group", s.local)
 	}
 	if err := s.Shutdown(time.Second); err != nil {
@@ -159,7 +159,7 @@ func TestServer_New_MatrixConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New (matrix): %v", err)
 	}
-	if _, ok := s.local.(*router.Matrix); !ok {
+	if _, ok := unwrapLocal(s.local).(*router.Matrix); !ok {
 		t.Fatalf("localRouter=%T want *router.Matrix", s.local)
 	}
 	if err := s.Shutdown(time.Second); err != nil {

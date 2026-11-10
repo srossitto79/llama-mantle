@@ -173,6 +173,10 @@ func New(cfg config.Config, muxlog *logmon.Monitor, proxylog *logmon.Monitor, up
 		}
 	}
 
+	if tm != nil {
+		local = heldRouter{LocalRouter: local, hold: tm.GPUHold(), log: proxylog}
+	}
+
 	peer, err := router.NewPeer(cfg, proxylog)
 	if err != nil {
 		return nil, fmt.Errorf("creating peer router: %w", err)
@@ -235,6 +239,7 @@ func New(cfg config.Config, muxlog *logmon.Monitor, proxylog *logmon.Monitor, up
 	}
 	s.mantle = mantle.NewHandler(tm, &s.cfg, cfg.ConfigPath,
 		cfg.ModelsDir, cfg.BackendsDir, cfg.BuildScript)
+	s.mantle.SetLocalUnloader(func() { s.local.Unload(0) })
 	s.routes()
 	s.startPreload()
 	return s, nil

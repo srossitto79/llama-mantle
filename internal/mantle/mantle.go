@@ -228,7 +228,13 @@ type TaskManager struct {
 	studioRetryPending bool
 	studioCleanupRoots map[string]struct{}
 	studioRegister     func(RegisterStudioModelRequest, string) error
+
+	gpu    GPUHold
+	tuning tunerSession
 }
+
+// GPUHold is the hold local model requests wait on.
+func (tm *TaskManager) GPUHold() *GPUHold { return &tm.gpu }
 
 // NewTaskManager creates a new task manager. log receives a line for every
 // line of build output, so it shows up in the container logs / /logs

@@ -18,6 +18,7 @@ import (
 	"github.com/mostlygeek/llama-swap/internal/config"
 	"github.com/mostlygeek/llama-swap/internal/configedit"
 	"github.com/mostlygeek/llama-swap/internal/event"
+	"github.com/mostlygeek/llama-swap/internal/mantle/tuner"
 	"github.com/mostlygeek/llama-swap/internal/shared"
 )
 
@@ -36,6 +37,9 @@ type Handler struct {
 	effective configedit.EffectiveReader
 	planner   configedit.Planner
 	validator configedit.Validator
+
+	tuner       tuner.Tuner
+	unloadLocal func() // stops every local model; set by the server
 }
 
 // NewHandler creates a new mantle API handler. tm is constructed once by the
@@ -56,6 +60,7 @@ func NewHandler(tm *TaskManager, cfg *config.Config, configPath, modelsDir, back
 	h.source = configedit.NewSourceReader()
 	h.effective = configedit.NewEffectiveReader(load)
 	h.planner = configedit.NewPlanner(h.validator)
+	h.tuner = newTuner(backendsDir)
 	tm.SetStudioRegister(h.registerStudioModel)
 	return h
 }
@@ -158,6 +163,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/mantle/backends", h.handleListBackends)
 	mux.HandleFunc("GET /api/mantle/backends/{name}/schema", h.handleGetBackendSchema)
 	mux.HandleFunc("POST /api/mantle/backends/{name}/update", h.handleUpdateBackend)
+	mux.HandleFunc("POST /api/mantle/tuner/analyse", h.handleTunerAnalyse)
+	mux.HandleFunc("POST /api/mantle/tuner/cache-tune", h.handleTunerCacheTune)
+	mux.HandleFunc("DELETE /api/mantle/tuner/cache-tune/{id}", h.handleCancelCacheTune)
 	mux.HandleFunc("DELETE /api/mantle/backends/{name...}", h.handleDeleteBackend)
 
 	// Task status
