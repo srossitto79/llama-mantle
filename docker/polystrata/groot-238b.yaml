@@ -1,3 +1,8 @@
+# Removed from this installation: on 11 qwen-hard items it scored 152 of 220 against 146 for Swift
+# on Strata, at 12x the wall time and 9.5-13 tok/s warm decode. Its files, image and volume are gone;
+# this file and the run configs stay as the record. To restore it, copy the i1-IQ3_M GGUF back into
+# gguf_models, rebuild the image with build.sh and write the tokenizer and run config into the volume.
+#
 # Merge this entry under models: in config.yaml. Paths are Docker host paths.
 # Groot-238B-A18B (GLM-5.3-Flash prune, glm5-next) on PolyStrata's strata-poly engine.
 # PolyStrata's setup pins GLM-5.3-Flash's files, so the polystrata-groot238 volume holds a
