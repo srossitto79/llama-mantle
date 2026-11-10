@@ -1,0 +1,43 @@
+# Merge these entries under models: in config.yaml. Paths are Docker host paths.
+# Groot-280B-A16B (GrootTeam UD-Q4_K_XL, a 192-expert prune of DeepSeek V4.1 Flash) on Strata's
+# DeepSeek engine. Setup pins DeepSeek's own files, so the strata-groot280 volume holds a hand-made
+# pack and run configs (README.md); strata serve starts them without the entrypoint's setup.
+groot-280b-a16b-strata-station-64k:
+  name: "Groot 280B A16B Strata 64K"
+  description: "UD-Q4_K_XL with DSpark and vision"
+  cmd: >-
+    docker run --rm --name strata-groot280
+    --gpus all --ulimit memlock=-1:-1 --shm-size 2g --network llama-mantle_default
+    -v strata-groot280:/data
+    -v /home/sross/gguf_models/GrootTeam_Groot-280B-A16B-261023-GGUF:/models:ro
+    -e STRATA_API_KEY
+    ghcr.io/niko1221/strata:0.2.9-cuda13
+    /opt/strata/terminal/bin/strata serve --profile /data/install/strata-groot-280b-64k.json --host 0.0.0.0 --port 8080
+  cmdStop: docker stop -t 120 strata-groot280
+  env:
+    - "STRATA_API_KEY=${env.STRATA_API_KEY}"
+  apiKey: ${env.STRATA_API_KEY}
+  proxy: http://strata-groot280:8080
+  checkEndpoint: /health
+  useModelName: groot-280b-a16b
+  filters: *deepseek41-effort
+
+groot-280b-a16b-strata-station-128k:
+  name: "Groot 280B A16B Strata 128K"
+  description: "UD-Q4_K_XL with DSpark and vision"
+  cmd: >-
+    docker run --rm --name strata-groot280-128k
+    --gpus all --ulimit memlock=-1:-1 --shm-size 2g --network llama-mantle_default
+    -v strata-groot280:/data
+    -v /home/sross/gguf_models/GrootTeam_Groot-280B-A16B-261023-GGUF:/models:ro
+    -e STRATA_API_KEY
+    ghcr.io/niko1221/strata:0.2.9-cuda13
+    /opt/strata/terminal/bin/strata serve --profile /data/install/strata-groot-280b-128k.json --host 0.0.0.0 --port 8080
+  cmdStop: docker stop -t 120 strata-groot280-128k
+  env:
+    - "STRATA_API_KEY=${env.STRATA_API_KEY}"
+  apiKey: ${env.STRATA_API_KEY}
+  proxy: http://strata-groot280-128k:8080
+  checkEndpoint: /health
+  useModelName: groot-280b-a16b
+  filters: *deepseek41-effort

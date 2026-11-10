@@ -94,6 +94,23 @@ Merge the entries into `config.yaml` only once the download has finished: an ent
 started earlier runs the same setup into the same folder. Suffixes `:off`, `:low`,
 `:medium`, `:high` and `:max` choose reasoning effort (the template's default is high).
 
+## Groot 280B A16B
+
+`groot-280b.yaml` serves GrootTeam's UD-Q4_K_XL (`GrootTeam/Groot-280B-A16B-261023-GGUF`: nine
+shards, 356 GB, with `dspark-*-BF16.gguf` and `mmproj-*-BF16.gguf` in the folder above them), a
+192-expert prune of DeepSeek V4.1 Flash on the same engine. Experts are MXFP4 (144 GB) and the
+Engram table MXFP8 (203 GB). Setup pins DeepSeek's own files, so the `strata-groot280` volume
+holds a hand-made pack and run configs, started with `strata serve --profile`:
+
+- engine: `setup.get_dsv41_engine` run with `STRATA_CONTROL_INSTALL=1 STRATA_INSTALL_DIR=/data/install`
+  (0.1.59 in `/data/install/engine-dsv41`);
+- pack: `tools/dsv41/pack_gguf.py --model /models/UD-Q4_K_XL --dspark-gguf /models/dspark-...gguf
+  --mmproj /models/mmproj-...gguf --out /data/packs/groot-280b`, checked with `strata-dsv41 --pack-info`;
+- run configs: `/data/install/strata-groot-280b-{64k,128k}.json`, args `--pack ... --max-context N
+  --eos 1 --vision on --dspark auto --reserve-mib 1024`.
+
+Decode on the 3090 with 128 GB of RAM: 6 tok/s on the first request, 13.7 tok/s warm.
+
 ## Updating
 
 Change the image tag in the entry (and `seed-run-config.sh`'s default), then
