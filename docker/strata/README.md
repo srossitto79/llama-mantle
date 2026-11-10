@@ -107,9 +107,11 @@ holds a hand-made pack and run configs, started with `strata serve --profile`:
 - pack: `tools/dsv41/pack_gguf.py --model /models/UD-Q4_K_XL --dspark-gguf /models/dspark-...gguf
   --mmproj /models/mmproj-...gguf --out /data/packs/groot-280b`, checked with `strata-dsv41 --pack-info`;
 - run configs: `/data/install/strata-groot-280b-{64k,128k}.json`, args `--pack ... --max-context N
-  --eos 1 --vision on --dspark auto --reserve-mib 1024`.
+  --eos 1 --vision on --dspark auto --reserve-mib 2048`.
 
-Decode on the 3090 with 128 GB of RAM: 6 tok/s on the first request, 13.7 tok/s warm.
+Decode on the 3090 with 128 GB of RAM: 6 tok/s on the first request, 13.7 tok/s warm. With a 1024 MiB
+reserve (1 GB of VRAM left free) a 22K-token answer at 128K hit the CUDA "unknown error" DeepSeek had
+(`moe_down`, then every request failing); the reserve is 2048 since.
 
 ## Updating
 
